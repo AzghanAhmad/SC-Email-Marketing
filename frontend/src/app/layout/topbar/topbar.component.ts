@@ -88,42 +88,60 @@ import { AuthService } from '../../core/services/auth.service';
     .topbar {
       height:64px; display:flex; align-items:center; justify-content:space-between;
       padding:0 2rem;
-      background:#ffffff;
-      border-bottom:1px solid #e2e8f0;
-      position:sticky; top:0; z-index:40;
-      box-shadow:0 1px 3px rgba(0,0,0,0.05);
+      background:linear-gradient(180deg, rgba(22,38,62,0.98) 0%, rgba(14,24,40,0.98) 100%);
+      backdrop-filter:blur(20px);
+      border-bottom:1px solid rgba(255,255,255,0.07);
+      position:fixed; top:0; left:240px; right:0; z-index:40;
+      box-shadow:0 1px 0 rgba(0,0,0,0.15);
     }
     .topbar-left { display:flex; align-items:center; gap:1rem; }
     .topbar-right { display:flex; align-items:center; gap:.5rem; position:relative; }
 
+    .search-wrap svg {
+      color:rgba(255,255,255,0.45);
+    }
+    .search-input {
+      background:rgba(255,255,255,0.08);
+      border:1.5px solid rgba(255,255,255,0.1);
+      color:rgba(255,255,255,0.95);
+    }
+    .search-input::placeholder { color:rgba(255,255,255,0.4); }
+    .search-input:focus {
+      border-color:rgba(96,165,250,0.55);
+      box-shadow:0 0 0 3px rgba(96,165,250,0.18);
+      background:rgba(255,255,255,0.1);
+    }
+
     .icon-btn {
       width:38px; height:38px; display:flex; align-items:center; justify-content:center;
-      background:#f8fafc; border:1.5px solid #e2e8f0;
-      border-radius:10px; cursor:pointer; color:#64748b;
+      background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1);
+      border-radius:10px; cursor:pointer; color:rgba(255,255,255,0.55);
       transition:all .2s; position:relative;
     }
-    .icon-btn:hover { background:#f1f5f9; color:#0f172a; border-color:#cbd5e1; }
+    .icon-btn:hover { background:rgba(255,255,255,0.12); color:rgba(255,255,255,0.95); border-color:rgba(255,255,255,0.14); }
     .icon-btn svg { width:17px; height:17px; }
     .notif-dot {
       position:absolute; top:8px; right:8px; width:7px; height:7px;
-      background:#3b82f6; border-radius:50%; border:1.5px solid white;
+      background:#60a5fa; border-radius:50%; border:1.5px solid rgba(22,38,62,0.98);
     }
 
     .user-btn {
       display:flex; align-items:center; gap:.5rem;
       padding:.4rem .75rem .4rem .4rem;
-      background:#f8fafc; border:1.5px solid #e2e8f0;
+      background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1);
       border-radius:10px; cursor:pointer; transition:all .2s;
     }
-    .user-btn:hover { background:#f1f5f9; border-color:#cbd5e1; }
+    .user-btn:hover { background:rgba(255,255,255,0.12); border-color:rgba(255,255,255,0.14); }
     .user-avatar {
       width:28px; height:28px; border-radius:8px;
-      background:linear-gradient(135deg,#3b82f6,#8b5cf6);
+      background:linear-gradient(135deg,#60a5fa,#a78bfa);
       display:flex; align-items:center; justify-content:center;
       font-size:.7rem; font-weight:700; color:white;
     }
     .user-avatar.lg { width:38px; height:38px; border-radius:10px; font-size:.875rem; flex-shrink:0; }
-    .user-name-top { font-size:.8125rem; font-weight:600; color:#0f172a; }
+    .user-name-top { font-size:.8125rem; font-weight:600; color:rgba(255,255,255,0.92); }
+    .user-btn > svg { color:rgba(255,255,255,0.45); }
+    .user-btn:hover > svg { color:rgba(255,255,255,0.75); }
 
     .dropdown {
       position:absolute; top:calc(100% + .5rem); right:0;

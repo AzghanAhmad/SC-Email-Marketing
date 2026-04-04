@@ -19,9 +19,15 @@ import { TopbarComponent } from '../topbar/topbar.component';
     </div>
   `,
   styles: [`
-    .app-shell { display:flex; min-height:100vh; }
-    .main-area { flex:1; margin-left:240px; display:flex; flex-direction:column; min-height:100vh; transition:margin-left .3s; background:var(--bg); }
-    .main-content { flex:1; overflow-y:auto; }
+    .app-shell { display:flex; min-height:100vh; min-height:100dvh; }
+    .main-area {
+      flex:1 1 0; margin-left:240px; display:flex; flex-direction:column;
+      min-height:0; align-self:stretch; background:var(--bg);
+    }
+    .main-content {
+      flex:1; min-height:0; overflow-y:auto;
+      padding-top:64px;
+    }
   `]
 })
 export class MainLayoutComponent {}
