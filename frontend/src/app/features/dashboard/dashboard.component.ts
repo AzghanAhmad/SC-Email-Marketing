@@ -9,17 +9,33 @@ import { MockDataService } from '../../core/services/mock-data.service';
   imports: [CommonModule, RouterModule],
   template: `
     <div class="page-wrapper">
-      <!-- Header -->
-      <div class="page-header">
-        <div>
-          <h1 class="page-title">Dashboard</h1>
-          <p class="page-subtitle">Welcome back, {{ greeting }}. Here's what's happening.</p>
+      <!-- Welcome Header -->
+      <div class="welcome-section">
+        <div class="welcome-text">
+          <h1 class="welcome-title">Welcome to ScribeCount Email</h1>
+          <p class="welcome-sub">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Customize this message with your name in Settings. <a routerLink="/settings" class="welcome-link">Update Profile</a>
+          </p>
         </div>
-        <div class="header-actions">
-          <a routerLink="/campaigns" class="btn-secondary btn-sm" data-tooltip="View all campaigns">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-            New Campaign
-          </a>
+      </div>
+
+      <!-- Conversion Metric -->
+      <div class="conversion-section">
+        <div class="conv-header">
+          <h3 class="conv-label">Conversion metric</h3>
+          <div class="conv-controls">
+            <select class="conv-select">
+              <option>Placed Order</option>
+              <option>Clicked Link</option>
+              <option>Opened Email</option>
+            </select>
+            <button class="btn-ghost btn-sm conv-period-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              Time period
+            </button>
+          </div>
+          <span class="conv-date-range">Mar 9, 2026 — Apr 8, 2026 compared to previous period</span>
         </div>
       </div>
 
@@ -42,6 +58,40 @@ import { MockDataService } from '../../core/services/mock-data.service';
           </div>
           <div class="stat-tooltip" [attr.data-tooltip]="stat.tooltip">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- Business Performance Summary -->
+      <div class="glass-card perf-summary anim-up d2">
+        <div class="perf-header">
+          <div>
+            <h3 class="perf-title">Business Performance Summary</h3>
+            <p class="perf-period">Mar 9, 2026 — Apr 8, 2026</p>
+          </div>
+          <a routerLink="/marketing-analytics" class="btn-secondary btn-sm" data-tooltip="View full analytics dashboard">View Dashboard</a>
+        </div>
+        <div class="perf-kpi-row">
+          <div class="perf-kpi">
+            <span class="pk-val">$4,280</span>
+            <span class="pk-label">Total Revenue</span>
+            <span class="pk-change">— 0% vs. previous period</span>
+          </div>
+          <div class="perf-kpi">
+            <span class="pk-val">$1,840</span>
+            <span class="pk-label">Attributed Revenue (42.9% of total)</span>
+            <span class="pk-change">— +22.7% vs. previous period</span>
+          </div>
+        </div>
+        <div class="attr-row">
+          <h4 class="attr-title">Attributed Revenue</h4>
+          <div class="attr-grid">
+            <div class="attr-item" *ngFor="let a of attributionData">
+              <div class="attr-icon">{{ a.icon }}</div>
+              <span class="attr-label">{{ a.label }}</span>
+              <span class="attr-val">{{ a.value }}</span>
+              <span class="attr-pct">{{ a.pct }}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -135,13 +185,13 @@ import { MockDataService } from '../../core/services/mock-data.service';
               </div>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" class="qa-arrow"><polyline points="9 18 15 12 9 6"/></svg>
             </a>
-            <a routerLink="/audience" class="quick-action" data-tooltip="Add a new subscriber to your list">
+            <a routerLink="/audience/growth-tools" class="quick-action" data-tooltip="Grow your subscriber list">
               <div class="qa-icon" style="background:rgba(139,92,246,0.1)">
                 <svg viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
               </div>
               <div class="qa-body">
-                <span class="qa-title">Add Subscriber</span>
-                <span class="qa-sub">Grow your audience</span>
+                <span class="qa-title">Grow Audience</span>
+                <span class="qa-sub">Growth tools & forms</span>
               </div>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" class="qa-arrow"><polyline points="9 18 15 12 9 6"/></svg>
             </a>
@@ -155,7 +205,7 @@ import { MockDataService } from '../../core/services/mock-data.service';
               </div>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" class="qa-arrow"><polyline points="9 18 15 12 9 6"/></svg>
             </a>
-            <a routerLink="/reports" class="quick-action" data-tooltip="View detailed analytics and reports">
+            <a routerLink="/analytics/dashboards" class="quick-action" data-tooltip="View detailed analytics and reports">
               <div class="qa-icon" style="background:rgba(245,158,11,0.1)">
                 <svg viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
               </div>
@@ -171,6 +221,22 @@ import { MockDataService } from '../../core/services/mock-data.service';
     </div>
   `,
   styles: [`
+    /* Welcome Section */
+    .welcome-section { margin-bottom:1.5rem; }
+    .welcome-title { font-size:1.75rem; font-weight:800; color:#0f172a; letter-spacing:-.03em; margin:0 0 .35rem; }
+    .welcome-sub { display:flex; align-items:center; gap:.375rem; font-size:.8125rem; color:#94a3b8; margin:0; }
+    .welcome-link { color:#3b82f6; text-decoration:none; font-weight:500; }
+    .welcome-link:hover { text-decoration:underline; }
+
+    /* Conversion Section */
+    .conversion-section { margin-bottom:1.5rem; }
+    .conv-header { display:flex; align-items:center; gap:1rem; flex-wrap:wrap; }
+    .conv-label { font-size:.875rem; font-weight:600; color:#0f172a; margin:0; }
+    .conv-controls { display:flex; align-items:center; gap:.5rem; }
+    .conv-select { padding:.4rem .75rem; background:white; border:1.5px solid #e2e8f0; border-radius:8px; font-size:.8rem; font-family:inherit; color:#334155; outline:none; cursor:pointer; }
+    .conv-period-btn { display:flex; align-items:center; gap:.375rem; padding:.4rem .75rem !important; border:1.5px solid #e2e8f0 !important; border-radius:8px !important; font-size:.8rem !important; }
+    .conv-date-range { font-size:.78rem; color:#94a3b8; margin-left:auto; }
+
     .stats-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:1.25rem; margin-bottom:1.75rem; }
     .stat-card {
       background:#ffffff; border:1px solid #f1f5f9;
@@ -189,6 +255,24 @@ import { MockDataService } from '../../core/services/mock-data.service';
     .stat-trend.up { color:#059669; background:rgba(16,185,129,0.1); }
     .stat-trend.down { color:#dc2626; background:rgba(239,68,68,0.1); }
     .stat-tooltip { position:absolute; top:1rem; right:.875rem; color:#cbd5e1; cursor:help; }
+
+    /* Performance Summary */
+    .perf-summary { padding:1.75rem; margin-bottom:1.75rem; }
+    .perf-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:1.5rem; }
+    .perf-title { font-size:1.125rem; font-weight:700; color:#0f172a; margin:0 0 .2rem; }
+    .perf-period { font-size:.8125rem; color:#94a3b8; margin:0; }
+    .perf-kpi-row { display:grid; grid-template-columns:1fr 1fr; gap:2rem; padding:1.5rem; background:#f8fafc; border-radius:14px; margin-bottom:1.5rem; }
+    .perf-kpi { display:flex; flex-direction:column; }
+    .pk-val { font-size:2rem; font-weight:800; color:#0f172a; letter-spacing:-.03em; }
+    .pk-label { font-size:.8125rem; color:#64748b; margin-top:.25rem; }
+    .pk-change { font-size:.78rem; color:#94a3b8; margin-top:.25rem; }
+    .attr-title { font-size:.8125rem; font-weight:700; color:#0f172a; margin:0 0 1rem; }
+    .attr-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:1rem; }
+    .attr-item { display:flex; flex-direction:column; align-items:center; gap:.25rem; padding:.875rem; background:#f8fafc; border-radius:12px; border:1px solid #f1f5f9; }
+    .attr-icon { font-size:1.25rem; }
+    .attr-label { font-size:.72rem; font-weight:600; color:#64748b; text-align:center; }
+    .attr-val { font-size:1.0625rem; font-weight:800; color:#0f172a; }
+    .attr-pct { font-size:.7rem; color:#94a3b8; }
 
     .charts-row { display:grid; grid-template-columns:1.4fr 1fr; gap:1.5rem; margin-bottom:1.5rem; }
     .chart-card { padding:1.5rem; }
@@ -240,13 +324,12 @@ import { MockDataService } from '../../core/services/mock-data.service';
     .qa-arrow { color:#cbd5e1; transition:transform .2s; }
     .quick-action:hover .qa-arrow { transform:translateX(3px); color:#3b82f6; }
 
-    @media(max-width:1200px) { .stats-grid { grid-template-columns:repeat(2,1fr); } }
-    @media(max-width:900px) { .charts-row,.bottom-row { grid-template-columns:1fr; } }
-    @media(max-width:600px) { .stats-grid { grid-template-columns:1fr; } }
+    @media(max-width:1200px) { .stats-grid { grid-template-columns:repeat(2,1fr); } .attr-grid { grid-template-columns:repeat(3,1fr); } }
+    @media(max-width:900px) { .charts-row,.bottom-row { grid-template-columns:1fr; } .perf-kpi-row { grid-template-columns:1fr; } }
+    @media(max-width:600px) { .stats-grid { grid-template-columns:1fr; } .attr-grid { grid-template-columns:repeat(2,1fr); } }
   `]
 })
 export class DashboardComponent implements OnInit {
-  greeting = '';
   stats: any[] = [];
   campaignData: any[] = [];
   growthData: any[] = [];
@@ -256,12 +339,17 @@ export class DashboardComponent implements OnInit {
   growthAreaPoints = '';
   growthDots: { x: number; y: number }[] = [];
 
+  attributionData = [
+    { icon: '👤', label: 'Per Recipient', value: '$0.17', pct: '' },
+    { icon: '📧', label: 'Campaigns', value: '$2,870', pct: '67.1%' },
+    { icon: '⚡', label: 'Flows', value: '$1,020', pct: '23.8%' },
+    { icon: '✉️', label: 'Email', value: '$3,890', pct: '90.9%' },
+    { icon: '🛒', label: 'Direct Sales', value: '$390', pct: '9.1%' },
+  ];
+
   constructor(private mockData: MockDataService) {}
 
   ngOnInit() {
-    const hour = new Date().getHours();
-    this.greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
-
     const s = this.mockData.getDashboardStats();
     this.stats = [
       { label:'Total Subscribers', value: s.totalSubscribers.toLocaleString(), growth: s.subscriberGrowth, iconBg:'rgba(59,130,246,0.1)', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>', tooltip:'Total active subscribers on your list' },

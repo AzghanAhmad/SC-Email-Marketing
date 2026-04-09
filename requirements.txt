@@ -1,0 +1,300 @@
+ScribeCount Email II
+Scope of Work (SOW)
+ScribeCount Email Marketing Service for Independent Authors (SES-based, ScribeCount-integrated)
+Document Version: vNext (Architecture & Integration Focus)
+Client: ScribeCount
+Service Name (Working): ScribeCount Email (powered by Amazon SES)
+Target Users: Independent authors and small author teams
+Primary Goal: Low-cost, high-impact email marketing system that produces data that merges cleanly with ScribeCount reporting
+
+1) Executive Summary
+ScribeCount will deliver a standalone email marketing service designed specifically for independent authors. The service will use Amazon SES as the sending backbone and will be engineered from day one to produce structured marketing and engagement data that integrates with the broader ScribeCount ecosystem—particularly website tracking, link/ad attribution, and sales reporting—to provide authors with actionable insights.
+This service is not intended to be a generic marketing automation platform. It is intentionally optimized for how authors market books and related content and will exclude functions that authors do not routinely utilize at meaningful scale (notably SMS).
+A core value proposition is that authors should be able to answer business-critical questions without assembling multiple tools or manually reconciling metrics. In practice: the email service will become one of ScribeCount’s primary “signal sources” that connects marketing actions to outcomes.
+
+2) Objective (Expanded Narrative)
+2.1 What the Feature Is
+The feature is a full email marketing and automation system tailored to book marketing workflows. It includes:
+Broadcast Campaigns (one-time or scheduled sends)
+Flows / Automations (event-driven sequences for reader onboarding, launches, winback, etc.)
+A Template System for emails and reusable content blocks (book cards, series order, etc.)
+Audience management: Profiles, Lists, Segments, Tags, consent and suppression states
+A deliverability system engineered around SES + SNS telemetry (bounce/complaint/delivery)
+A reporting layer designed to join email performance to ScribeCount’s broader analytics
+A Flow Template Library that includes premade flows with editable sample content, so authors can launch quickly without writing everything from scratch
+2.2 How It Should Be Constructed
+The system must be built with integration and maintainability as primary constraints. Implementation choices should prioritize:
+Clear service boundaries (sending/deliverability vs orchestration vs reporting)
+Strict event contracts that align with ScribeCount reporting needs
+Versioned, auditable flows so authors and support teams can understand “why did this send”
+Export pipelines that produce trusted, reconcilable data inside ScribeCount
+Tooling for support and debug (audit trails, event traces, job histories, suppression rationales)
+Feature-flag-driven rollouts (tested in Sandbox first)
+This is a “ScribeCount-first” system: the email service is a standalone product in operation, but it is not a standalone source of truth. ScribeCount is the reporting hub, and the email system’s data must be shaped to join reliably with website and sales signals.
+2.3 How Authors Will Use It
+Authors do not want to build from scratch. They want to:
+Set up sending once (domain + deliverability guardrails)
+Install/enable a few proven automations (welcome/magnet, launch, post-purchase, review request)
+Send periodic broadcasts (release updates, promos, behind-the-scenes)
+Look at a dashboard that tells them what worked and what didn’t
+The service must support an author’s core lifecycle:
+List growth (forms/landing pages, reader magnets, segmentation)
+Launch execution (preorder → launch day → post-launch sustain)
+Backlist monetization (revivals, bundles, audio/print upgrades)
+Direct sales lift (abandoned checkout, post-purchase upsell)
+Engagement maintenance (surveys, winback, hygiene)
+Authors should be able to install a premade flow template with sample content, edit it in minutes, connect it to their book/series link set, and activate it with confidence.
+2.4 How the Data Integrates with ScribeCount to Produce Actionable Reports
+The primary product outcome is not “emails sent,” but business clarity. The system must generate data that ScribeCount can combine with:
+book release schedules and metadata
+ad link attribution chains (ad → click → session → purchase)
+website traffic signals
+direct sales purchase events (when available)
+retailer click-out performance (clearly labeled as directional where purchases cannot be confirmed)
+The integrated reporting must enable practical decisions:
+which flows increase sales or engagement
+which segments are valuable for preorders
+which retailers or direct channels respond best to the author’s audience
+whether marketing effort correlates with revenue lift by title or series
+how list growth quality changes over time (not just subscriber count)
+2.5 Benefits
+Benefits to Authors
+Fast marketing execution through premade flows + editable content
+Fewer tools to manage; reduced technical burden
+Clear “what worked” signals instead of vanity metrics
+Better launch consistency and backlist stability
+Benefits to ScribeCount
+Increased retention and stickiness (ScribeCount becomes the operating system)
+Higher data completeness for attribution and performance reporting
+Clear expansion path into AI optimization, template packs, premium analytics
+Differentiated positioning: publishing-focused marketing intelligence, not generic e-commerce tooling
+
+3) Guiding Principles and Constraints
+3.1 Non-Negotiables
+Amazon SES is the sending backbone.
+No SMS is required in this scope.
+Service functions as a standalone service but exports data ONLY to ScribeCount (besides necessary AWS SES/SNS delivery infrastructure).
+All features must include tooltips, help icons, and information icons (centrally managed via a help registry).
+Must support integration with the author’s website and direct sales platform.
+3.2 Documentation Constraint (No Sample Code)
+This SOW is intentionally architecture-first and does not include sample code. It may recommend construction patterns that support maintainability, but implementation details are left to engineering execution.
+3.3 UI Reference Disclaimer (Non-Copy Requirement)
+Any included screenshots or UI references from Author.Email and Klaviyo are provided for functional reference only (feature discoverability, workflows, terminology). They must not be copied verbatim, and no UI elements should be treated as design requirements. The final UI must be original and brand-aligned to ScribeCount.
+
+4) Scope Inclusions
+4.1 Core Product Capabilities
+Authentication and tenant isolation (author accounts, roles, permissions)
+Audience:
+profiles (subscribers)
+lists, segments, tags
+consent tracking and audit logs
+suppression states (unsubscribed, bounced, complained)
+Content:
+template system (email templates + reusable blocks)
+asset library (images/files used in emails)
+link sets and UTM/link-group tagging
+Campaigns:
+draft → scheduled → sending → sent lifecycle
+pre-send checks (domain verification, suppression rules)
+Flows (automation):
+triggers, actions, waits, branching
+versioning and publishing model
+deterministic execution and traceability
+Deliverability:
+SES configuration guidance (identity, DKIM, mail-from)
+SNS event ingestion (delivery/bounce/complaint)
+suppression management and deliverability dashboard
+Reporting dashboards:
+campaigns, flows, deliverability, subscriber growth/quality
+attribution-friendly reporting hooks
+Integration:
+website event capture support
+direct sales event capture support
+ScribeCount export pipeline (jobs, retries, reconciliation)
+Migration Tool (Required):
+import subscribers, fields, tags, suppressions/unsubs
+import templates (best-effort HTML)
+guided mapping and validation reporting
+4.2 Premade Flow Template Library with Editable Sample Content (Required)
+The service will ship with a library of flow templates that include:
+prebuilt flow structure
+sample email content that the author can edit (subject, preview, body, CTA)
+suggested timing, throttle defaults, and quiet hours guidance
+segment/tag setup assumptions and install helpers
+reporting metadata applied consistently for downstream ScribeCount reports
+Minimum recommended template set for V1:
+Welcome / Reader Magnet Delivery
+New Release Launch Sequence
+Preorder Nurture
+Abandoned Checkout (Direct)
+Post-Purchase Nurture + Upsell
+Review Request
+ARC / Launch Team Onboarding
+Backlist Revival
+Winback / Re-Engagement
+Reader Survey Routing → Segmentation
+
+5) Out of Scope
+SMS messaging and SMS reporting
+Building a full e-commerce product catalog engine comparable to large retail platforms
+Guaranteed retailer purchase attribution where confirmed purchase data is not available
+Copying UI designs from Author.Email or Klaviyo verbatim
+External data export connectors beyond ScribeCount (explicitly prohibited)
+
+6) Target Architecture (Conceptual)
+6.1 Core Components
+A) Sending & Deliverability Layer (SES)
+responsible for sending, deliverability telemetry ingest, suppression actions
+stores raw SNS payloads for audit/debug
+produces normalized delivery events for reporting
+B) Audience & Consent Layer
+profiles, lists, segments, tags
+consent logs and lifecycle state management
+segment evaluation system (rules, previews, saved definitions)
+C) Content Layer
+templates and reusable blocks
+asset library
+link sets, UTM presets, link group classifications
+D) Campaign Orchestration Layer
+campaign lifecycle management
+scheduling and send job creation
+pre-flight checks and safety rails (suppression, domain readiness)
+E) Flow Orchestration Layer
+flow definitions and versions
+runtime execution logs (“why did this send”)
+node-level analytics and outcomes
+F) Reporting & Analytics Layer
+query-ready metrics tables (campaign/flow/link metrics)
+deliverability and hygiene analytics
+attribution join compatibility (email clicks → links → sessions → purchases)
+G) ScribeCount Export Layer (Outbound to ScribeCount only)
+export jobs, retries, reconciliation
+auditing and scope controls
+ensures ScribeCount is the unified reporting hub
+6.2 Construction Guidance (No code, best-practice patterns)
+Version everything that changes: flows, templates, campaign revisions
+Event-first design: every action produces an event usable by reporting
+Deterministic execution: flows should be traceable, explainable, and replayable for debugging
+Separation of concerns: sending vs orchestration vs reporting should not be tightly coupled
+Sandbox-first rollout: feature flags and seeded test tenants in Sandbox
+
+7) Integration Requirements
+7.1 Website Integration
+The service must support collecting website events to enable:
+list growth attribution (where subscribers came from)
+conversion tracking (email click → session)
+content performance reporting (landing page effectiveness)
+Website integration should support:
+installation guidance (wizard-driven)
+event validation tooling (testing console)
+event normalization into the shared ScribeCount event vocabulary
+7.2 Direct Sales Platform Integration
+The service must support integration with direct sales platforms such that:
+purchases and cart events can trigger flows (post-purchase, abandoned checkout)
+links and UTMs can join email performance to direct revenue outcomes
+ScribeCount reporting can unify these signals
+7.3 Link/Ad Attribution Integration
+The email system must generate link metadata compatible with ScribeCount’s linking feature:
+link group classification (Direct/Amazon/Kobo/etc.)
+consistent UTM tagging
+stable identifiers for joining click events to sessions/purchases
+explicit labeling when downstream outcomes are directional/inferred
+7.4 ScribeCount-Only Export Requirement
+The email service must export only to ScribeCount:
+performance metrics
+subscriber lifecycle state changes
+deliverability and suppression events
+campaign and flow metadata required for reports
+The export must support:
+job history and retries
+reconciliation to prevent drift
+auditing for compliance and support investigations
+
+8) Reporting Requirements (Actionable Data)
+8.1 Minimum Reporting Views (V1)
+Campaign performance dashboard
+Flow performance dashboard (step-level)
+Deliverability and suppression dashboard
+List growth and engagement quality dashboard
+Link click performance by link group (Direct vs retailers)
+Cohort-style views (new subscribers by source and their engagement trajectory)
+8.2 ScribeCount “Actionable Reports” (V1 outcomes)
+Reports should help authors decide:
+which marketing steps to repeat next release
+which segments to prioritize for preorders
+whether list growth is high quality (engagement, conversions)
+whether direct vs retailer strategy is working for their audience
+All reports must clearly distinguish:
+confirmed outcomes (direct purchases)
+directional outcomes (retailer click-outs without confirmed purchase data)
+
+9) UI/UX Requirements (Original, Guided, Author-Friendly)
+9.1 Functional UX Expectations
+Setup wizard for SES sending domain readiness
+Guided creation for campaigns and flows
+Template gallery + flow library install paths
+Testing console for website/direct store events
+Deliverability status surfaced in plain language
+9.2 Mandatory Help System Coverage
+Every feature and key control must include:
+tooltip (quick)
+help icon (detailed side panel)
+info icon (why it matters)
+Help content must be centrally managed to ensure completeness and consistency.
+9.3 UI Reference Disclaimer
+Author.Email and Klaviyo UI examples are reference only and must not be copied verbatim.
+
+10) Deliverables
+10.1 Engineering Deliverables
+Architecture documentation (component boundaries, data contracts, event vocabulary)
+API documentation (OpenAPI specs without embedding sample code blocks)
+Data export contract to ScribeCount (schemas, scopes, reconciliation approach)
+Operational runbooks (deliverability incidents, suppression behavior, export failures)
+Sandbox deployment configuration and release plan for Azure DevOps pipelines
+10.2 Product Deliverables
+Working email service (SES-based)
+Premade flow template library with editable sample content
+Reporting dashboards compatible with ScribeCount’s unified reporting
+Migration tool (CSV-first, mapping, validation, audit logs)
+
+11) Acceptance Criteria (High-Level)
+A release is acceptable when:
+SES sending is operational, and SNS events update suppression states correctly
+Campaigns can be created, scheduled, sent, and reported reliably
+Flows can be installed from templates, edited, versioned, activated, and traced
+Reporting dashboards show consistent metrics with explainable definitions
+Exports to ScribeCount are reliable, auditable, and reconcilable
+No outbound exports exist beyond ScribeCount (besides SES/SNS infrastructure)
+UI includes tooltips/help/info across all major controls
+
+12) Project Execution and Environment
+12.1 Azure DevOps + Sandbox Expectations
+Work tracked as Epics → Features → Stories → Tasks
+PR-based development with required checks
+Deployments validated in Sandbox with acceptance testing prior to handoff
+Feature flags for staged rollout and controlled testing
+12.2 Handoff Standards
+Each handoff must include:
+updated architecture narrative and data contracts
+OpenAPI specs and schema definitions
+acceptance tests and test data setup guidance
+operational runbooks and troubleshooting playbooks
+
+13) Risks and Mitigations
+Deliverability Risk (new senders):
+Mitigate via warmup patterns, throttles, hygiene defaults, deliverability guidance, and suppression transparency.
+Attribution Ambiguity (retailers):
+Mitigate by clearly labeling directional vs confirmed outcomes, and by designing reports to avoid implying certainty where it cannot exist.
+Integration Drift:
+Mitigate by strict data contracts, versioned schemas, and reconciliation jobs.
+Support Burden:
+Mitigate by audit logs, “why did this send” tracing, and raw SNS payload retention.
+
+14) Future-Proofing (Explicitly Supported)
+The system must be architected to support future ScribeCount enhancements without major refactors, including:
+expanded attribution and ad cost imports
+AI-assisted flow drafting and maintenance (draft-only guardrails)
+deeper catalog/book metadata blocks in templates
+enhanced cohort analytics and lifecycle segmentation
+additional integrations that still preserve “ScribeCount-only export”
+
