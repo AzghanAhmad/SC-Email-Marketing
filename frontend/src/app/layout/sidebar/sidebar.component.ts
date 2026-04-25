@@ -126,8 +126,6 @@ interface NavGroup {
       display:flex; flex-direction:column;
       overflow:hidden;
     }
-
-    /* ── Logo ── */
     .sidebar-logo {
       display:flex; align-items:center; gap:.75rem;
       padding:1.25rem 1.125rem 1.125rem;
@@ -137,8 +135,6 @@ interface NavGroup {
     .logo-mark { width:34px; height:34px; flex-shrink:0; }
     .logo-mark svg { width:100%; height:100%; }
     .logo-text { font-size:1rem; font-weight:800; color:white; letter-spacing:-.02em; white-space:nowrap; }
-
-    /* ── Nav scroll area ── */
     .sidebar-nav {
       flex:1; padding:.625rem .75rem;
       display:flex; flex-direction:column; gap:.0625rem;
@@ -146,134 +142,73 @@ interface NavGroup {
     }
     .sidebar-nav::-webkit-scrollbar { width:3px; }
     .sidebar-nav::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.08); border-radius:100px; }
-
-    /* ── Base nav item ── */
     .nav-item {
       display:flex; align-items:center; gap:.875rem;
-      padding:.7rem 1rem;
-      border-radius:10px;
-      color:rgba(255,255,255,0.55);
-      text-decoration:none;
+      padding:.7rem 1rem; border-radius:10px;
+      color:rgba(255,255,255,0.55); text-decoration:none;
       font-size:.875rem; font-weight:500;
       transition:background .15s, color .15s;
-      white-space:nowrap;
-      position:relative;
+      white-space:nowrap; position:relative;
     }
-    .nav-item:hover {
-      background:rgba(255,255,255,0.07);
-      color:rgba(255,255,255,0.88);
-    }
-
-    /* Active state — matches screenshot: darker bg + left teal accent */
-    .nav-item.active {
-      background:rgba(255,255,255,0.1);
-      color:#ffffff;
-      font-weight:600;
-    }
+    .nav-item:hover { background:rgba(255,255,255,0.07); color:rgba(255,255,255,0.88); }
+    .nav-item.active { background:rgba(255,255,255,0.1); color:#ffffff; font-weight:600; }
     .nav-item.active::before {
-      content:'';
-      position:absolute; left:0; top:20%; bottom:20%;
+      content:''; position:absolute; left:0; top:20%; bottom:20%;
       width:3px; border-radius:0 3px 3px 0;
       background:linear-gradient(180deg, #2dd4bf, #06b6d4);
     }
-
-    /* ── Icon wrapper ── */
-    .nav-icon {
-      width:22px; height:22px;
-      display:flex; align-items:center; justify-content:center;
-      flex-shrink:0;
-      opacity:.75;
-    }
+    .nav-icon { width:22px; height:22px; display:flex; align-items:center; justify-content:center; flex-shrink:0; opacity:.75; }
     .nav-item.active .nav-icon { opacity:1; }
     .nav-item:hover .nav-icon { opacity:.9; }
-
-    /* Force SVG size inside nav-icon */
     .nav-icon svg { width:20px !important; height:20px !important; stroke-width:1.75 !important; }
-
     .nav-label { white-space:nowrap; line-height:1; }
-
-    /* ── Expandable group header ── */
     .nav-group { display:flex; flex-direction:column; }
     .nav-group-header {
       display:flex; align-items:center; gap:.875rem;
-      padding:.7rem 1rem;
-      border-radius:10px;
-      color:rgba(255,255,255,0.55);
-      font-size:.875rem; font-weight:500;
+      padding:.7rem 1rem; border-radius:10px;
+      color:rgba(255,255,255,0.55); font-size:.875rem; font-weight:500;
       transition:background .15s, color .15s;
       background:transparent; border:none; cursor:pointer;
       font-family:inherit; width:100%; text-align:left;
       white-space:nowrap; position:relative;
     }
-    .nav-group-header:hover {
-      background:rgba(255,255,255,0.07);
-      color:rgba(255,255,255,0.88);
-    }
+    .nav-group-header:hover { background:rgba(255,255,255,0.07); color:rgba(255,255,255,0.88); }
     .nav-group-header.expanded { color:rgba(255,255,255,0.88); }
     .nav-group-header .nav-icon { opacity:.75; }
-    .nav-group-header:hover .nav-icon,
-    .nav-group-header.expanded .nav-icon { opacity:1; }
-
+    .nav-group-header:hover .nav-icon, .nav-group-header.expanded .nav-icon { opacity:1; }
     .chevron {
       width:15px; height:15px; margin-left:auto; flex-shrink:0;
       transition:transform .25s cubic-bezier(.4,0,.2,1);
       opacity:.35; stroke-width:2.5;
     }
     .chevron.rotated { transform:rotate(90deg); opacity:.6; }
-
-    /* ── Children ── */
-    .nav-group-children {
-      max-height:0; overflow:hidden;
-      transition:max-height .3s cubic-bezier(.4,0,.2,1);
-    }
+    .nav-group-children { max-height:0; overflow:hidden; transition:max-height .3s cubic-bezier(.4,0,.2,1); }
     .nav-group-children.open { max-height:400px; }
-
     .nav-child-item {
       display:flex; align-items:center; gap:.625rem;
-      padding:.55rem 1rem .55rem 2.75rem;
-      border-radius:8px;
-      color:rgba(255,255,255,0.42);
-      text-decoration:none;
+      padding:.55rem 1rem .55rem 2.75rem; border-radius:8px;
+      color:rgba(255,255,255,0.42); text-decoration:none;
       font-size:.8125rem; font-weight:500;
       transition:background .15s, color .15s;
       white-space:nowrap; position:relative;
     }
-    .nav-child-item:hover {
-      background:rgba(255,255,255,0.06);
-      color:rgba(255,255,255,0.82);
-    }
-    .nav-child-item.active {
-      color:#2dd4bf;
-      font-weight:600;
-      background:rgba(45,212,191,0.08);
-    }
+    .nav-child-item:hover { background:rgba(255,255,255,0.06); color:rgba(255,255,255,0.82); }
+    .nav-child-item.active { color:#2dd4bf; font-weight:600; background:rgba(45,212,191,0.08); }
     .nav-child-item.active::before {
-      content:'';
-      position:absolute; left:0; top:20%; bottom:20%;
+      content:''; position:absolute; left:0; top:20%; bottom:20%;
       width:3px; border-radius:0 3px 3px 0;
       background:linear-gradient(180deg, #2dd4bf, #06b6d4);
     }
-    .child-icon {
-      width:16px; height:16px;
-      display:flex; align-items:center; justify-content:center;
-      flex-shrink:0; opacity:.7;
-    }
+    .child-icon { width:16px; height:16px; display:flex; align-items:center; justify-content:center; flex-shrink:0; opacity:.7; }
     .nav-child-item.active .child-icon { opacity:1; }
     .child-icon svg { width:14px !important; height:14px !important; stroke-width:1.75 !important; }
     .child-label { white-space:nowrap; }
-
-    /* ── Divider & section label ── */
-    .nav-divider {
-      height:1px; background:rgba(255,255,255,0.06);
-      margin:.5rem .25rem;
-    }
+    .nav-divider { height:1px; background:rgba(255,255,255,0.06); margin:.5rem .25rem; }
     .nav-section-label {
       font-size:.625rem; font-weight:700; text-transform:uppercase;
       letter-spacing:.1em; color:rgba(255,255,255,0.22);
       padding:.375rem 1rem .3rem;
     }
-
-    /* ── Footer ── */
     .sidebar-footer {
       padding:.75rem; border-top:1px solid rgba(255,255,255,0.06);
       display:flex; flex-direction:column; gap:.375rem;
@@ -311,6 +246,13 @@ export class SidebarComponent {
   advancedItems: NavItem[] = [];
   bottomItems: NavItem[] = [];
 
+  constructor(public auth: AuthService, private router: Router, private sanitizer: DomSanitizer) {
+    const s = (svg: string) => this.sanitizer.bypassSecurityTrustHtml(svg);
+
+    this.topItems = [
+      { label: 'Home', route: '/dashboard', icon: s('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>') },
+      { label: 'Campaigns', route: '/campaigns', icon: s('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>') },
+      { label: 'Flows', route: '/flows', icon: s('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>') },
       { label: 'Email', route: '/email/inbox', icon: s('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>') },
     ];
 
