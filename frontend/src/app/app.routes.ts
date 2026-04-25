@@ -111,6 +111,16 @@ export const routes: Routes = [
         redirectTo: '/analytics/dashboards',
         pathMatch: 'full'
       },
+      // Email
+      {
+        path: 'email',
+        redirectTo: '/email/inbox',
+        pathMatch: 'full'
+      },
+      {
+        path: 'email/:folder',
+        loadComponent: () => import('./features/email/email-page.component').then(m => m.EmailPageComponent)
+      },
       // Settings
       {
         path: 'settings',

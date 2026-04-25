@@ -91,11 +91,11 @@ export class MockDataService {
   getCampaigns(): Campaign[] {
     return [
       { id:'1', name:'March Newsletter', subject:'What I\'ve been writing this month...', status:'sent', openRate:54.2, clickRate:12.8, sent:4821, date:'Mar 15, 2026' },
-      { id:'2', name:'Book Launch: The Ember Crown', subject:'It\'s finally here! 🎉', status:'sent', openRate:71.4, clickRate:28.3, sent:3200, date:'Mar 1, 2026' },
+      { id:'2', name:'Book Launch: The Ember Crown', subject:'It\'s finally here!', status:'sent', openRate:71.4, clickRate:28.3, sent:3200, date:'Mar 1, 2026' },
       { id:'3', name:'April Newsletter', subject:'Spring reading picks + a surprise', status:'draft', openRate:0, clickRate:0, sent:0, date:'Apr 10, 2026' },
       { id:'4', name:'VIP Early Access', subject:'You get to read it first...', status:'scheduled', openRate:0, clickRate:0, sent:0, date:'Apr 8, 2026' },
       { id:'5', name:'February Roundup', subject:'February was wild. Here\'s why.', status:'sent', openRate:48.9, clickRate:9.1, sent:4650, date:'Feb 28, 2026' },
-      { id:'6', name:'Holiday Special', subject:'A gift from me to you 🎁', status:'sent', openRate:62.1, clickRate:18.5, sent:5100, date:'Dec 20, 2025' },
+      { id:'6', name:'Holiday Special', subject:'A gift from me to you', status:'sent', openRate:62.1, clickRate:18.5, sent:5100, date:'Dec 20, 2025' },
     ];
   }
 
@@ -118,7 +118,7 @@ export class MockDataService {
           { id:'s1', type:'trigger', label:'Trigger', detail:'Tag: launch-list added' },
           { id:'s2', type:'email', label:'Announcement', detail:'Subject: Big news — my new book is coming!' },
           { id:'s3', type:'wait', label:'Wait 1 Day', detail:'Delay: 1 day' },
-          { id:'s4', type:'email', label:'Pre-order Email', detail:'Subject: Pre-order is LIVE 🚀' },
+          { id:'s4', type:'email', label:'Pre-order Email', detail:'Subject: Pre-order is LIVE' },
           { id:'s5', type:'condition', label:'Pre-ordered?', detail:'If clicked → thank you email' },
         ]
       },
@@ -136,25 +136,25 @@ export class MockDataService {
 
   getTemplates(): Template[] {
     return [
-      { id:'1', name:'Newsletter Classic', category:'Newsletter', preview:'📰', description:'Clean newsletter layout with header, body, and footer' },
-      { id:'2', name:'Book Launch', category:'Launch', preview:'🚀', description:'High-impact launch announcement with CTA button' },
-      { id:'3', name:'Welcome Email', category:'Automation', preview:'👋', description:'Warm welcome email for new subscribers' },
-      { id:'4', name:'Story Excerpt', category:'Content', preview:'📖', description:'Share a chapter or excerpt with your readers' },
-      { id:'5', name:'Event Invite', category:'Event', preview:'🎉', description:'Invite readers to a signing, webinar, or live event' },
-      { id:'6', name:'Re-engagement', category:'Automation', preview:'💌', description:'Win back inactive subscribers with a personal touch' },
-      { id:'7', name:'Holiday Special', category:'Seasonal', preview:'🎄', description:'Festive email with seasonal design elements' },
-      { id:'8', name:'Survey / Feedback', category:'Engagement', preview:'📊', description:'Ask readers for feedback or poll their preferences' },
+      { id:'1', name:'Newsletter Classic', category:'Newsletter', preview:'NL', description:'Clean newsletter layout with header, body, and footer' },
+      { id:'2', name:'Book Launch', category:'Launch', preview:'BL', description:'High-impact launch announcement with CTA button' },
+      { id:'3', name:'Welcome Email', category:'Automation', preview:'WE', description:'Warm welcome email for new subscribers' },
+      { id:'4', name:'Story Excerpt', category:'Content', preview:'SE', description:'Share a chapter or excerpt with your readers' },
+      { id:'5', name:'Event Invite', category:'Event', preview:'EV', description:'Invite readers to a signing, webinar, or live event' },
+      { id:'6', name:'Re-engagement', category:'Automation', preview:'RE', description:'Win back inactive subscribers with a personal touch' },
+      { id:'7', name:'Holiday Special', category:'Seasonal', preview:'HS', description:'Festive email with seasonal design elements' },
+      { id:'8', name:'Survey / Feedback', category:'Engagement', preview:'SF', description:'Ask readers for feedback or poll their preferences' },
     ];
   }
 
   getRecentActivity(): ActivityItem[] {
     return [
-      { id:'1', type:'campaign_sent', message:'Campaign "March Newsletter" sent to 4,821 subscribers', time:'2 hours ago', icon:'📧' },
-      { id:'2', type:'new_subscriber', message:'New subscriber: priya@example.com joined via landing page', time:'4 hours ago', icon:'👤' },
-      { id:'3', type:'flow_triggered', message:'Welcome Flow triggered for 12 new subscribers', time:'6 hours ago', icon:'⚡' },
-      { id:'4', type:'new_subscriber', message:'New subscriber: tom@example.com joined via book link', time:'8 hours ago', icon:'👤' },
-      { id:'5', type:'campaign_sent', message:'Campaign "VIP Early Access" scheduled for Apr 8', time:'1 day ago', icon:'📅' },
-      { id:'6', type:'flow_triggered', message:'Winback Flow triggered for 23 inactive subscribers', time:'2 days ago', icon:'⚡' },
+      { id:'1', type:'campaign_sent', message:'Campaign "March Newsletter" sent to 4,821 subscribers', time:'2 hours ago', icon:'campaign' },
+      { id:'2', type:'new_subscriber', message:'New subscriber: priya@example.com joined via landing page', time:'4 hours ago', icon:'subscriber' },
+      { id:'3', type:'flow_triggered', message:'Welcome Flow triggered for 12 new subscribers', time:'6 hours ago', icon:'flow' },
+      { id:'4', type:'new_subscriber', message:'New subscriber: tom@example.com joined via book link', time:'8 hours ago', icon:'subscriber' },
+      { id:'5', type:'campaign_sent', message:'Campaign "VIP Early Access" scheduled for Apr 8', time:'1 day ago', icon:'scheduled' },
+      { id:'6', type:'flow_triggered', message:'Winback Flow triggered for 23 inactive subscribers', time:'2 days ago', icon:'flow' },
     ];
   }
 

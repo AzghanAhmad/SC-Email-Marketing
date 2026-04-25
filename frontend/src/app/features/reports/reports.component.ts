@@ -19,20 +19,66 @@ import { MockDataService } from '../../core/services/mock-data.service';
         </button>
       </div>
 
-      <!-- Summary Row -->
-      <div class="summary-row">
-        <div class="glass-card summary-card" *ngFor="let s of summaryStats">
-          <div class="sc-icon" [style.background]="s.iconBg" [innerHTML]="s.icon"></div>
-          <div class="sc-body">
-            <span class="sc-val">{{ s.value }}</span>
-            <span class="sc-label">{{ s.label }}</span>
+      <!-- Metrics Chart Panel -->
+      <div class="glass-card metrics-panel">
+        <div class="metrics-header">
+          <div>
+            <h3 class="metrics-title">Metrics</h3>
+            <p class="metrics-sub">Track your key email marketing performance metrics over time</p>
           </div>
-          <div class="sc-change" [class.up]="s.change > 0">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="11" height="11">
-              <polyline *ngIf="s.change > 0" points="18 15 12 9 6 15"/>
-              <polyline *ngIf="s.change < 0" points="6 9 12 15 18 9"/>
+          <div class="period-tabs">
+            <button class="period-tab" [class.active]="activePeriod === '7d'" (click)="setPeriod('7d')">Last 7 days</button>
+            <button class="period-tab" [class.active]="activePeriod === '30d'" (click)="setPeriod('30d')">Last 30 days</button>
+            <button class="period-tab" [class.active]="activePeriod === '90d'" (click)="setPeriod('90d')">Last 90 days</button>
+          </div>
+        </div>
+
+        <!-- Metric KPI Cards -->
+        <div class="metrics-kpi-row">
+          <div class="metric-kpi" *ngFor="let m of metricCards" [class.active]="activeMetric === m.key" (click)="setMetric(m.key)">
+            <div class="mkpi-top">
+              <span class="mkpi-label">{{ m.label }}</span>
+              <span class="mkpi-change" [class.up]="m.change > 0" [class.down]="m.change < 0">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="10" height="10">
+                  <polyline *ngIf="m.change > 0" points="18 15 12 9 6 15"/>
+                  <polyline *ngIf="m.change < 0" points="6 9 12 15 18 9"/>
+                </svg>
+                {{ m.change > 0 ? '+' : '' }}{{ m.change }}%
+              </span>
+            </div>
+            <span class="mkpi-value">{{ m.value }}</span>
+            <span class="mkpi-period">vs previous period</span>
+          </div>
+        </div>
+
+        <!-- Line Chart -->
+        <div class="metrics-chart-wrap">
+          <div class="metrics-y-axis">
+            <span *ngFor="let y of metricsYLabels">{{ y }}</span>
+          </div>
+          <div class="metrics-chart-inner">
+            <svg class="metrics-svg" viewBox="0 0 600 180" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="mGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#1e3a5f" stop-opacity="0.1"/>
+                  <stop offset="100%" stop-color="#1e3a5f" stop-opacity="0.01"/>
+                </linearGradient>
+              </defs>
+              <!-- Grid lines -->
+              <line *ngFor="let gl of metricsGridLines" x1="0" [attr.y1]="gl" x2="600" [attr.y2]="gl" stroke="#f1f5f9" stroke-width="1"/>
+              <!-- Area -->
+              <polygon [attr.points]="metricsAreaPoints" fill="url(#mGrad)"/>
+              <!-- Line -->
+              <polyline [attr.points]="metricsLinePoints" fill="none" stroke="#1e3a5f" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+              <!-- Dots -->
+              <g *ngFor="let pt of metricsDots">
+                <circle [attr.cx]="pt.x" [attr.cy]="pt.y" r="5" fill="white" stroke="#1e3a5f" stroke-width="2"/>
+                <circle [attr.cx]="pt.x" [attr.cy]="pt.y" r="2.5" fill="#1e3a5f"/>
+              </g>
             </svg>
-            {{ s.change > 0 ? '+' : '' }}{{ s.change }}%
+            <div class="metrics-x-labels">
+              <span *ngFor="let l of metricsXLabels">{{ l }}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -158,15 +204,32 @@ import { MockDataService } from '../../core/services/mock-data.service';
     </div>
   `,
   styles: [`
-    .summary-row { display:grid; grid-template-columns:repeat(4,1fr); gap:1.25rem; margin-bottom:1.75rem; }
-    .summary-card { display:flex; align-items:center; gap:1rem; padding:1.25rem 1.375rem; position:relative; box-shadow:0 1px 3px rgba(0,0,0,0.06); }
-    .sc-icon { width:42px; height:42px; border-radius:12px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-    .sc-icon :global(svg) { width:20px; height:20px; }
-    .sc-body { flex:1; display:flex; flex-direction:column; }
-    .sc-val { font-size:1.5rem; font-weight:800; color:#0f172a; letter-spacing:-.03em; line-height:1.1; }
-    .sc-label { font-size:.7rem; font-weight:600; color:#94a3b8; text-transform:uppercase; letter-spacing:.06em; margin-top:.2rem; }
-    .sc-change { display:flex; align-items:center; gap:.2rem; font-size:.75rem; font-weight:700; padding:.2rem .45rem; border-radius:6px; position:absolute; top:.875rem; right:.875rem; }
-    .sc-change.up { color:#059669; background:rgba(16,185,129,0.1); }
+    /* Metrics Panel */
+    .metrics-panel { padding:1.75rem; margin-bottom:1.75rem; }
+    .metrics-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:1.5rem; flex-wrap:wrap; gap:1rem; }
+    .metrics-title { font-size:1.125rem; font-weight:700; color:#0f172a; margin:0 0 .2rem; }
+    .metrics-sub { font-size:.8rem; color:#94a3b8; margin:0; }
+    .period-tabs { display:flex; gap:.25rem; background:#f1f5f9; border-radius:10px; padding:.25rem; }
+    .period-tab { padding:.4rem .875rem; border-radius:8px; border:none; background:transparent; font-size:.8rem; font-weight:500; font-family:inherit; color:#64748b; cursor:pointer; transition:all .2s; }
+    .period-tab.active { background:white; color:#0f172a; font-weight:600; box-shadow:0 1px 3px rgba(0,0,0,0.08); }
+
+    .metrics-kpi-row { display:grid; grid-template-columns:repeat(6,1fr); gap:1rem; margin-bottom:1.75rem; }
+    .metric-kpi { padding:1rem; border-radius:12px; border:1.5px solid #f1f5f9; cursor:pointer; transition:all .2s; background:#fafafa; }
+    .metric-kpi:hover { border-color:#bfdbfe; background:#f0f7ff; }
+    .metric-kpi.active { border-color:#1e3a5f; background:white; box-shadow:0 2px 8px rgba(30,58,95,0.1); }
+    .mkpi-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:.375rem; }
+    .mkpi-label { font-size:.72rem; font-weight:600; color:#64748b; text-transform:uppercase; letter-spacing:.04em; }
+    .mkpi-change { display:flex; align-items:center; gap:.15rem; font-size:.72rem; font-weight:700; padding:.15rem .4rem; border-radius:5px; }
+    .mkpi-change.up { color:#059669; background:rgba(16,185,129,0.1); }
+    .mkpi-change.down { color:#dc2626; background:rgba(239,68,68,0.1); }
+    .mkpi-value { display:block; font-size:1.375rem; font-weight:800; color:#0f172a; letter-spacing:-.02em; line-height:1.1; margin-bottom:.2rem; }
+    .mkpi-period { font-size:.7rem; color:#94a3b8; }
+
+    .metrics-chart-wrap { display:flex; gap:.5rem; }
+    .metrics-y-axis { display:flex; flex-direction:column; justify-content:space-between; text-align:right; font-size:.65rem; color:#94a3b8; font-weight:500; width:36px; padding-bottom:1.5rem; flex-shrink:0; }
+    .metrics-chart-inner { flex:1; position:relative; }
+    .metrics-svg { width:100%; height:180px; display:block; }
+    .metrics-x-labels { display:flex; justify-content:space-between; font-size:.68rem; color:#94a3b8; margin-top:.25rem; padding:0 2px; }
 
     .report-card { padding:1.5rem; margin-bottom:1.5rem; }
     .report-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:1.5rem; }
@@ -207,7 +270,6 @@ import { MockDataService } from '../../core/services/mock-data.service';
     .fp-stat { display:flex; flex-direction:column; cursor:help; }
     .fps-val { font-size:1.0625rem; font-weight:700; color:#0f172a; }
     .fps-label { font-size:.7rem; color:#94a3b8; text-transform:uppercase; letter-spacing:.05em; }
-    .fp-bar-wrap { }
     .fp-bar { height:5px; background:#e2e8f0; border-radius:100px; overflow:hidden; }
     .fp-bar-fill { height:100%; border-radius:100px; transition:width .8s; }
 
@@ -219,9 +281,9 @@ import { MockDataService } from '../../core/services/mock-data.service';
     .eng-val { font-size:.9rem; font-weight:800; color:#0f172a; }
     .eng-label { font-size:.75rem; font-weight:600; color:#64748b; text-align:center; }
 
-    @media(max-width:1200px) { .summary-row { grid-template-columns:repeat(2,1fr); } .engagement-grid { grid-template-columns:repeat(3,1fr); } }
-    @media(max-width:900px) { .charts-row { grid-template-columns:1fr; } .perf-row { grid-template-columns:2fr 1fr 1fr; } .perf-row span:nth-child(4),.perf-row span:nth-child(5) { display:none; } }
-    @media(max-width:600px) { .summary-row { grid-template-columns:1fr; } .engagement-grid { grid-template-columns:repeat(2,1fr); } }
+    @media(max-width:1200px) { .metrics-kpi-row { grid-template-columns:repeat(3,1fr); } .engagement-grid { grid-template-columns:repeat(3,1fr); } }
+    @media(max-width:900px) { .charts-row { grid-template-columns:1fr; } .perf-row { grid-template-columns:2fr 1fr 1fr; } .metrics-kpi-row { grid-template-columns:repeat(2,1fr); } }
+    @media(max-width:600px) { .metrics-kpi-row { grid-template-columns:1fr 1fr; } .engagement-grid { grid-template-columns:repeat(2,1fr); } }
   `]
 })
 export class ReportsComponent implements OnInit {
@@ -232,15 +294,53 @@ export class ReportsComponent implements OnInit {
   engagementData: any[] = [];
   maxNew = 1;
 
+  activePeriod = '30d';
+  activeMetric = 'openRate';
+  metricCards: any[] = [];
+  metricsLinePoints = '';
+  metricsAreaPoints = '';
+  metricsDots: { x: number; y: number }[] = [];
+  metricsYLabels: string[] = [];
+  metricsGridLines: number[] = [];
+  metricsXLabels: string[] = [];
+
+  private metricsData: Record<string, Record<string, number[]>> = {
+    '7d': {
+      openRate:   [48, 52, 50, 55, 53, 57, 54],
+      clickRate:  [10, 11, 10, 13, 12, 14, 13],
+      bounceRate: [2.8, 2.6, 2.7, 2.5, 2.6, 2.4, 2.5],
+      unsubRate:  [0.5, 0.4, 0.5, 0.4, 0.4, 0.3, 0.4],
+      revEmail:   [0.12, 0.14, 0.13, 0.16, 0.15, 0.18, 0.17],
+      listGrowth: [60, 80, 75, 90, 85, 95, 100],
+    },
+    '30d': {
+      openRate:   [46, 49, 51, 48, 53, 50, 55, 52, 54, 51, 56, 54],
+      clickRate:  [9, 10, 11, 10, 12, 11, 13, 12, 13, 11, 13, 13],
+      bounceRate: [3.1, 2.9, 2.8, 2.9, 2.7, 2.8, 2.6, 2.7, 2.5, 2.6, 2.5, 2.5],
+      unsubRate:  [0.6, 0.5, 0.5, 0.4, 0.5, 0.4, 0.4, 0.4, 0.3, 0.4, 0.4, 0.4],
+      revEmail:   [0.10, 0.11, 0.12, 0.11, 0.13, 0.12, 0.14, 0.13, 0.15, 0.14, 0.16, 0.17],
+      listGrowth: [320, 380, 350, 410, 390, 430, 420, 460, 440, 480, 500, 521],
+    },
+    '90d': {
+      openRate:   [42, 44, 46, 45, 48, 47, 50, 49, 51, 50, 53, 52, 54, 53, 54],
+      clickRate:  [7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 12, 13, 13, 13],
+      bounceRate: [3.5, 3.3, 3.2, 3.1, 3.0, 2.9, 2.8, 2.8, 2.7, 2.6, 2.6, 2.5, 2.5, 2.5, 2.5],
+      unsubRate:  [0.8, 0.7, 0.7, 0.6, 0.6, 0.5, 0.5, 0.5, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4],
+      revEmail:   [0.08, 0.09, 0.09, 0.10, 0.10, 0.11, 0.11, 0.12, 0.12, 0.13, 0.14, 0.14, 0.15, 0.16, 0.17],
+      listGrowth: [200, 240, 280, 310, 340, 370, 390, 420, 440, 460, 480, 490, 500, 510, 521],
+    }
+  };
+
   constructor(private mockData: MockDataService) {}
 
   ngOnInit() {
-    const s = this.mockData.getDashboardStats();
-    this.summaryStats = [
-      { label:'Total Emails Sent', value: '24,830', change: 8.1, iconBg:'rgba(59,130,246,0.1)', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>' },
-      { label:'Avg Open Rate', value: '54.2%', change: 3.2, iconBg:'rgba(16,185,129,0.1)', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>' },
-      { label:'Avg Click Rate', value: '12.8%', change: 1.4, iconBg:'rgba(99,102,241,0.1)', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>' },
-      { label:'Unsubscribe Rate', value: '0.4%', change: -0.1, iconBg:'rgba(239,68,68,0.1)', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="23" y1="11" x2="17" y2="11"/></svg>' },
+    this.metricCards = [
+      { key:'openRate',   label:'Open Rate',        value:'54.2%', change:3.2  },
+      { key:'clickRate',  label:'Click Rate',        value:'12.8%', change:1.4  },
+      { key:'bounceRate', label:'Bounce Rate',       value:'2.5%',  change:-0.3 },
+      { key:'unsubRate',  label:'Unsubscribe Rate',  value:'0.4%',  change:-0.1 },
+      { key:'revEmail',   label:'Revenue/Email',     value:'$0.17', change:12.4 },
+      { key:'listGrowth', label:'List Growth',       value:'+521',  change:6.2  },
     ];
 
     this.campaignPerf = [
@@ -263,11 +363,57 @@ export class ReportsComponent implements OnInit {
     ];
 
     this.engagementData = [
-      { label:'Opened', value:54, color:'#60a5fa' },
-      { label:'Clicked', value:13, color:'#818cf8' },
-      { label:'Replied', value:4, color:'#a78bfa' },
-      { label:'Forwarded', value:2, color:'#34d399' },
-      { label:'Unsubscribed', value:0.4, color:'#f87171' },
+      { label:'Opened', value:54, color:'#3b82f6' },
+      { label:'Clicked', value:13, color:'#6366f1' },
+      { label:'Replied', value:4, color:'#8b5cf6' },
+      { label:'Forwarded', value:2, color:'#059669' },
+      { label:'Unsubscribed', value:0.4, color:'#dc2626' },
     ];
+
+    this.buildMetricsChart();
+  }
+
+  setPeriod(p: string) {
+    this.activePeriod = p;
+    this.buildMetricsChart();
+  }
+
+  setMetric(key: string) {
+    this.activeMetric = key;
+    this.buildMetricsChart();
+  }
+
+  buildMetricsChart() {
+    const raw = this.metricsData[this.activePeriod][this.activeMetric] || [];
+    const W = 600, H = 180, PAD_T = 12, PAD_B = 8, PAD_L = 4, PAD_R = 4;
+    const chartH = H - PAD_T - PAD_B;
+    const chartW = W - PAD_L - PAD_R;
+    const max = Math.max(...raw);
+    const min = Math.min(...raw);
+    const range = max - min || 1;
+    const steps = 4;
+
+    this.metricsYLabels = [];
+    this.metricsGridLines = [];
+    for (let i = steps; i >= 0; i--) {
+      const val = min + (i / steps) * range;
+      this.metricsYLabels.push(val >= 100 ? val.toFixed(0) : val.toFixed(1));
+      this.metricsGridLines.push(PAD_T + ((steps - i) / steps) * chartH);
+    }
+
+    const pts = raw.map((v, i) => ({
+      x: PAD_L + (i / (raw.length - 1)) * chartW,
+      y: PAD_T + (1 - (v - min) / range) * chartH
+    }));
+    this.metricsDots = pts;
+    this.metricsLinePoints = pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+    this.metricsAreaPoints = `${pts[0].x},${H - PAD_B} ${pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')} ${pts[pts.length - 1].x},${H - PAD_B}`;
+
+    // X labels — show ~6 evenly spaced
+    const step = Math.max(1, Math.floor(raw.length / 6));
+    this.metricsXLabels = raw.map((_, i) => {
+      if (i % step === 0 || i === raw.length - 1) return `Day ${i + 1}`;
+      return '';
+    }).filter((_, i) => i % step === 0 || i === raw.length - 1);
   }
 }

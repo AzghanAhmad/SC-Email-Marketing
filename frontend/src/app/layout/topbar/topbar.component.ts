@@ -91,7 +91,7 @@ import { AuthService } from '../../core/services/auth.service';
       background:linear-gradient(180deg, rgba(22,38,62,0.98) 0%, rgba(14,24,40,0.98) 100%);
       backdrop-filter:blur(20px);
       border-bottom:1px solid rgba(255,255,255,0.07);
-      position:fixed; top:0; left:240px; right:0; z-index:40;
+      position:fixed; top:0; left:252px; right:0; z-index:40;
       box-shadow:0 1px 0 rgba(0,0,0,0.15);
     }
     .topbar-left { display:flex; align-items:center; gap:1rem; }

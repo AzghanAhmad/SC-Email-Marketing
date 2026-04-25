@@ -21,7 +21,7 @@ import { TopbarComponent } from '../topbar/topbar.component';
   styles: [`
     .app-shell { display:flex; min-height:100vh; min-height:100dvh; }
     .main-area {
-      flex:1 1 0; margin-left:240px; display:flex; flex-direction:column;
+      flex:1 1 0; margin-left:252px; display:flex; flex-direction:column;
       min-height:0; align-self:stretch; background:var(--bg);
     }
     .main-content {

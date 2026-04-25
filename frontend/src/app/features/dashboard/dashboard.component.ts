@@ -87,7 +87,7 @@ import { MockDataService } from '../../core/services/mock-data.service';
           <h4 class="attr-title">Attributed Revenue</h4>
           <div class="attr-grid">
             <div class="attr-item" *ngFor="let a of attributionData">
-              <div class="attr-icon">{{ a.icon }}</div>
+              <div class="attr-svg-icon" [innerHTML]="a.svgIcon"></div>
               <span class="attr-label">{{ a.label }}</span>
               <span class="attr-val">{{ a.value }}</span>
               <span class="attr-pct">{{ a.pct }}</span>
@@ -128,26 +128,48 @@ import { MockDataService } from '../../core/services/mock-data.service';
               <h3 class="chart-title">Subscriber Growth</h3>
               <p class="chart-sub">Total subscribers over time</p>
             </div>
+            <div class="growth-legend">
+              <span class="legend-item"><span class="legend-dot" style="background:#1e3a5f"></span>Actual</span>
+              <span class="legend-item"><span class="legend-dot legend-dot-dash" style="background:#94a3b8"></span>Target</span>
+            </div>
           </div>
-          <div class="line-chart-wrap">
-            <svg class="line-svg" viewBox="0 0 300 120" preserveAspectRatio="none">
-              <defs>
-                <linearGradient id="lineGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stop-color="#60a5fa" stop-opacity="0.3"/>
-                  <stop offset="100%" stop-color="#60a5fa" stop-opacity="0.02"/>
-                </linearGradient>
-              </defs>
-              <polygon [attr.points]="growthAreaPoints" fill="url(#lineGrad)"/>
-              <polyline [attr.points]="growthLinePoints" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-              <circle *ngFor="let pt of growthDots" [attr.cx]="pt.x" [attr.cy]="pt.y" r="3" fill="#60a5fa" stroke="rgba(16,28,46,0.8)" stroke-width="1.5"/>
-            </svg>
-            <div class="line-labels">
-              <span *ngFor="let d of growthData">{{ d.label }}</span>
+          <!-- Proper line chart with axes -->
+          <div class="growth-chart-container">
+            <div class="growth-y-axis">
+              <span *ngFor="let y of yAxisLabels">{{ y }}</span>
+            </div>
+            <div class="growth-chart-inner">
+              <svg class="growth-svg" [attr.viewBox]="'0 0 ' + svgW + ' ' + svgH" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="growthGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#1e3a5f" stop-opacity="0.12"/>
+                    <stop offset="100%" stop-color="#1e3a5f" stop-opacity="0.01"/>
+                  </linearGradient>
+                </defs>
+                <!-- Grid lines -->
+                <line *ngFor="let gl of gridLines" [attr.x1]="0" [attr.y1]="gl" [attr.x2]="svgW" [attr.y2]="gl" stroke="#e2e8f0" stroke-width="1"/>
+                <!-- Target dashed line -->
+                <line [attr.x1]="growthDots[0]?.x" [attr.y1]="growthDots[0]?.y" [attr.x2]="growthDots[growthDots.length-1]?.x" [attr.y2]="growthDots[growthDots.length-1]?.y" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="5 4"/>
+                <!-- Area fill -->
+                <polygon [attr.points]="growthAreaPoints" fill="url(#growthGrad)"/>
+                <!-- Main line -->
+                <polyline [attr.points]="growthLinePoints" fill="none" stroke="#1e3a5f" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+                <!-- Data dots -->
+                <g *ngFor="let pt of growthDots; let i = index">
+                  <circle [attr.cx]="pt.x" [attr.cy]="pt.y" r="5" fill="white" stroke="#1e3a5f" stroke-width="2"/>
+                  <circle [attr.cx]="pt.x" [attr.cy]="pt.y" r="2.5" fill="#1e3a5f"/>
+                </g>
+              </svg>
+              <!-- X-axis labels -->
+              <div class="growth-x-labels">
+                <span *ngFor="let d of growthData">{{ d.label }}</span>
+              </div>
             </div>
           </div>
           <div class="growth-footer">
             <span class="growth-current">{{ growthData[growthData.length-1].count | number }}</span>
             <span class="growth-label">total subscribers</span>
+            <span class="growth-change up">+12.4% vs last period</span>
           </div>
         </div>
       </div>
@@ -162,7 +184,12 @@ import { MockDataService } from '../../core/services/mock-data.service';
           </div>
           <div class="activity-list">
             <div class="activity-item" *ngFor="let item of activity">
-              <span class="activity-icon">{{ item.icon }}</span>
+              <div class="activity-icon-wrap" [class]="'act-' + item.icon">
+                <svg *ngIf="item.icon === 'campaign'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                <svg *ngIf="item.icon === 'subscriber'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+                <svg *ngIf="item.icon === 'flow'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                <svg *ngIf="item.icon === 'scheduled'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              </div>
               <div class="activity-body">
                 <p class="activity-msg">{{ item.message }}</p>
                 <span class="activity-time">{{ item.time }}</span>
@@ -269,7 +296,8 @@ import { MockDataService } from '../../core/services/mock-data.service';
     .attr-title { font-size:.8125rem; font-weight:700; color:#0f172a; margin:0 0 1rem; }
     .attr-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:1rem; }
     .attr-item { display:flex; flex-direction:column; align-items:center; gap:.25rem; padding:.875rem; background:#f8fafc; border-radius:12px; border:1px solid #f1f5f9; }
-    .attr-icon { font-size:1.25rem; }
+    .attr-svg-icon { width:28px; height:28px; display:flex; align-items:center; justify-content:center; color:#64748b; }
+    .attr-svg-icon :global(svg) { width:18px; height:18px; }
     .attr-label { font-size:.72rem; font-weight:600; color:#64748b; text-align:center; }
     .attr-val { font-size:1.0625rem; font-weight:800; color:#0f172a; }
     .attr-pct { font-size:.7rem; color:#94a3b8; }
@@ -295,9 +323,17 @@ import { MockDataService } from '../../core/services/mock-data.service';
     .line-chart-wrap { position:relative; margin-bottom:.75rem; }
     .line-svg { width:100%; height:120px; }
     .line-labels { display:flex; justify-content:space-between; font-size:.7rem; color:#94a3b8; margin-top:.25rem; }
-    .growth-footer { display:flex; align-items:baseline; gap:.5rem; }
-    .growth-current { font-size:1.75rem; font-weight:800; color:#0f172a; letter-spacing:-.03em; }
+    .growth-legend { display:flex; gap:.875rem; }
+    .growth-chart-container { display:flex; gap:.5rem; margin-bottom:.75rem; }
+    .growth-y-axis { display:flex; flex-direction:column; justify-content:space-between; text-align:right; font-size:.65rem; color:#94a3b8; font-weight:500; width:38px; padding-bottom:1.5rem; flex-shrink:0; }
+    .growth-chart-inner { flex:1; position:relative; }
+    .growth-svg { width:100%; height:160px; display:block; }
+    .growth-x-labels { display:flex; justify-content:space-between; font-size:.68rem; color:#94a3b8; margin-top:.25rem; padding:0 2px; }
+    .growth-footer { display:flex; align-items:baseline; gap:.625rem; margin-top:.5rem; }
+    .growth-current { font-size:1.625rem; font-weight:800; color:#0f172a; letter-spacing:-.03em; }
     .growth-label { font-size:.8rem; color:#94a3b8; }
+    .growth-change { font-size:.75rem; font-weight:700; padding:.2rem .5rem; border-radius:6px; }
+    .growth-change.up { color:#059669; background:rgba(16,185,129,0.1); }
 
     .bottom-row { display:grid; grid-template-columns:1.4fr 1fr; gap:1.5rem; }
     .activity-card { padding:1.5rem; }
@@ -308,7 +344,11 @@ import { MockDataService } from '../../core/services/mock-data.service';
     .activity-list { display:flex; flex-direction:column; gap:.125rem; }
     .activity-item { display:flex; align-items:flex-start; gap:.875rem; padding:.75rem; border-radius:10px; transition:background .15s; }
     .activity-item:hover { background:#f8fafc; }
-    .activity-icon { font-size:1.25rem; flex-shrink:0; margin-top:.1rem; }
+    .activity-icon-wrap { width:32px; height:32px; border-radius:9px; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:.1rem; }
+    .act-campaign { background:rgba(59,130,246,0.1); color:#3b82f6; }
+    .act-subscriber { background:rgba(16,185,129,0.1); color:#059669; }
+    .act-flow { background:rgba(139,92,246,0.1); color:#8b5cf6; }
+    .act-scheduled { background:rgba(245,158,11,0.1); color:#d97706; }
     .activity-body { display:flex; flex-direction:column; gap:.2rem; }
     .activity-msg { font-size:.8125rem; color:#334155; line-height:1.4; margin:0; }
     .activity-time { font-size:.7rem; color:#94a3b8; }
@@ -338,13 +378,17 @@ export class DashboardComponent implements OnInit {
   growthLinePoints = '';
   growthAreaPoints = '';
   growthDots: { x: number; y: number }[] = [];
+  yAxisLabels: string[] = [];
+  gridLines: number[] = [];
+  svgW = 400;
+  svgH = 160;
 
   attributionData = [
-    { icon: '👤', label: 'Per Recipient', value: '$0.17', pct: '' },
-    { icon: '📧', label: 'Campaigns', value: '$2,870', pct: '67.1%' },
-    { icon: '⚡', label: 'Flows', value: '$1,020', pct: '23.8%' },
-    { icon: '✉️', label: 'Email', value: '$3,890', pct: '90.9%' },
-    { icon: '🛒', label: 'Direct Sales', value: '$390', pct: '9.1%' },
+    { label: 'Per Recipient', value: '$0.17', pct: '', svgIcon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>' },
+    { label: 'Campaigns', value: '$2,870', pct: '67.1%', svgIcon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>' },
+    { label: 'Flows', value: '$1,020', pct: '23.8%', svgIcon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>' },
+    { label: 'Email', value: '$3,890', pct: '90.9%', svgIcon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>' },
+    { label: 'Direct Sales', value: '$390', pct: '9.1%', svgIcon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>' },
   ];
 
   constructor(private mockData: MockDataService) {}
@@ -369,14 +413,31 @@ export class DashboardComponent implements OnInit {
     const data = this.growthData;
     const max = Math.max(...data.map(d => d.count));
     const min = Math.min(...data.map(d => d.count));
-    const range = max - min || 1;
-    const W = 300, H = 120, PAD = 10;
+    const padded_min = Math.floor(min / 1000) * 1000;
+    const padded_max = Math.ceil(max / 1000) * 1000;
+    const range = padded_max - padded_min || 1;
+    const W = this.svgW, H = this.svgH;
+    const PAD_T = 12, PAD_B = 8, PAD_L = 4, PAD_R = 4;
+    const chartH = H - PAD_T - PAD_B;
+    const chartW = W - PAD_L - PAD_R;
+
+    // Y-axis labels (5 steps)
+    const steps = 4;
+    this.yAxisLabels = [];
+    this.gridLines = [];
+    for (let i = steps; i >= 0; i--) {
+      const val = padded_min + (i / steps) * range;
+      this.yAxisLabels.push(val >= 1000 ? (val / 1000).toFixed(0) + 'k' : val.toFixed(0));
+      const y = PAD_T + ((steps - i) / steps) * chartH;
+      this.gridLines.push(y);
+    }
+
     const pts = data.map((d, i) => ({
-      x: PAD + (i / (data.length - 1)) * (W - PAD * 2),
-      y: H - PAD - ((d.count - min) / range) * (H - PAD * 2)
+      x: PAD_L + (i / (data.length - 1)) * chartW,
+      y: PAD_T + (1 - (d.count - padded_min) / range) * chartH
     }));
     this.growthDots = pts;
     this.growthLinePoints = pts.map(p => `${p.x},${p.y}`).join(' ');
-    this.growthAreaPoints = `${pts[0].x},${H} ${pts.map(p => `${p.x},${p.y}`).join(' ')} ${pts[pts.length-1].x},${H}`;
+    this.growthAreaPoints = `${pts[0].x},${H - PAD_B} ${pts.map(p => `${p.x},${p.y}`).join(' ')} ${pts[pts.length - 1].x},${H - PAD_B}`;
   }
 }

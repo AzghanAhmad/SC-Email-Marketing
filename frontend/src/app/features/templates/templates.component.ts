@@ -34,7 +34,16 @@ import { MockDataService, Template } from '../../core/services/mock-data.service
       <div class="templates-grid">
         <div class="glass-card template-card" *ngFor="let t of filteredTemplates" (click)="previewTemplate.set(t)">
           <div class="template-preview">
-            <div class="template-emoji">{{ t.preview }}</div>
+            <div class="template-icon-wrap">
+              <svg *ngIf="t.preview === 'NL'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+              <svg *ngIf="t.preview === 'BL'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+              <svg *ngIf="t.preview === 'WE'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <svg *ngIf="t.preview === 'SE'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+              <svg *ngIf="t.preview === 'EV'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              <svg *ngIf="t.preview === 'RE'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>
+              <svg *ngIf="t.preview === 'HS'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              <svg *ngIf="t.preview === 'SF'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            </div>
             <div class="template-lines">
               <div class="tl tl-1"></div>
               <div class="tl tl-2"></div>
@@ -57,7 +66,9 @@ import { MockDataService, Template } from '../../core/services/mock-data.service
       </div>
 
       <div class="empty-state" *ngIf="filteredTemplates.length === 0">
-        <div class="empty-state-icon">📄</div>
+        <div class="empty-state-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" stroke-width="1.5" width="48" height="48"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        </div>
         <h3>No templates found</h3>
         <p>Try a different category or search term</p>
       </div>
@@ -112,7 +123,8 @@ import { MockDataService, Template } from '../../core/services/mock-data.service
     .template-card:hover .template-preview { background:#eff6ff; }
 
     .template-preview { padding:1.5rem; background:#f8fafc; border-bottom:1.5px solid #f1f5f9; display:flex; flex-direction:column; align-items:center; gap:.875rem; min-height:140px; justify-content:center; transition:background .2s; }
-    .template-emoji { font-size:2.5rem; }
+    .template-icon-wrap { width:56px; height:56px; border-radius:14px; background:#e2e8f0; display:flex; align-items:center; justify-content:center; color:#64748b; transition:all .2s; }
+    .template-card:hover .template-icon-wrap { background:#dbeafe; color:#3b82f6; }
     .template-lines { display:flex; flex-direction:column; gap:.375rem; width:80%; }
     .tl { height:8px; border-radius:4px; background:#e2e8f0; }
     .tl-1 { width:100%; }
