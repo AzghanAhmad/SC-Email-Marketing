@@ -247,7 +247,7 @@ export class SidebarComponent {
   bottomItems: NavItem[] = [];
 
   constructor(public auth: AuthService, private router: Router, private sanitizer: DomSanitizer) {
-    const s = (svg: string) => this.sanitizer.bypassSecurityTrustHtml(svg);
+    const s = (svg: string): SafeHtml => this.sanitizer.bypassSecurityTrustHtml(svg);
 
     this.topItems = [
       { label: 'Home', route: '/dashboard', icon: s('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>') },
@@ -297,6 +297,7 @@ export class SidebarComponent {
     ];
 
     this.advancedItems = [
+      { label: 'AuthorVault', route: '/author-vault', icon: s('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>') },
       { label: 'Marketing Analytics', route: '/marketing-analytics', icon: s('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>') },
     ];
 
@@ -308,7 +309,7 @@ export class SidebarComponent {
 
   initials(): string {
     const name = this.auth.user()?.name || '';
-    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+    return name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2);
   }
 
   logout(): void {

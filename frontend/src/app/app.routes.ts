@@ -95,6 +95,19 @@ export const routes: Routes = [
         path: 'analytics/custom-reports',
         loadComponent: () => import('./features/analytics/custom-reports/custom-reports.component').then(m => m.CustomReportsComponent)
       },
+      {
+        path: 'analytics/list-health',
+        loadComponent: () => import('./features/analytics/list-health/list-health.component').then(m => m.ListHealthComponent)
+      },
+      {
+        path: 'analytics/link-clicks',
+        loadComponent: () => import('./features/analytics/link-clicks/link-clicks.component').then(m => m.LinkClicksComponent)
+      },
+      // AuthorVault
+      {
+        path: 'author-vault',
+        loadComponent: () => import('./features/author-vault/author-vault.component').then(m => m.AuthorVaultComponent)
+      },
       // Advanced
       {
         path: 'marketing-analytics',

@@ -85,6 +85,10 @@ export class MockDataService {
       { id:'4', name:'Newsletter Only', count:2341, description:'General newsletter subscribers', color:'#fbbf24' },
       { id:'5', name:'Inactive 90d', count:512, description:'No opens in last 90 days', color:'#f87171' },
       { id:'6', name:'New This Month', count:189, description:'Joined in the last 30 days', color:'#818cf8' },
+      { id:'7', name:'ARC Team — The Ember Crown', count:34, description:'Advance readers for The Ember Crown — tagged arc-ember-crown-2026', color:'#8b5cf6' },
+      { id:'8', name:'Series Readers — Ember Chronicles', count:621, description:'Purchased 2+ books in the Ember Chronicles series', color:'#6366f1' },
+      { id:'9', name:'Superfans / All-Title Buyers', count:187, description:'Purchased every title in the catalog — highest-priority audience for new release notifications', color:'#f59e0b' },
+      { id:'10', name:'Backlist Buyers — Gothic Romance', count:843, description:'Purchased previous gothic romance titles — warmest audience for companion or related releases', color:'#ec4899' },
     ];
   }
 
@@ -92,6 +96,7 @@ export class MockDataService {
     return [
       { id:'1', name:'March Newsletter', subject:'What I\'ve been writing this month...', status:'sent', openRate:54.2, clickRate:12.8, sent:4821, date:'Mar 15, 2026' },
       { id:'2', name:'Book Launch: The Ember Crown', subject:'It\'s finally here!', status:'sent', openRate:71.4, clickRate:28.3, sent:3200, date:'Mar 1, 2026' },
+      { id:'7', name:'New Release Notification — The Ember Crown', subject:'The next chapter in the Ember Chronicles is here', status:'sent', openRate:68.9, clickRate:34.1, sent:621, date:'Mar 4, 2026' },
       { id:'3', name:'April Newsletter', subject:'Spring reading picks + a surprise', status:'draft', openRate:0, clickRate:0, sent:0, date:'Apr 10, 2026' },
       { id:'4', name:'VIP Early Access', subject:'You get to read it first...', status:'scheduled', openRate:0, clickRate:0, sent:0, date:'Apr 8, 2026' },
       { id:'5', name:'February Roundup', subject:'February was wild. Here\'s why.', status:'sent', openRate:48.9, clickRate:9.1, sent:4650, date:'Feb 28, 2026' },
@@ -131,12 +136,30 @@ export class MockDataService {
           { id:'s4', type:'condition', label:'Opened?', detail:'If no open → unsubscribe tag' },
         ]
       },
+      {
+        id:'4', name:'ARC Confirmation Flow', description:'Automatically delivers ARC copy and confirmation when a reader opts into your launch team', status:'active', triggers:156,
+        steps:[
+          { id:'s1', type:'trigger', label:'Trigger', detail:'Tag added: arc-reader' },
+          { id:'s2', type:'email', label:'Confirmation Email', detail:'Subject: You\'re in — here\'s your advance copy' },
+          { id:'s3', type:'wait', label:'Wait 3 Days', detail:'Delay: 3 days — give them time to start reading' },
+          { id:'s4', type:'email', label:'Check-In Email', detail:'Subject: How\'s the reading going?' },
+          { id:'s5', type:'condition', label:'Opened?', detail:'If opened → tag as engaged-arc-reader' },
+        ]
+      },
     ];
   }
 
   getTemplates(): Template[] {
     return [
       { id:'1', name:'Newsletter Classic', category:'Newsletter', preview:'NL', description:'Clean newsletter layout with header, body, and footer' },
+      { id:'9', name:'Book Launch', category:'Launch', preview:'BL', description:'High-impact launch day email: cover image, hook, early praise, and single CTA button. Structured for maximum sales velocity on release day.' },
+      { id:'10', name:'Week-Two Push', category:'Launch', preview:'BL', description:'Post-launch follow-up for non-buyers. Highlights early reviews, reader reactions, and momentum. Warmer tone than day one.' },
+      { id:'11', name:'Pre-Launch Tease', category:'Launch', preview:'BL', description:'2–3 days before release: cover reveal, first chapter preview, or a personal note building anticipation.' },
+      { id:'12', name:'ARC Invitation', category:'ARC', preview:'BL', description:'Recruit advance readers from your most engaged segment. Covers all 5 required elements: what you\'re offering, what you\'re asking, timing, delivery method, and how to say yes.' },
+      { id:'13', name:'ARC Follow-Up', category:'ARC', preview:'RE', description:'Warm reminder to your ARC team 1 week before launch. Leads with gratitude, includes direct platform review links, and frames the ask as low-stakes and easy.' },
+      { id:'14', name:'ARC Post-Launch Thank-You', category:'ARC', preview:'WE', description:'Close the loop with your ARC team after launch. Share results, thank them genuinely, and deepen their investment in your next book.' },
+      { id:'15', name:'New Release Notification', category:'Launch', preview:'NL', description:'Targeted notification for backlist and series readers, sent 2–4 days post-launch. Warmer tone, more direct ask. Acknowledges the relationship, connects to previous titles, includes early praise.' },
+      { id:'16', name:'New Release — Series Readers', category:'Launch', preview:'NL', description:'Series-specific version of the New Release Notification. Explicitly connects the new title to what came before, names the previous book, and includes a secondary "Start from the beginning" link.' },
       { id:'2', name:'Book Launch', category:'Launch', preview:'BL', description:'High-impact launch announcement with CTA button' },
       { id:'3', name:'Welcome Email', category:'Automation', preview:'WE', description:'Warm welcome email for new subscribers' },
       { id:'4', name:'Story Excerpt', category:'Content', preview:'SE', description:'Share a chapter or excerpt with your readers' },

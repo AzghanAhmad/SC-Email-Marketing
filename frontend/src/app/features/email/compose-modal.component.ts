@@ -31,9 +31,26 @@ import { FormsModule } from '@angular/forms';
 
         <!-- Subject -->
         <div class="compose-field">
-          <label class="compose-label">Subject</label>
+          <div class="label-row">
+            <label class="compose-label">Subject</label>
+            <span class="char-counter" [class.over]="subject.length > 60">
+              {{ subject.length }}/60
+              <span class="counter-hint" *ngIf="subject.length > 60">May be truncated on mobile</span>
+            </span>
+          </div>
           <input type="text" class="compose-input" placeholder="Enter subject..."
                  [(ngModel)]="subject">
+        </div>
+
+        <!-- Preview Text -->
+        <div class="compose-field">
+          <div class="label-row">
+            <label class="compose-label">Preview Text</label>
+            <span class="label-hint" data-tooltip="The short line shown after the subject in the inbox. Write it after your subject so they work together.">Optional</span>
+          </div>
+          <input type="text" class="compose-input" placeholder="Appears after subject in inbox..."
+                 [(ngModel)]="previewText" maxlength="150">
+          <span class="field-help">This text appears next to your subject line in the inbox. Keep it under 90 characters.</span>
         </div>
 
         <!-- Message -->
@@ -41,6 +58,42 @@ import { FormsModule } from '@angular/forms';
           <label class="compose-label">Message</label>
           <textarea #messageInput class="compose-textarea" placeholder="Write your message..."
                     [(ngModel)]="body"></textarea>
+        </div>
+
+        <!-- Pre-Send Score Check -->
+        <div class="score-check" *ngIf="body.length > 20">
+          <div class="score-header" (click)="showScorePanel = !showScorePanel">
+            <div class="score-left">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+              </svg>
+              <span>Pre-Send Score</span>
+            </div>
+            <div class="score-badge" [class.good]="sendScore >= 80" [class.warn]="sendScore >= 50 && sendScore < 80" [class.bad]="sendScore < 50">
+              {{ sendScore }}/100
+            </div>
+          </div>
+          <div class="score-details" *ngIf="showScorePanel">
+            <div class="score-row" *ngFor="let cat of scoreCategories">
+              <div class="score-cat-info">
+                <span class="score-cat-name">{{ cat.name }}</span>
+                <span class="score-cat-desc">{{ cat.desc }}</span>
+              </div>
+              <div class="score-cat-bar">
+                <div class="score-cat-fill" [style.width]="cat.score + '%'"
+                     [class.good]="cat.score >= 80" [class.warn]="cat.score >= 50 && cat.score < 80" [class.bad]="cat.score < 50"></div>
+              </div>
+              <span class="score-cat-val" [class.good]="cat.score >= 80" [class.warn]="cat.score >= 50 && cat.score < 80" [class.bad]="cat.score < 50">{{ cat.score }}%</span>
+            </div>
+            <div class="score-tips" *ngIf="scoreTips.length > 0">
+              <div class="score-tip" *ngFor="let tip of scoreTips">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
+                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <span>{{ tip }}</span>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Formatting Toolbar -->
@@ -218,6 +271,136 @@ import { FormsModule } from '@angular/forms';
     }
     .compose-textarea::placeholder { color: var(--text-muted); }
 
+    .label-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .char-counter {
+      font-size: .7rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      transition: color .2s;
+    }
+    .char-counter.over { color: #f59e0b; }
+    .counter-hint {
+      font-size: .65rem;
+      color: #f59e0b;
+      margin-left: .35rem;
+    }
+    .label-hint {
+      font-size: .68rem;
+      color: var(--text-muted);
+      font-weight: 400;
+      cursor: help;
+    }
+    .field-help {
+      font-size: .68rem;
+      color: var(--text-muted);
+      margin-top: .15rem;
+    }
+
+    .score-check {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+    }
+    .score-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: .625rem .875rem;
+      cursor: pointer;
+      background: var(--bg);
+      transition: background .15s;
+    }
+    .score-header:hover { background: var(--bg-subtle); }
+    .score-left {
+      display: flex;
+      align-items: center;
+      gap: .45rem;
+      font-size: .8rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+    .score-badge {
+      font-size: .72rem;
+      font-weight: 700;
+      padding: .2rem .55rem;
+      border-radius: 100px;
+    }
+    .score-badge.good { background: rgba(16,185,129,0.1); color: #059669; }
+    .score-badge.warn { background: rgba(245,158,11,0.1); color: #d97706; }
+    .score-badge.bad { background: rgba(239,68,68,0.1); color: #dc2626; }
+    .score-details {
+      padding: .75rem .875rem;
+      border-top: 1px solid var(--border-light);
+      display: flex;
+      flex-direction: column;
+      gap: .625rem;
+    }
+    .score-row {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+    }
+    .score-cat-info {
+      flex: 1;
+      min-width: 0;
+    }
+    .score-cat-name {
+      font-size: .75rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      display: block;
+    }
+    .score-cat-desc {
+      font-size: .65rem;
+      color: var(--text-muted);
+    }
+    .score-cat-bar {
+      width: 80px;
+      height: 5px;
+      background: var(--border-light);
+      border-radius: 100px;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .score-cat-fill {
+      height: 100%;
+      border-radius: 100px;
+      transition: width .5s;
+    }
+    .score-cat-fill.good { background: #10b981; }
+    .score-cat-fill.warn { background: #f59e0b; }
+    .score-cat-fill.bad { background: #ef4444; }
+    .score-cat-val {
+      font-size: .7rem;
+      font-weight: 700;
+      width: 32px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+    .score-cat-val.good { color: #059669; }
+    .score-cat-val.warn { color: #d97706; }
+    .score-cat-val.bad { color: #dc2626; }
+    .score-tips {
+      display: flex;
+      flex-direction: column;
+      gap: .35rem;
+      padding-top: .375rem;
+      border-top: 1px solid var(--border-light);
+    }
+    .score-tip {
+      display: flex;
+      align-items: flex-start;
+      gap: .375rem;
+      font-size: .7rem;
+      color: var(--text-secondary);
+      line-height: 1.4;
+    }
+    .score-tip svg { color: #f59e0b; flex-shrink: 0; margin-top: 1px; }
+
     .compose-toolbar {
       display: flex;
       gap: .25rem;
@@ -304,8 +487,31 @@ export class ComposeModalComponent implements OnChanges, OnInit {
 
   to = '';
   subject = '';
+  previewText = '';
   body = '';
   attachments: string[] = [];
+  showScorePanel = false;
+
+  scoreCategories = [
+    { name: 'Content', desc: 'Spam trigger words & formatting', score: 92 },
+    { name: 'Technical', desc: 'Authentication & domain', score: 95 },
+    { name: 'Links', desc: 'URL validity & reputation', score: 88 },
+    { name: 'Compliance', desc: 'Address, unsubscribe & identity', score: 100 },
+  ];
+
+  get sendScore(): number {
+    return Math.round(this.scoreCategories.reduce((s, c) => s + c.score, 0) / this.scoreCategories.length);
+  }
+
+  get scoreTips(): string[] {
+    const tips: string[] = [];
+    if (this.subject.length > 60) tips.push('Subject line exceeds 60 characters — may be truncated on mobile devices.');
+    if (this.subject.length === 0 && this.body.length > 0) tips.push('Add a subject line before sending.');
+    if (!this.previewText) tips.push('Adding preview text improves open rates — it appears next to your subject in the inbox.');
+    if (/!{2,}/.test(this.subject) || /!{2,}/.test(this.body)) tips.push('Multiple exclamation marks may trigger spam filters.');
+    if (/FREE|GUARANTEED|ACT NOW|LIMITED TIME/i.test(this.body)) tips.push('Some phrases in your message may trigger spam filters.');
+    return tips;
+  }
 
   ngOnInit(): void {
     this.syncFromInputs();
@@ -366,6 +572,25 @@ export class ComposeModalComponent implements OnChanges, OnInit {
     this.to = this.initialTo || '';
     this.subject = this.initialSubject || '';
     this.body = this.initialBody || '';
+    this.previewText = '';
     this.attachments = [];
+    this.showScorePanel = false;
+    this.recalculateScore();
+  }
+
+  private recalculateScore() {
+    // Simulate dynamic score based on content
+    const hasBody = this.body.length > 20;
+    const hasSubject = this.subject.length > 0;
+    const shortSubject = this.subject.length <= 60;
+    const noSpamWords = !/FREE|GUARANTEED|ACT NOW|LIMITED TIME|CLICK HERE/i.test(this.body + ' ' + this.subject);
+    const noExcessPunctuation = !/!{3,}|\${2,}|[A-Z]{10,}/.test(this.body + ' ' + this.subject);
+
+    this.scoreCategories = [
+      { name: 'Content', desc: 'Spam trigger words & formatting', score: noSpamWords && noExcessPunctuation ? 95 : (noSpamWords ? 78 : 55) },
+      { name: 'Technical', desc: 'Authentication & domain verified', score: 95 },
+      { name: 'Links', desc: 'URL validity & reputation', score: 88 },
+      { name: 'Compliance', desc: 'Address, unsubscribe & sender identity', score: 100 },
+    ];
   }
 }

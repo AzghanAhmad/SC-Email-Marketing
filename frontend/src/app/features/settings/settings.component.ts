@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../../core/services/auth.service';
 
-type SettingsTab = 'account' | 'domain' | 'integrations' | 'notifications' | 'billing' | 'help';
+type SettingsTab = 'account' | 'domain' | 'integrations' | 'store' | 'notifications' | 'preferences' | 'billing' | 'help';
 
 @Component({
   selector: 'app-settings',
@@ -130,17 +130,288 @@ type SettingsTab = 'account' | 'domain' | 'integrations' | 'notifications' | 'bi
               <p class="sc-sub">Connect ScribeCount Email with your favorite tools</p>
               <div class="integrations-grid">
                 <div class="integration-card" *ngFor="let int of integrations">
-                  <div class="int-logo">{{ int.logo }}</div>
+                  <div class="int-icon-wrap" [innerHTML]="int.icon"></div>
                   <div class="int-body">
                     <h4 class="int-name">{{ int.name }}</h4>
                     <p class="int-desc">{{ int.description }}</p>
                   </div>
                   <div class="int-status">
-                    <span class="int-badge" [class.connected]="int.connected">{{ int.connected ? 'Connected' : 'Connect' }}</span>
+                    <button class="int-badge" [class.connected]="int.connected"
+                      (click)="int.name === 'Shopify' ? activeTab.set('store') : null">
+                      {{ int.connected ? 'Connected' : int.name === 'Shopify' ? 'Set Up' : 'Connect' }}
+                    </button>
                   </div>
                 </div>
               </div>
             </div>
+          </div>
+
+          <!-- Store Connection (Shopify) -->
+          <div *ngIf="activeTab() === 'store'">
+
+            <!-- Connection Status Card -->
+            <div class="glass-card settings-card">
+              <div class="store-header">
+                <div class="store-header-left">
+                  <div class="shopify-logo-wrap">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="1.75" width="28" height="28"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                  </div>
+                  <div>
+                    <h2 class="sc-title" style="margin:0 0 .2rem">Shopify Store Connection</h2>
+                    <p class="sc-sub" style="margin:0">Connect your Shopify store to trigger email flows from store events</p>
+                  </div>
+                </div>
+                <div class="conn-status-badge" [class.connected]="shopify.connected" [class.disconnected]="!shopify.connected">
+                  <span class="conn-dot"></span>
+                  {{ shopify.connected ? 'Connected' : 'Not Connected' }}
+                </div>
+              </div>
+
+              <!-- Not connected state -->
+              <div *ngIf="!shopify.connected" class="connect-flow">
+                <div class="connect-steps">
+                  <div class="connect-step">
+                    <div class="cs-num">1</div>
+                    <div class="cs-body">
+                      <div class="cs-title">Install the ScribeCount app in Shopify</div>
+                      <div class="cs-desc">Go to your Shopify admin → Apps → search for "ScribeCount Email" and click Add App</div>
+                    </div>
+                  </div>
+                  <div class="connect-step">
+                    <div class="cs-num">2</div>
+                    <div class="cs-body">
+                      <div class="cs-title">Enter your Shopify store URL</div>
+                      <div class="cs-desc">Enter your store's myshopify.com address below</div>
+                    </div>
+                  </div>
+                  <div class="connect-step">
+                    <div class="cs-num">3</div>
+                    <div class="cs-body">
+                      <div class="cs-title">Authorize the connection</div>
+                      <div class="cs-desc">ScribeCount will verify the connection and display a green status indicator</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="form-group" style="margin-top:1.5rem">
+                  <label class="form-label">Your Shopify Store URL</label>
+                  <div class="store-url-row">
+                    <input type="text" class="form-input" [(ngModel)]="shopify.storeUrl" placeholder="yourstore.myshopify.com" />
+                    <button class="btn-primary" (click)="connectShopify()" data-tooltip="Authorize the connection between your Shopify store and ScribeCount Email">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                      Authorize Connection
+                    </button>
+                  </div>
+                </div>
+                <div class="permissions-note">
+                  <svg viewBox="0 0 20 20" fill="#059669" width="16" height="16"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd"/></svg>
+                  ScribeCount only requests read access to orders, customers, and products. It does not modify orders, change prices, or access payment information.
+                </div>
+              </div>
+
+              <!-- Connected state -->
+              <div *ngIf="shopify.connected" class="connected-info">
+                <div class="conn-detail-row">
+                  <span class="conn-detail-key">Store URL</span>
+                  <span class="conn-detail-val">{{ shopify.storeUrl || 'yourstore.myshopify.com' }}</span>
+                </div>
+                <div class="conn-detail-row">
+                  <span class="conn-detail-key">Connected since</span>
+                  <span class="conn-detail-val">Mar 1, 2026</span>
+                </div>
+                <div class="conn-detail-row">
+                  <span class="conn-detail-key">Events received</span>
+                  <span class="conn-detail-val">1,284 webhooks</span>
+                </div>
+                <div class="conn-actions">
+                  <button class="btn-secondary btn-sm" (click)="save()" data-tooltip="Test the connection by sending a simulated event">Test Connection</button>
+                  <button class="btn-ghost btn-sm danger-btn" (click)="shopify.connected = false" data-tooltip="Disconnect your Shopify store">Disconnect</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Event Configuration -->
+            <div class="glass-card settings-card" *ngIf="shopify.connected">
+              <h2 class="sc-title">Store Event Configuration</h2>
+              <p class="sc-sub">Configure how each store event triggers your email flows</p>
+
+              <div class="event-sections">
+                <!-- Purchase Events -->
+                <div class="event-section">
+                  <div class="event-section-header">
+                    <div class="event-icon purchase">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                    </div>
+                    <div>
+                      <div class="event-section-title">Completed Purchase</div>
+                      <div class="event-section-sub">Fires when a reader completes a transaction in your store</div>
+                    </div>
+                    <input type="checkbox" class="toggle" [(ngModel)]="shopify.events.purchase" />
+                  </div>
+                  <div class="event-config" *ngIf="shopify.events.purchase">
+                    <div class="form-row-3">
+                      <div class="form-group">
+                        <label class="form-label">First-time buyer flow</label>
+                        <select class="form-input"><option>Post-Purchase Thank You</option><option>Order Confirmation</option></select>
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label">Repeat buyer flow</label>
+                        <select class="form-input"><option>Repeat Purchase Thank You</option><option>Post-Purchase Thank You</option></select>
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label">Follow-up delay</label>
+                        <select class="form-input"><option>3 days</option><option>5 days</option><option>7 days</option></select>
+                      </div>
+                    </div>
+                    <div class="event-toggle-row">
+                      <span class="etl">Auto-add purchasers to list (with consent)</span>
+                      <input type="checkbox" class="toggle" [(ngModel)]="shopify.autoAddPurchasers" />
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Abandoned Cart -->
+                <div class="event-section">
+                  <div class="event-section-header">
+                    <div class="event-icon cart">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+                    </div>
+                    <div>
+                      <div class="event-section-title">Abandoned Cart</div>
+                      <div class="event-section-sub">Fires when a reader leaves without checking out (default: 60 min window)</div>
+                    </div>
+                    <input type="checkbox" class="toggle" [(ngModel)]="shopify.events.abandonedCart" />
+                  </div>
+                  <div class="event-config" *ngIf="shopify.events.abandonedCart">
+                    <div class="form-row-3">
+                      <div class="form-group">
+                        <label class="form-label">Detection window</label>
+                        <select class="form-input"><option>60 minutes (recommended)</option><option>30 minutes</option><option>90 minutes</option></select>
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label">Flow to trigger</label>
+                        <select class="form-input"><option>Abandoned Cart Flow</option></select>
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label">First email delay</label>
+                        <select class="form-input"><option>60 minutes</option><option>30 minutes</option><option>2 hours</option></select>
+                      </div>
+                    </div>
+                    <div class="event-toggle-row">
+                      <span class="etl">Suppress existing buyers of the abandoned title</span>
+                      <input type="checkbox" class="toggle" [ngModel]="true" />
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Abandoned Checkout -->
+                <div class="event-section">
+                  <div class="event-section-header">
+                    <div class="event-icon checkout">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+                    </div>
+                    <div>
+                      <div class="event-section-title">Abandoned Checkout</div>
+                      <div class="event-section-sub">Fires when a reader enters payment info but doesn't complete (higher intent)</div>
+                    </div>
+                    <input type="checkbox" class="toggle" [(ngModel)]="shopify.events.abandonedCheckout" />
+                  </div>
+                  <div class="event-config" *ngIf="shopify.events.abandonedCheckout">
+                    <div class="form-row-3">
+                      <div class="form-group">
+                        <label class="form-label">Flow to trigger</label>
+                        <select class="form-input"><option>Abandoned Checkout Flow</option></select>
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label">First email delay</label>
+                        <select class="form-input"><option>30 minutes (recommended)</option><option>15 minutes</option><option>60 minutes</option></select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Subscriber Opt-In -->
+                <div class="event-section">
+                  <div class="event-section-header">
+                    <div class="event-icon optin">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+                    </div>
+                    <div>
+                      <div class="event-section-title">New Subscriber Opt-In</div>
+                      <div class="event-section-sub">Fires when a reader submits an opt-in form in your store</div>
+                    </div>
+                    <input type="checkbox" class="toggle" [(ngModel)]="shopify.events.optIn" />
+                  </div>
+                  <div class="event-config" *ngIf="shopify.events.optIn">
+                    <div class="form-row-3">
+                      <div class="form-group">
+                        <label class="form-label">Welcome flow</label>
+                        <select class="form-input"><option>Welcome Sequence</option><option>Reader Magnet Delivery</option></select>
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label">Source tag</label>
+                        <input type="text" class="form-input" value="shopify-checkout-optin" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <button class="btn-primary" style="margin-top:1rem" (click)="save()">Save Event Settings</button>
+            </div>
+
+            <!-- Testing Console -->
+            <div class="glass-card settings-card" *ngIf="shopify.connected">
+              <h2 class="sc-title">Event Testing Console</h2>
+              <p class="sc-sub">Simulate store events to verify your flows are configured correctly — no real orders needed</p>
+              <div class="test-console">
+                <div class="test-event-grid">
+                  <div class="test-event-card" *ngFor="let t of testEvents" (click)="runTest(t)">
+                    <div class="te-icon" [innerHTML]="t.icon"></div>
+                    <div class="te-body">
+                      <div class="te-title">{{ t.label }}</div>
+                      <div class="te-desc">{{ t.desc }}</div>
+                    </div>
+                    <div class="te-status" *ngIf="t.result">
+                      <span class="te-pass" *ngIf="t.result === 'pass'">
+                        <svg viewBox="0 0 20 20" fill="#059669" width="16" height="16"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd"/></svg>
+                        Passed
+                      </span>
+                    </div>
+                    <button class="te-run-btn">Run Test</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Activity Log -->
+            <div class="glass-card settings-card" *ngIf="shopify.connected">
+              <div class="log-header">
+                <div>
+                  <h2 class="sc-title">Activity Log</h2>
+                  <p class="sc-sub">Recent webhook events received from your Shopify store</p>
+                </div>
+                <button class="btn-secondary btn-sm" (click)="save()">Refresh</button>
+              </div>
+              <div class="activity-log">
+                <div class="log-row header-row">
+                  <span>Timestamp</span><span>Event Type</span><span>Subscriber</span><span>Flow Triggered</span><span>Status</span>
+                </div>
+                <div class="log-row" *ngFor="let entry of activityLog">
+                  <span class="log-time">{{ entry.time }}</span>
+                  <span class="log-event">
+                    <span class="log-event-badge" [class]="'event-' + entry.type">{{ entry.eventLabel }}</span>
+                  </span>
+                  <span class="log-email">{{ entry.email }}</span>
+                  <span class="log-flow">{{ entry.flow }}</span>
+                  <span class="log-status" [class.status-ok]="entry.status === 'ok'" [class.status-warn]="entry.status === 'warn'">
+                    <svg *ngIf="entry.status === 'ok'" viewBox="0 0 20 20" fill="#059669" width="14" height="14"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd"/></svg>
+                    <svg *ngIf="entry.status === 'warn'" viewBox="0 0 20 20" fill="#f59e0b" width="14" height="14"><path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/></svg>
+                    {{ entry.status === 'ok' ? 'Success' : 'Warning' }}
+                  </span>
+                </div>
+              </div>
+            </div>
+
           </div>
 
           <!-- Notifications -->
@@ -158,6 +429,71 @@ type SettingsTab = 'account' | 'domain' | 'integrations' | 'notifications' | 'bi
                 </div>
               </div>
               <button class="btn-primary" style="margin-top:1rem" (click)="save()" data-tooltip="Save notification preferences">Save Preferences</button>
+            </div>
+          </div>
+
+          <!-- Preference Center -->
+          <div *ngIf="activeTab() === 'preferences'">
+            <div class="glass-card settings-card">
+              <h2 class="sc-title">Reader Preference Center</h2>
+              <p class="sc-sub">Let your readers choose what they receive and how often — readers who feel in control are dramatically less likely to unsubscribe</p>
+
+              <!-- Explainer -->
+              <div class="pref-explainer">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" width="16" height="16"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                <p>A preference center is linked from the footer of every email you send. Readers tell you what they want — and your segmentation updates automatically, with no manual list management.</p>
+              </div>
+
+              <!-- Preference options -->
+              <h3 class="pref-section-title">Email Types Readers Can Choose</h3>
+              <div class="pref-options-list">
+                <div class="pref-option" *ngFor="let opt of prefOptions">
+                  <div class="pref-opt-left">
+                    <label class="toggle-wrap">
+                      <input type="checkbox" [(ngModel)]="opt.enabled" />
+                      <span class="toggle-slider"></span>
+                    </label>
+                    <div class="pref-opt-info">
+                      <span class="pref-opt-name">{{ opt.name }}</span>
+                      <span class="pref-opt-desc">{{ opt.description }}</span>
+                    </div>
+                  </div>
+                  <span class="pref-opt-count">{{ opt.subscriberCount | number }} subscribers</span>
+                </div>
+              </div>
+
+              <!-- Frequency options -->
+              <h3 class="pref-section-title" style="margin-top:1.5rem">Frequency Options Readers Can Choose</h3>
+              <div class="pref-freq-grid">
+                <div class="pref-freq-card" *ngFor="let freq of prefFrequencies" [class.pref-freq-active]="freq.enabled">
+                  <label class="toggle-wrap" style="position:absolute;top:.875rem;right:.875rem">
+                    <input type="checkbox" [(ngModel)]="freq.enabled" />
+                    <span class="toggle-slider"></span>
+                  </label>
+                  <div class="pref-freq-icon">{{ freq.icon }}</div>
+                  <div class="pref-freq-name">{{ freq.name }}</div>
+                  <div class="pref-freq-desc">{{ freq.description }}</div>
+                </div>
+              </div>
+
+              <!-- Footer link preview -->
+              <h3 class="pref-section-title" style="margin-top:1.5rem">Footer Link Preview</h3>
+              <div class="pref-footer-preview">
+                <div class="pfp-inner">
+                  <p class="pfp-text">You're receiving this because you subscribed at <strong>janeausten.com</strong>.</p>
+                  <div class="pfp-links">
+                    <a class="pfp-link">Manage preferences</a>
+                    <span class="pfp-sep">·</span>
+                    <a class="pfp-link">Unsubscribe</a>
+                    <span class="pfp-sep">·</span>
+                    <a class="pfp-link">View in browser</a>
+                  </div>
+                  <p class="pfp-address">123 Author Lane, New York, NY 10001</p>
+                </div>
+              </div>
+              <p class="pref-footer-note">The "Manage preferences" link is automatically added to every email footer and links to your preference center page.</p>
+
+              <button class="btn-primary" style="margin-top:1.25rem" (click)="save()">Save Preference Center Settings</button>
             </div>
           </div>
 
@@ -201,7 +537,7 @@ type SettingsTab = 'account' | 'domain' | 'integrations' | 'notifications' | 'bi
               <p class="sc-sub">Find answers, guides, and support resources</p>
               <div class="help-grid">
                 <a class="help-card" *ngFor="let h of helpItems" [href]="h.url" target="_blank" data-tooltip="Open documentation">
-                  <div class="help-icon">{{ h.icon }}</div>
+                  <div class="help-icon" [innerHTML]="h.icon"></div>
                   <div class="help-body">
                     <h4 class="help-title">{{ h.title }}</h4>
                     <p class="help-desc">{{ h.description }}</p>
@@ -270,13 +606,90 @@ type SettingsTab = 'account' | 'domain' | 'integrations' | 'notifications' | 'bi
     .integrations-grid { display:flex; flex-direction:column; gap:.75rem; }
     .integration-card { display:flex; align-items:center; gap:1rem; padding:1rem; background:#f8fafc; border:1.5px solid #f1f5f9; border-radius:12px; transition:all .2s; }
     .integration-card:hover { background:#f0f7ff; border-color:#bfdbfe; }
-    .int-logo { font-size:1.75rem; flex-shrink:0; }
+    .int-icon-wrap { width:40px; height:40px; border-radius:10px; background:#f1f5f9; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .int-icon-wrap :global(svg) { width:22px; height:22px; }
     .int-body { flex:1; }
     .int-name { font-size:.9rem; font-weight:600; color:#0f172a; margin:0 0 .2rem; }
     .int-desc { font-size:.8rem; color:#94a3b8; margin:0; }
     .int-badge { padding:.35rem .875rem; border-radius:8px; font-size:.8rem; font-weight:600; cursor:pointer; background:#f1f5f9; color:#64748b; border:1.5px solid #e2e8f0; transition:all .2s; }
     .int-badge.connected { background:rgba(16,185,129,0.08); color:#059669; border-color:rgba(16,185,129,0.2); }
     .int-badge:hover { background:#eff6ff; color:#3b82f6; border-color:#bfdbfe; }
+
+    /* Store Connection */
+    .store-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:1.5rem; flex-wrap:wrap; gap:1rem; }
+    .store-header-left { display:flex; align-items:center; gap:1rem; }
+    .shopify-logo-wrap { width:48px; height:48px; border-radius:12px; background:rgba(5,150,105,0.08); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .conn-status-badge { display:inline-flex; align-items:center; gap:.5rem; padding:.45rem 1rem; border-radius:100px; font-size:.8125rem; font-weight:600; }
+    .conn-status-badge.connected { background:rgba(16,185,129,0.1); color:#059669; border:1px solid rgba(16,185,129,0.2); }
+    .conn-status-badge.disconnected { background:#f1f5f9; color:#64748b; border:1px solid #e2e8f0; }
+    .conn-dot { width:8px; height:8px; border-radius:50%; background:currentColor; }
+
+    .connect-steps { display:flex; flex-direction:column; gap:1rem; margin-bottom:1.5rem; }
+    .connect-step { display:flex; align-items:flex-start; gap:.875rem; }
+    .cs-num { width:28px; height:28px; border-radius:50%; background:#3b82f6; color:white; display:flex; align-items:center; justify-content:center; font-size:.75rem; font-weight:700; flex-shrink:0; }
+    .cs-body { flex:1; }
+    .cs-title { font-size:.875rem; font-weight:600; color:#0f172a; margin-bottom:.2rem; }
+    .cs-desc { font-size:.8rem; color:#64748b; }
+    .store-url-row { display:flex; gap:.75rem; }
+    .store-url-row .form-input { flex:1; }
+    .permissions-note { display:flex; align-items:flex-start; gap:.625rem; padding:.875rem 1rem; background:rgba(5,150,105,0.06); border:1px solid rgba(5,150,105,0.15); border-radius:10px; font-size:.8125rem; color:#374151; margin-top:1rem; line-height:1.5; }
+
+    .connected-info { display:flex; flex-direction:column; gap:0; }
+    .conn-detail-row { display:flex; gap:1rem; padding:.625rem 0; border-bottom:1px solid #f1f5f9; }
+    .conn-detail-row:last-of-type { border-bottom:none; }
+    .conn-detail-key { font-size:.8125rem; font-weight:600; color:#94a3b8; min-width:130px; }
+    .conn-detail-val { font-size:.8125rem; color:#0f172a; }
+    .conn-actions { display:flex; gap:.75rem; margin-top:1.25rem; }
+    .danger-btn { color:#dc2626 !important; }
+    .danger-btn:hover { background:rgba(239,68,68,0.06) !important; }
+
+    .event-sections { display:flex; flex-direction:column; gap:.75rem; }
+    .event-section { border:1.5px solid #e2e8f0; border-radius:12px; overflow:hidden; }
+    .event-section-header { display:flex; align-items:center; gap:.875rem; padding:1rem 1.125rem; background:#f8fafc; }
+    .event-icon { width:34px; height:34px; border-radius:9px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .event-icon.purchase { background:rgba(5,150,105,0.1); color:#059669; }
+    .event-icon.cart { background:rgba(245,158,11,0.1); color:#d97706; }
+    .event-icon.checkout { background:rgba(99,102,241,0.1); color:#6366f1; }
+    .event-icon.optin { background:rgba(59,130,246,0.1); color:#3b82f6; }
+    .event-section-title { font-size:.875rem; font-weight:600; color:#0f172a; }
+    .event-section-sub { font-size:.75rem; color:#94a3b8; margin-top:.1rem; }
+    .event-section-header .toggle { margin-left:auto; }
+    .event-config { padding:1rem 1.125rem; border-top:1px solid #f1f5f9; background:#fff; }
+    .form-row-3 { display:grid; grid-template-columns:repeat(3,1fr); gap:1rem; margin-bottom:.75rem; }
+    .event-toggle-row { display:flex; align-items:center; justify-content:space-between; padding:.625rem .875rem; background:#f8fafc; border-radius:8px; }
+    .etl { font-size:.8125rem; color:#374151; font-weight:500; }
+
+    .test-console { }
+    .test-event-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:.75rem; }
+    .test-event-card { display:flex; align-items:center; gap:.875rem; padding:1rem; border:1.5px solid #e2e8f0; border-radius:12px; background:#f8fafc; transition:all .15s; cursor:pointer; }
+    .test-event-card:hover { border-color:#bfdbfe; background:#f0f7ff; }
+    .te-icon { width:36px; height:36px; border-radius:9px; background:#fff; border:1px solid #e2e8f0; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .te-body { flex:1; }
+    .te-title { font-size:.8125rem; font-weight:600; color:#0f172a; }
+    .te-desc { font-size:.75rem; color:#94a3b8; margin-top:.1rem; }
+    .te-status { display:flex; align-items:center; }
+    .te-pass { display:flex; align-items:center; gap:.25rem; font-size:.75rem; font-weight:600; color:#059669; }
+    .te-run-btn { padding:.35rem .75rem; border:1.5px solid #e2e8f0; border-radius:8px; background:#fff; font-size:.75rem; font-weight:600; color:#374151; font-family:inherit; cursor:pointer; transition:all .15s; white-space:nowrap; }
+    .te-run-btn:hover { border-color:#3b82f6; color:#3b82f6; }
+
+    .log-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:1.25rem; }
+    .activity-log { display:flex; flex-direction:column; overflow-x:auto; }
+    .log-row { display:grid; grid-template-columns:130px 160px 1fr 1fr 90px; gap:.75rem; padding:.75rem 0; border-bottom:1px solid #f1f5f9; align-items:center; font-size:.8125rem; }
+    .log-row:last-child { border-bottom:none; }
+    .header-row { font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#94a3b8; }
+    .log-time { color:#64748b; font-size:.75rem; }
+    .log-event-badge { padding:.2rem .55rem; border-radius:6px; font-size:.7rem; font-weight:700; font-family:monospace; }
+    .event-purchase { background:rgba(5,150,105,0.1); color:#059669; }
+    .event-cart { background:rgba(245,158,11,0.1); color:#d97706; }
+    .event-checkout { background:rgba(99,102,241,0.1); color:#6366f1; }
+    .event-optin { background:rgba(59,130,246,0.1); color:#3b82f6; }
+    .log-email { color:#64748b; font-family:monospace; font-size:.75rem; }
+    .log-flow { color:#334155; font-size:.8rem; }
+    .log-status { display:flex; align-items:center; gap:.3rem; font-size:.75rem; font-weight:600; }
+    .status-ok { color:#059669; }
+    .status-warn { color:#d97706; }
+
+    @media(max-width:900px) { .test-event-grid { grid-template-columns:1fr; } .form-row-3 { grid-template-columns:1fr; } .log-row { grid-template-columns:1fr 1fr; } }
 
     .notif-list { display:flex; flex-direction:column; gap:.5rem; }
     .notif-item { display:flex; align-items:center; justify-content:space-between; padding:1rem; background:#f8fafc; border-radius:12px; border:1px solid #f1f5f9; }
@@ -302,7 +715,7 @@ type SettingsTab = 'account' | 'domain' | 'integrations' | 'notifications' | 'bi
     .help-grid { display:flex; flex-direction:column; gap:.625rem; margin-bottom:1.5rem; }
     .help-card { display:flex; align-items:center; gap:1rem; padding:1rem; background:#f8fafc; border:1.5px solid #f1f5f9; border-radius:12px; text-decoration:none; transition:all .2s; cursor:pointer; }
     .help-card:hover { background:#f0f7ff; border-color:#bfdbfe; transform:translateX(3px); }
-    .help-icon { font-size:1.5rem; flex-shrink:0; }
+    .help-icon { width:36px; height:36px; border-radius:9px; background:#f1f5f9; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
     .help-body { flex:1; }
     .help-title { font-size:.9rem; font-weight:600; color:#0f172a; margin:0 0 .2rem; }
     .help-desc { font-size:.8rem; color:#94a3b8; margin:0; }
@@ -314,6 +727,39 @@ type SettingsTab = 'account' | 'domain' | 'integrations' | 'notifications' | 'bi
     .toast svg { width:18px; height:18px; color:#34d399; flex-shrink:0; }
 
     @media(max-width:900px) { .settings-layout { grid-template-columns:1fr; } .settings-nav { flex-direction:row; overflow-x:auto; position:static; } .form-row { grid-template-columns:1fr; } .plan-features { grid-template-columns:1fr; } }
+
+    /* Preference Center */
+    .pref-explainer { display:flex; align-items:flex-start; gap:.75rem; padding:.875rem 1rem; background:rgba(59,130,246,0.06); border:1.5px solid rgba(59,130,246,0.12); border-radius:10px; margin-bottom:1.5rem; font-size:.8125rem; color:#374151; line-height:1.6; }
+    .pref-section-title { font-size:.75rem; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:#94a3b8; margin:0 0 .875rem; }
+    .pref-options-list { display:flex; flex-direction:column; gap:.625rem; }
+    .pref-option { display:flex; align-items:center; justify-content:space-between; padding:.875rem 1rem; border:1.5px solid #e2e8f0; border-radius:12px; background:#f8fafc; gap:1rem; flex-wrap:wrap; }
+    .pref-opt-left { display:flex; align-items:center; gap:.875rem; flex:1; min-width:200px; }
+    .pref-opt-info { display:flex; flex-direction:column; gap:.2rem; }
+    .pref-opt-name { font-size:.875rem; font-weight:600; color:#0f172a; }
+    .pref-opt-desc { font-size:.75rem; color:#94a3b8; line-height:1.4; }
+    .pref-opt-count { font-size:.8125rem; font-weight:600; color:#64748b; white-space:nowrap; }
+    .pref-freq-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:.75rem; }
+    .pref-freq-card { position:relative; padding:1rem; border:1.5px solid #e2e8f0; border-radius:12px; background:#f8fafc; transition:all .15s; }
+    .pref-freq-active { border-color:rgba(59,130,246,0.3); background:rgba(59,130,246,0.04); }
+    .pref-freq-icon { font-size:1.5rem; margin-bottom:.5rem; }
+    .pref-freq-name { font-size:.875rem; font-weight:600; color:#0f172a; margin-bottom:.2rem; }
+    .pref-freq-desc { font-size:.75rem; color:#94a3b8; }
+    .pref-footer-preview { border:1.5px solid #e2e8f0; border-radius:12px; overflow:hidden; margin-bottom:.5rem; }
+    .pfp-inner { padding:1.25rem; background:#f8fafc; text-align:center; }
+    .pfp-text { font-size:.8125rem; color:#64748b; margin:0 0 .625rem; }
+    .pfp-links { display:flex; align-items:center; justify-content:center; gap:.5rem; margin-bottom:.5rem; }
+    .pfp-link { font-size:.8125rem; color:#3b82f6; text-decoration:underline; cursor:pointer; }
+    .pfp-sep { color:#cbd5e1; font-size:.75rem; }
+    .pfp-address { font-size:.75rem; color:#94a3b8; margin:0; }
+    .pref-footer-note { font-size:.75rem; color:#94a3b8; line-height:1.5; }
+    /* Toggle for preference center (reuse from campaigns) */
+    .toggle-wrap { position:relative; display:inline-flex; align-items:center; cursor:pointer; flex-shrink:0; }
+    .toggle-wrap input { opacity:0; width:0; height:0; position:absolute; }
+    .toggle-slider { width:40px; height:22px; background:#e2e8f0; border-radius:100px; transition:background .2s; position:relative; }
+    .toggle-slider::after { content:''; position:absolute; top:3px; left:3px; width:16px; height:16px; border-radius:50%; background:#fff; transition:transform .2s; box-shadow:0 1px 3px rgba(0,0,0,0.15); }
+    .toggle-wrap input:checked + .toggle-slider { background:#3b82f6; }
+    .toggle-wrap input:checked + .toggle-slider::after { transform:translateX(18px); }
+    @media(max-width:700px) { .pref-freq-grid { grid-template-columns:1fr 1fr; } }
   `]
 })
 export class SettingsComponent {
@@ -331,7 +777,9 @@ export class SettingsComponent {
     { id: 'account' as SettingsTab, label: 'Account', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>' },
     { id: 'domain' as SettingsTab, label: 'Domain Setup', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>' },
     { id: 'integrations' as SettingsTab, label: 'Integrations', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>' },
+    { id: 'store' as SettingsTab, label: 'Store Connection', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>' },
     { id: 'notifications' as SettingsTab, label: 'Notifications', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>' },
+    { id: 'preferences' as SettingsTab, label: 'Preference Center', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>' },
     { id: 'billing' as SettingsTab, label: 'Billing', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>' },
     { id: 'help' as SettingsTab, label: 'Help', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>' },
   ];
@@ -343,12 +791,39 @@ export class SettingsComponent {
   ];
 
   integrations = [
-    { logo: '📚', name: 'BookFunnel', description: 'Sync reader magnet downloads to your list', connected: true },
-    { logo: '🛒', name: 'Shopify', description: 'Add customers to your email list automatically', connected: false },
-    { logo: '📊', name: 'Google Analytics', description: 'Track email campaign traffic in GA4', connected: false },
-    { logo: '🔗', name: 'Zapier', description: 'Connect with 5,000+ apps via Zapier', connected: false },
-    { logo: '📖', name: 'StoryOrigin', description: 'Import subscribers from StoryOrigin', connected: true },
-    { logo: '🎯', name: 'Facebook Pixel', description: 'Retarget email subscribers on Facebook', connected: false },
+    { icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="1.75" width="24" height="24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>', name: 'BookFunnel', description: 'Sync reader magnet downloads to your list', connected: true },
+    { icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="1.75" width="24" height="24"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>', name: 'Shopify', description: 'Connect your store for purchase flows and abandoned cart recovery', connected: false },
+    { icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="1.75" width="24" height="24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>', name: 'Google Analytics', description: 'Track email campaign traffic in GA4', connected: false },
+    { icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="1.75" width="24" height="24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>', name: 'Zapier', description: 'Connect with 5,000+ apps via Zapier', connected: false },
+    { icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="1.75" width="24" height="24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>', name: 'StoryOrigin', description: 'Import subscribers from StoryOrigin newsletter swaps', connected: true },
+    { icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="1.75" width="24" height="24"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>', name: 'Facebook Pixel', description: 'Retarget email subscribers on Facebook', connected: false },
+  ];
+
+  shopify = {
+    connected: false,
+    storeUrl: '',
+    events: {
+      purchase: true,
+      abandonedCart: true,
+      abandonedCheckout: true,
+      optIn: true,
+    },
+    autoAddPurchasers: true,
+  };
+
+  testEvents = [
+    { label: 'Completed Purchase', desc: 'Simulate a reader buying a book', type: 'purchase', result: '' as string, icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2" width="18" height="18"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>' },
+    { label: 'Abandoned Cart', desc: 'Simulate a reader leaving with items in cart', type: 'cart', result: '' as string, icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" width="18" height="18"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>' },
+    { label: 'Abandoned Checkout', desc: 'Simulate a reader stopping at payment', type: 'checkout', result: '' as string, icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2" width="18" height="18"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>' },
+    { label: 'New Opt-In', desc: 'Simulate a reader submitting a sign-up form', type: 'optin', result: '' as string, icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" width="18" height="18"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>' },
+  ];
+
+  activityLog = [
+    { time: 'May 8, 09:42', eventLabel: 'order.completed', type: 'purchase', email: 'em***@gmail.com', flow: 'Post-Purchase Thank You', status: 'ok' },
+    { time: 'May 8, 08:15', eventLabel: 'cart.abandoned', type: 'cart', email: 'sa***@yahoo.com', flow: 'Abandoned Cart Flow', status: 'ok' },
+    { time: 'May 7, 22:03', eventLabel: 'checkout.abandoned', type: 'checkout', email: 'to***@outlook.com', flow: 'Abandoned Checkout Flow', status: 'ok' },
+    { time: 'May 7, 18:30', eventLabel: 'subscriber.optin', type: 'optin', email: 'pr***@gmail.com', flow: 'Welcome Sequence', status: 'ok' },
+    { time: 'May 7, 14:11', eventLabel: 'order.completed', type: 'purchase', email: 'ja***@icloud.com', flow: 'Post-Purchase Thank You', status: 'warn' },
   ];
 
   notifications = [
@@ -372,15 +847,42 @@ export class SettingsComponent {
   ];
 
   helpItems = [
-    { icon: '📖', title: 'Getting Started Guide', description: 'Learn the basics of ScribeCount Email', url: '#' },
-    { icon: '📧', title: 'Campaign Best Practices', description: 'Tips for higher open and click rates', url: '#' },
-    { icon: '⚡', title: 'Automation Flows', description: 'How to set up and manage flows', url: '#' },
-    { icon: '📊', title: 'Understanding Analytics', description: 'Make sense of your email metrics', url: '#' },
+    { icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="1.75" width="22" height="22"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>', title: 'Getting Started Guide', description: 'Learn the basics of ScribeCount Email', url: '#' },
+    { icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="1.75" width="22" height="22"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>', title: 'Campaign Best Practices', description: 'Tips for higher open and click rates', url: '#' },
+    { icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="1.75" width="22" height="22"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>', title: 'Automation Flows', description: 'How to set up and manage flows', url: '#' },
+    { icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="1.75" width="22" height="22"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>', title: 'Understanding Analytics', description: 'Make sense of your email metrics', url: '#' },
+  ];
+
+  prefOptions = [
+    { name: 'Full Newsletter', description: 'Regular newsletter with writing updates, reading picks, and behind-the-scenes content', enabled: true, subscriberCount: 2341 },
+    { name: 'New Release Announcements', description: 'Only notified when a new book is available or pre-order goes live', enabled: true, subscriberCount: 4820 },
+    { name: 'Promotional Emails', description: 'Sales, limited-time offers, and backlist discounts', enabled: true, subscriberCount: 1876 },
+    { name: 'Community Updates', description: 'Reader events, signings, ARC opportunities, and community news', enabled: false, subscriberCount: 934 },
+  ];
+
+  prefFrequencies = [
+    { name: 'Weekly', description: 'Hear from me every week', icon: '📅', enabled: true },
+    { name: 'Biweekly', description: 'Every two weeks', icon: '🗓️', enabled: true },
+    { name: 'Monthly', description: 'Once a month', icon: '📆', enabled: true },
+    { name: 'New releases only', description: 'Only when I publish something new', icon: '📚', enabled: true },
   ];
 
   constructor(public auth: AuthService) {}
 
   save() {
+    this.showToast.set(true);
+    setTimeout(() => this.showToast.set(false), 2500);
+  }
+
+  connectShopify() {
+    if (!this.shopify.storeUrl.trim()) return;
+    this.shopify.connected = true;
+    this.showToast.set(true);
+    setTimeout(() => this.showToast.set(false), 2500);
+  }
+
+  runTest(t: { label: string; result: string }) {
+    t.result = 'pass';
     this.showToast.set(true);
     setTimeout(() => this.showToast.set(false), 2500);
   }

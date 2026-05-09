@@ -6,6 +6,7 @@ import { EmailSidebarComponent } from './email-sidebar.component';
 import { EmailListComponent } from './email-list.component';
 import { EmailViewComponent } from './email-view.component';
 import { ComposeModalComponent } from './compose-modal.component';
+import { EmailTipsComponent } from './email-tips.component';
 import { Subscription } from 'rxjs';
 
 @Component({
@@ -18,6 +19,7 @@ import { Subscription } from 'rxjs';
     EmailListComponent,
     EmailViewComponent,
     ComposeModalComponent,
+    EmailTipsComponent,
   ],
   template: `
     <div class="email-page">
@@ -59,6 +61,16 @@ import { Subscription } from 'rxjs';
         (onSchedule)="scheduleEmail($event)"
       />
 
+      <!-- Best Practices Button -->
+      <button class="tips-fab" (click)="showTips = true" title="Email Best Practices">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+          <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+      </button>
+
+      <!-- Tips Panel -->
+      <app-email-tips *ngIf="showTips" (onClose)="showTips = false" />
+
       <!-- Toast -->
       <div class="toast" [class.show]="showToast">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -75,6 +87,29 @@ import { Subscription } from 'rxjs';
       height: calc(100vh - 64px);
       overflow: hidden;
       animation: fadeIn .3s ease-out;
+      position: relative;
+    }
+    .tips-fab {
+      position: absolute;
+      bottom: 1.25rem;
+      right: 1.25rem;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #818cf8, #6366f1);
+      color: white;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 16px rgba(99, 102, 241, 0.3);
+      transition: all .2s;
+      z-index: 50;
+    }
+    .tips-fab:hover {
+      transform: scale(1.08);
+      box-shadow: 0 6px 24px rgba(99, 102, 241, 0.4);
     }
   `]
 })
@@ -85,6 +120,7 @@ export class EmailPageComponent implements OnInit, OnDestroy {
   currentEmails: Email[] = [];
   loading = false;
   showCompose = false;
+  showTips = false;
   composeTitle = 'New Message';
   composeTo = '';
   composeSubject = '';

@@ -42,7 +42,7 @@ import { CommonModule } from '@angular/common';
           <h4 class="rb-title">Attributed Revenue</h4>
           <div class="rb-grid">
             <div class="rb-item" *ngFor="let r of revenueBreakdown">
-              <div class="rb-icon">{{ r.icon }}</div>
+              <div class="rb-icon" [innerHTML]="r.icon"></div>
               <span class="rb-label">{{ r.label }}</span>
               <span class="rb-val">{{ r.value }}</span>
               <span class="rb-pct">{{ r.pct }}</span>
@@ -124,7 +124,7 @@ import { CommonModule } from '@angular/common';
     .rb-title { font-size:.8125rem; font-weight:700; color:#0f172a; margin:0 0 1rem; }
     .rb-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:1rem; }
     .rb-item { display:flex; flex-direction:column; align-items:center; gap:.25rem; padding:.875rem; background:#f8fafc; border-radius:12px; border:1px solid #f1f5f9; }
-    .rb-icon { font-size:1.25rem; }
+    .rb-icon { width:32px; height:32px; border-radius:8px; background:#f1f5f9; display:flex; align-items:center; justify-content:center; }
     .rb-label { font-size:.72rem; font-weight:600; color:#64748b; text-align:center; }
     .rb-val { font-size:1.125rem; font-weight:800; color:#0f172a; }
     .rb-pct { font-size:.7rem; color:#94a3b8; }
@@ -170,11 +170,11 @@ import { CommonModule } from '@angular/common';
 })
 export class MarketingAnalyticsComponent {
   revenueBreakdown = [
-    { icon: '👤', label: 'Per Recipient', value: '$0.17', pct: '' },
-    { icon: '📧', label: 'Campaigns', value: '$2,870', pct: '67.1%' },
-    { icon: '⚡', label: 'Flows', value: '$1,020', pct: '23.8%' },
-    { icon: '✉️', label: 'Email', value: '$3,890', pct: '90.9%' },
-    { icon: '🛒', label: 'Direct Sales', value: '$390', pct: '9.1%' },
+    { icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.75" width="18" height="18"><circle cx="12" cy="8" r="4"/><path d="M4 20a8 8 0 0 1 16 0"/></svg>', label: 'Per Recipient', value: '$0.17', pct: '' },
+    { icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="1.75" width="18" height="18"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>', label: 'Campaigns', value: '$2,870', pct: '67.1%' },
+    { icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="1.75" width="18" height="18"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>', label: 'Flows', value: '$1,020', pct: '23.8%' },
+    { icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="1.75" width="18" height="18"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>', label: 'Email', value: '$3,890', pct: '90.9%' },
+    { icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="1.75" width="18" height="18"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>', label: 'Direct Sales', value: '$390', pct: '9.1%' },
   ];
 
   sources = [

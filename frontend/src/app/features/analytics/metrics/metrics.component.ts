@@ -60,6 +60,69 @@ import { CommonModule } from '@angular/common';
           </tbody>
         </table>
       </div>
+
+      <div class="glass-card detail-card">
+        <h3 class="detail-title">Flow Step Performance</h3>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Flow Step</th>
+              <th>Entered</th>
+              <th>Completed</th>
+              <th>Delivered</th>
+              <th>Opens</th>
+              <th>Clicks</th>
+              <th>Revenue</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let s of flowSteps">
+              <td class="metric-name">{{ s.step }}</td>
+              <td>{{ s.entered }}</td>
+              <td>{{ s.completed }}</td>
+              <td>{{ s.delivered }}</td>
+              <td>{{ s.opens }}</td>
+              <td>{{ s.clicks }}</td>
+              <td class="rev">{{ s.revenue }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="glass-card detail-card">
+        <h3 class="detail-title">Flow Goal Exit Rate</h3>
+        <div class="goal-grid">
+          <div class="goal-item" *ngFor="let g of goalExitRates">
+            <span class="goal-name">{{ g.name }}</span>
+            <span class="goal-rate">{{ g.rate }}%</span>
+            <span class="goal-note">{{ g.note }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="glass-card detail-card">
+        <h3 class="detail-title">Why Did This Send (Audit Log)</h3>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Subscriber</th>
+              <th>Flow</th>
+              <th>Step</th>
+              <th>Reason</th>
+              <th>Time</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let row of sendAuditRows">
+              <td>{{ row.subscriber }}</td>
+              <td>{{ row.flow }}</td>
+              <td>{{ row.step }}</td>
+              <td class="muted">{{ row.reason }}</td>
+              <td class="muted">{{ row.time }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   `,
   styles: [`
@@ -77,7 +140,8 @@ import { CommonModule } from '@angular/common';
     .mc-sparkline svg { width:100%; height:100%; }
     .mc-period { font-size:.7rem; color:#94a3b8; }
 
-    .detail-card { padding:1.5rem; }
+    .detail-card { padding:1.5rem; margin-bottom:1.25rem; }
+    .detail-card:last-child { margin-bottom:0; }
     .detail-title { font-size:1rem; font-weight:700; color:#0f172a; margin:0 0 1.25rem; }
     .metric-name { font-weight:600; color:#0f172a; }
     .metric-current { font-weight:700; color:#0f172a; }
@@ -87,9 +151,15 @@ import { CommonModule } from '@angular/common';
     .change-badge.down { color:#dc2626; background:rgba(239,68,68,0.1); }
     .spark-mini { width:60px; height:20px; }
     .spark-mini svg { width:100%; height:100%; }
+    .rev { color:#059669; font-weight:700; }
+    .goal-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:1.25rem; }
+    .goal-item { background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:.9rem; display:flex; flex-direction:column; gap:.25rem; }
+    .goal-name { font-size:.82rem; font-weight:600; color:#0f172a; }
+    .goal-rate { font-size:1.3rem; font-weight:800; color:#3b82f6; }
+    .goal-note { font-size:.72rem; color:#64748b; }
 
     @media(max-width:900px) { .metrics-grid { grid-template-columns:repeat(2,1fr); } }
-    @media(max-width:600px) { .metrics-grid { grid-template-columns:1fr; } }
+    @media(max-width:600px) { .metrics-grid { grid-template-columns:1fr; } .goal-grid { grid-template-columns:1fr; } }
   `]
 })
 export class MetricsComponent {
@@ -108,5 +178,25 @@ export class MetricsComponent {
     { name: 'Deliverability', current: '97.5%', previous: '96.8%', changeNum: 0.7, spark: '0,10 15,8 30,9 45,6 60,4' },
     { name: 'Spam Complaints', current: '0.09%', previous: '0.12%', changeNum: -25.0, spark: '0,15 15,12 30,14 45,10 60,8' },
     { name: 'Revenue (Total)', current: '$4,280', previous: '$3,490', changeNum: 22.6, spark: '0,18 15,15 30,12 45,8 60,4' },
+  ];
+
+  flowSteps = [
+    { step: 'Welcome Email 1', entered: 1280, completed: 1196, delivered: 1270, opens: 812, clicks: 204, revenue: '$520' },
+    { step: 'Welcome Email 2', entered: 1196, completed: 1083, delivered: 1188, opens: 662, clicks: 161, revenue: '$390' },
+    { step: 'Welcome Email 3', entered: 1083, completed: 947, delivered: 1072, opens: 521, clicks: 118, revenue: '$240' },
+    { step: 'Post-Purchase Follow-up', entered: 402, completed: 377, delivered: 398, opens: 309, clicks: 84, revenue: '$310' },
+  ];
+
+  goalExitRates = [
+    { name: 'Welcome Flow', rate: 12.4, note: 'Healthy for book-click objective' },
+    { name: 'Abandoned Cart', rate: 7.9, note: 'Within expected recovery range' },
+    { name: 'Re-engagement', rate: 24.3, note: 'Strong re-open performance' },
+  ];
+
+  sendAuditRows = [
+    { subscriber: 'reader1@example.com', flow: 'Welcome', step: 'Email 2', reason: 'Completed Email 1 and wait timer elapsed', time: '2h ago' },
+    { subscriber: 'reader2@example.com', flow: 'Abandoned Cart', step: 'Reminder 1', reason: 'Cart event captured with no purchase in 45 min', time: '4h ago' },
+    { subscriber: 'reader3@example.com', flow: 'Re-engagement', step: 'Ping 1', reason: 'No opens/clicks in 120 days', time: '8h ago' },
+    { subscriber: 'reader4@example.com', flow: 'Post-Purchase', step: 'Thank You', reason: 'Purchase confirmed in direct store', time: '1d ago' },
   ];
 }

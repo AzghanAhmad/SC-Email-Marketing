@@ -124,13 +124,50 @@ import { CommonModule } from '@angular/common';
           </div>
         </div>
       </div>
+
+      <!-- Campaign Funnel -->
+      <div class="glass-card chart-card funnel-card">
+        <div class="chart-header">
+          <div>
+            <h3 class="chart-title">Campaign Performance Funnel</h3>
+            <p class="chart-sub">Sent → Delivered → Opens → Clicks → Purchases → Revenue</p>
+          </div>
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Campaign</th>
+              <th>Sent</th>
+              <th>Delivered</th>
+              <th>Opens</th>
+              <th>Clicks</th>
+              <th>Purchases</th>
+              <th>Revenue</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let c of campaignFunnel">
+              <td class="camp-name">{{ c.name }}</td>
+              <td>{{ c.sent | number }}</td>
+              <td>{{ c.delivered | number }}</td>
+              <td>{{ c.opens | number }}</td>
+              <td>{{ c.clicks | number }}</td>
+              <td>{{ c.purchases }}</td>
+              <td class="revenue">{{ c.revenue }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="open-note">
+          Open rate is shown as directional only due to Apple MPP inflation. Use click rate, click-to-open, and conversion for decisions.
+        </p>
+      </div>
     </div>
   `,
   styles: [`
     .header-actions { display:flex; align-items:center; gap:.75rem; }
     .period-select { padding:.55rem 1rem; background:white; border:1.5px solid #e2e8f0; border-radius:10px; color:#334155; font-size:.8125rem; font-family:inherit; outline:none; cursor:pointer; }
 
-    .kpi-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:1.25rem; margin-bottom:1.75rem; }
+    .kpi-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:1.25rem; margin-bottom:1.75rem; }
     .kpi-card { display:flex; align-items:center; gap:1rem; padding:1.25rem 1.375rem; position:relative; }
     .kpi-icon { width:42px; height:42px; border-radius:12px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
     .kpi-icon :global(svg) { width:20px; height:20px; }
@@ -169,6 +206,14 @@ import { CommonModule } from '@angular/common';
     .eng-center { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
     .eng-val { font-size:.9rem; font-weight:800; color:#0f172a; }
     .eng-label { font-size:.75rem; font-weight:600; color:#64748b; text-align:center; }
+    .funnel-card { margin-top:1.5rem; }
+    .camp-name { font-weight:600; color:#0f172a; }
+    .revenue { color:#059669; font-weight:700; }
+    .open-note {
+      margin-top:1rem; font-size:.75rem; color:#64748b;
+      background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px;
+      padding:.625rem .75rem;
+    }
 
     @media(max-width:1200px) { .kpi-grid { grid-template-columns:repeat(2,1fr); } .engagement-grid { grid-template-columns:repeat(3,1fr); } }
     @media(max-width:900px) { .charts-row { grid-template-columns:1fr; } }
@@ -178,8 +223,10 @@ import { CommonModule } from '@angular/common';
 export class AnalyticsDashboardsComponent {
   kpis = [
     { label: 'Emails Sent', value: '24,830', change: 8.1, iconBg: 'rgba(59,130,246,0.1)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>' },
-    { label: 'Open Rate', value: '54.2%', change: 3.2, iconBg: 'rgba(16,185,129,0.1)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>' },
+    { label: 'Open Rate (MPP adj.)', value: '54.2%', change: 3.2, iconBg: 'rgba(16,185,129,0.1)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>' },
     { label: 'Click Rate', value: '12.8%', change: 1.4, iconBg: 'rgba(99,102,241,0.1)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>' },
+    { label: 'Click-to-Open', value: '23.6%', change: 1.8, iconBg: 'rgba(139,92,246,0.1)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>' },
+    { label: 'Conversion Rate', value: '2.1%', change: 4.5, iconBg: 'rgba(16,185,129,0.1)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2"><polyline points="4 14 9 9 13 13 20 6"/><polyline points="20 12 20 6 14 6"/></svg>' },
     { label: 'Revenue', value: '$4,280', change: 22.7, iconBg: 'rgba(245,158,11,0.1)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>' },
   ];
 
@@ -213,6 +260,13 @@ export class AnalyticsDashboardsComponent {
     { label: 'Replied', value: 4, color: '#a78bfa' },
     { label: 'Forwarded', value: 2, color: '#34d399' },
     { label: 'Unsubscribed', value: 0.4, color: '#f87171' },
+  ];
+
+  campaignFunnel = [
+    { name: 'Spring Catalog Launch', sent: 4821, delivered: 4712, opens: 2544, clicks: 611, purchases: 84, revenue: '$1,980' },
+    { name: 'Weekly Reader Letter', sent: 3510, delivered: 3448, opens: 1862, clicks: 429, purchases: 38, revenue: '$870' },
+    { name: 'Series Bundle Promo', sent: 2765, delivered: 2701, opens: 1422, clicks: 388, purchases: 57, revenue: '$1,430' },
+    { name: 'Re-engagement Check-in', sent: 2180, delivered: 2089, opens: 771, clicks: 148, purchases: 10, revenue: '$280' },
   ];
 
   constructor() {

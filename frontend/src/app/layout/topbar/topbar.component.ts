@@ -35,11 +35,58 @@ import { AuthService } from '../../core/services/auth.service';
             <button class="mark-read" (click)="showNotifs.set(false)">Mark all read</button>
           </div>
           <div class="notif-item" *ngFor="let n of notifications">
-            <span class="notif-icon">{{ n.icon }}</span>
+            <div class="notif-icon-wrap" [class]="'ni-' + n.type">
+              <svg *ngIf="n.type==='campaign'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+              <svg *ngIf="n.type==='subscriber'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+              <svg *ngIf="n.type==='flow'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+              <svg *ngIf="n.type==='report'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            </div>
             <div class="notif-body">
               <p class="notif-msg">{{ n.message }}</p>
               <span class="notif-time">{{ n.time }}</span>
             </div>
+          </div>
+        </div>
+
+        <!-- Hey ScribeCount? AI Assistant -->
+        <button class="icon-btn hey-btn" (click)="showAssistant.set(!showAssistant())" data-tooltip="Hey ScribeCount? — Ask anything about your business">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="17" height="17">
+            <path d="M12 2a10 10 0 0 1 10 10c0 5.52-4.48 10-10 10S2 17.52 2 12 6.48 2 12 2z"/>
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+            <circle cx="12" cy="17" r=".5" fill="currentColor"/>
+          </svg>
+          <span class="hey-label">Hey ScribeCount?</span>
+        </button>
+
+        <!-- AI Assistant Panel -->
+        <div class="assistant-panel" *ngIf="showAssistant()">
+          <div class="ap-header">
+            <div class="ap-title-row">
+              <div class="ap-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M12 2a10 10 0 0 1 10 10c0 5.52-4.48 10-10 10S2 17.52 2 12 6.48 2 12 2z"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><circle cx="12" cy="17" r=".5" fill="currentColor"/></svg>
+              </div>
+              <span class="ap-title">Hey ScribeCount?</span>
+            </div>
+            <button class="ap-close" (click)="showAssistant.set(false)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div class="ap-messages">
+            <div class="ap-msg assistant" *ngFor="let msg of assistantMessages">
+              <div class="ap-msg-bubble" [class.user-bubble]="msg.role === 'user'">{{ msg.text }}</div>
+            </div>
+            <div class="ap-typing" *ngIf="assistantTyping()">
+              <span></span><span></span><span></span>
+            </div>
+          </div>
+          <div class="ap-suggestions" *ngIf="assistantMessages.length === 1">
+            <button class="ap-suggestion" *ngFor="let s of suggestions" (click)="askAssistant(s)">{{ s }}</button>
+          </div>
+          <div class="ap-input-row">
+            <input class="ap-input" type="text" placeholder="Ask anything about your business..." [(ngModel)]="assistantQuery" (keydown.enter)="askAssistant(assistantQuery)" />
+            <button class="ap-send" (click)="askAssistant(assistantQuery)" [disabled]="!assistantQuery.trim()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            </button>
           </div>
         </div>
 
@@ -167,7 +214,11 @@ import { AuthService } from '../../core/services/auth.service';
     }
     .notif-item:hover { background:#f8fafc; }
     .notif-item:last-child { border-bottom:none; }
-    .notif-icon { font-size:1.25rem; flex-shrink:0; }
+    .notif-icon-wrap { width:30px; height:30px; border-radius:8px; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+    .ni-campaign { background:rgba(59,130,246,0.1); color:#3b82f6; }
+    .ni-subscriber { background:rgba(16,185,129,0.1); color:#059669; }
+    .ni-flow { background:rgba(139,92,246,0.1); color:#8b5cf6; }
+    .ni-report { background:rgba(245,158,11,0.1); color:#d97706; }
     .notif-body { display:flex; flex-direction:column; gap:.2rem; }
     .notif-msg { font-size:.8125rem; color:#334155; line-height:1.4; }
     .notif-time { font-size:.7rem; color:#94a3b8; }
@@ -188,18 +239,103 @@ import { AuthService } from '../../core/services/auth.service';
 
     .user-menu-wrap { position:relative; }
     .notif-dropdown { min-width:320px; }
+
+    /* Hey ScribeCount assistant */
+    .hey-btn { width:auto !important; padding:.4rem .875rem !important; gap:.5rem; border-radius:10px !important; }
+    .hey-label { font-size:.8125rem; font-weight:600; color:rgba(255,255,255,0.85); white-space:nowrap; }
+    .hey-btn:hover .hey-label { color:white; }
+
+    .assistant-panel {
+      position:absolute; top:calc(100% + .5rem); right:0;
+      width:380px; max-width:calc(100vw - 2rem);
+      background:#ffffff; border:1.5px solid #e2e8f0; border-radius:16px;
+      box-shadow:0 16px 48px rgba(0,0,0,0.14); z-index:200;
+      display:flex; flex-direction:column; overflow:hidden;
+      animation:fadeUp .2s ease-out;
+    }
+    .ap-header { display:flex; align-items:center; justify-content:space-between; padding:.875rem 1rem; border-bottom:1px solid #f1f5f9; background:#f8fafc; }
+    .ap-title-row { display:flex; align-items:center; gap:.5rem; }
+    .ap-icon { width:28px; height:28px; border-radius:8px; background:linear-gradient(135deg,#3b82f6,#8b5cf6); display:flex; align-items:center; justify-content:center; color:white; }
+    .ap-title { font-size:.875rem; font-weight:700; color:#0f172a; }
+    .ap-close { background:none; border:none; cursor:pointer; color:#64748b; padding:.25rem; border-radius:6px; display:flex; transition:all .15s; }
+    .ap-close:hover { background:#e2e8f0; color:#0f172a; }
+
+    .ap-messages { flex:1; padding:.875rem 1rem; display:flex; flex-direction:column; gap:.625rem; max-height:280px; overflow-y:auto; }
+    .ap-msg-bubble { padding:.625rem .875rem; border-radius:12px; font-size:.8125rem; line-height:1.5; max-width:90%; }
+    .ap-msg-bubble:not(.user-bubble) { background:#f1f5f9; color:#0f172a; align-self:flex-start; border-radius:4px 12px 12px 12px; }
+    .ap-msg-bubble.user-bubble { background:linear-gradient(135deg,#3b82f6,#6366f1); color:white; align-self:flex-end; border-radius:12px 4px 12px 12px; margin-left:auto; }
+    .ap-msg { display:flex; }
+
+    .ap-typing { display:flex; align-items:center; gap:.3rem; padding:.5rem .875rem; }
+    .ap-typing span { width:7px; height:7px; border-radius:50%; background:#94a3b8; animation:typingDot 1.2s infinite; }
+    .ap-typing span:nth-child(2) { animation-delay:.2s; }
+    .ap-typing span:nth-child(3) { animation-delay:.4s; }
+    @keyframes typingDot { 0%,60%,100%{transform:translateY(0);opacity:.4} 30%{transform:translateY(-4px);opacity:1} }
+
+    .ap-suggestions { padding:.5rem 1rem; display:flex; flex-direction:column; gap:.375rem; border-top:1px solid #f1f5f9; }
+    .ap-suggestion { text-align:left; padding:.5rem .75rem; background:#f8fafc; border:1px solid #f1f5f9; border-radius:8px; font-size:.78rem; color:#374151; font-family:inherit; cursor:pointer; transition:all .15s; }
+    .ap-suggestion:hover { background:#eff6ff; border-color:#bfdbfe; color:#3b82f6; }
+
+    .ap-input-row { display:flex; gap:.5rem; padding:.875rem 1rem; border-top:1px solid #f1f5f9; }
+    .ap-input { flex:1; padding:.55rem .875rem; background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:10px; font-size:.8125rem; font-family:inherit; color:#0f172a; outline:none; transition:border-color .15s; }
+    .ap-input:focus { border-color:#3b82f6; background:#fff; }
+    .ap-send { width:34px; height:34px; border-radius:9px; background:linear-gradient(135deg,#3b82f6,#6366f1); border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; color:white; transition:all .15s; flex-shrink:0; }
+    .ap-send:hover { opacity:.9; }
+    .ap-send:disabled { opacity:.4; cursor:not-allowed; }
   `]
 })
 export class TopbarComponent {
   searchQuery = '';
   showNotifs = signal(false);
   showUserMenu = signal(false);
+  showAssistant = signal(false);
+  assistantQuery = '';
+  assistantTyping = signal(false);
+  assistantMessages: { role: 'user' | 'assistant'; text: string }[] = [
+    { role: 'assistant', text: 'Hi! I\'m your ScribeCount assistant. Ask me anything about your email performance, subscriber growth, campaigns, or business data.' }
+  ];
+
+  suggestions = [
+    'Is my email list growing or shrinking this month?',
+    'Which campaign drove the most revenue?',
+    'What\'s my revenue per email this month?',
+    'Which flow is performing best?',
+  ];
+
+  private readonly mockAnswers: Record<string, string> = {
+    'growing': 'Your list has grown by 521 subscribers this month (+6.2% vs last month). Your top acquisition source is BookFunnel reader magnets at 38% of new subscribers.',
+    'shrinking': 'Your list has grown by 521 subscribers this month (+6.2% vs last month). Your top acquisition source is BookFunnel reader magnets at 38% of new subscribers.',
+    'campaign': 'Your best-performing campaign this month is "Book Launch: The Ember Crown" with a 71.4% open rate, 28.3% click rate, and $1,840 in attributed revenue.',
+    'subscriber': 'Your list has grown by 521 subscribers this month (+6.2% vs last month). Your top acquisition source is BookFunnel reader magnets.',
+    'revenue': 'Your revenue per email this month is $0.17, up 12.4% from last month. Your launch campaigns are driving the strongest attribution at $1,840.',
+    'flow': 'Your Welcome Flow is your top performer with a 68% open rate and 74% completion rate across 1,842 triggers this month.',
+    'open rate': 'Your average open rate is 54.2%, up 3.2% from last period — above the industry benchmark of 25–40% for author lists.',
+    'retailer': 'Your direct store drove the most revenue from your last launch at $2,120 (confirmed attribution). Amazon was second at $1,480 (directional).',
+    'series': 'Your best-performing series last quarter was The Ashford Inheritance with $2,870 in attributed email revenue and a 71.4% average open rate on launch emails.',
+    'default': 'Based on your current data: your email list has 8,421 subscribers (+6.2% this month), your campaigns average a 54.2% open rate, and your revenue per email is $0.17. What would you like to dig into?'
+  };
+
+  askAssistant(query: string) {
+    if (!query.trim()) return;
+    this.assistantMessages.push({ role: 'user', text: query });
+    this.assistantQuery = '';
+    this.assistantTyping.set(true);
+    setTimeout(() => {
+      const q = query.toLowerCase();
+      let answer = this.mockAnswers['default'];
+      for (const [key, val] of Object.entries(this.mockAnswers)) {
+        if (q.includes(key)) { answer = val; break; }
+      }
+      this.assistantMessages.push({ role: 'assistant', text: answer });
+      this.assistantTyping.set(false);
+    }, 900);
+  }
 
   notifications = [
-    { icon:'📧', message:'Campaign "March Newsletter" sent successfully', time:'2 hours ago' },
-    { icon:'👤', message:'12 new subscribers joined today', time:'4 hours ago' },
-    { icon:'⚡', message:'Welcome Flow triggered 8 times', time:'6 hours ago' },
-    { icon:'📊', message:'Weekly report is ready to view', time:'1 day ago' },
+    { type:'campaign', message:'Campaign "March Newsletter" sent successfully', time:'2 hours ago' },
+    { type:'subscriber', message:'12 new subscribers joined today', time:'4 hours ago' },
+    { type:'flow', message:'Welcome Flow triggered 8 times', time:'6 hours ago' },
+    { type:'report', message:'Weekly report is ready to view', time:'1 day ago' },
   ];
 
   constructor(public auth: AuthService, private router: Router) {}
