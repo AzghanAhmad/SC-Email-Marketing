@@ -1,4 +1,6 @@
-import { Injectable } from '@angular/core';
+﻿import { Injectable } from '@angular/core';
+import { FLOWS_DATA } from './mock-flows.data';
+import { FLOW_TEMPLATES_DATA } from './mock-flow-templates.data';
 
 export interface Subscriber {
   id: string;
@@ -29,20 +31,44 @@ export interface Campaign {
   date: string;
 }
 
+export interface SubscriptionMetrics {
+  paymentUpdateRate?: number;
+  retentionRateDunning?: number;
+  cancellationRate?: number;
+  resubscriptionRate?: number;
+}
+
 export interface Flow {
   id: string;
   name: string;
   description: string;
-  status: 'active' | 'paused';
+  status: 'active' | 'paused' | 'draft';
   triggers: number;
   steps: FlowStep[];
+  family: 'onboarding' | 'transaction' | 'launch' | 'retention';
+  goalExit: string;
+  priority?: 'day-one' | 'pre-store' | 'pre-launch' | 'mature';
+  requiresWebhook?: boolean;
+  subscriptionMetrics?: SubscriptionMetrics;
 }
 
 export interface FlowStep {
   id: string;
-  type: 'trigger' | 'email' | 'wait' | 'condition';
+  type: 'trigger' | 'billing-trigger' | 'email' | 'wait' | 'condition' | 'goal-exit';
   label: string;
   detail: string;
+}
+
+export interface FlowTemplate {
+  id: string;
+  name: string;
+  family: 'onboarding' | 'transaction' | 'launch' | 'retention';
+  description: string;
+  goalExit: string;
+  estimatedSetupMinutes: number;
+  priority?: 'day-one' | 'pre-store' | 'pre-launch' | 'mature';
+  requiresWebhook?: boolean;
+  steps: FlowStep[];
 }
 
 export interface Template {
@@ -105,48 +131,11 @@ export class MockDataService {
   }
 
   getFlows(): Flow[] {
-    return [
-      {
-        id:'1', name:'Welcome Flow', description:'Greet new subscribers and introduce your world', status:'active', triggers:1842,
-        steps:[
-          { id:'s1', type:'trigger', label:'Trigger', detail:'New subscriber joins list' },
-          { id:'s2', type:'email', label:'Welcome Email', detail:'Subject: Welcome to my reader community!' },
-          { id:'s3', type:'wait', label:'Wait 2 Days', detail:'Delay: 2 days' },
-          { id:'s4', type:'email', label:'Story Email', detail:'Subject: Here\'s a free chapter for you...' },
-          { id:'s5', type:'wait', label:'Wait 3 Days', detail:'Delay: 3 days' },
-          { id:'s6', type:'condition', label:'Opened?', detail:'If opened → VIP tag, else → re-engage' },
-        ]
-      },
-      {
-        id:'2', name:'Book Launch Flow', description:'Automated sequence for new book releases', status:'active', triggers:634,
-        steps:[
-          { id:'s1', type:'trigger', label:'Trigger', detail:'Tag: launch-list added' },
-          { id:'s2', type:'email', label:'Announcement', detail:'Subject: Big news — my new book is coming!' },
-          { id:'s3', type:'wait', label:'Wait 1 Day', detail:'Delay: 1 day' },
-          { id:'s4', type:'email', label:'Pre-order Email', detail:'Subject: Pre-order is LIVE' },
-          { id:'s5', type:'condition', label:'Pre-ordered?', detail:'If clicked → thank you email' },
-        ]
-      },
-      {
-        id:'3', name:'Winback Flow', description:'Re-engage subscribers who haven\'t opened in 90 days', status:'paused', triggers:89,
-        steps:[
-          { id:'s1', type:'trigger', label:'Trigger', detail:'No open in 90 days' },
-          { id:'s2', type:'email', label:'Miss You Email', detail:'Subject: Still there? I miss you...' },
-          { id:'s3', type:'wait', label:'Wait 7 Days', detail:'Delay: 7 days' },
-          { id:'s4', type:'condition', label:'Opened?', detail:'If no open → unsubscribe tag' },
-        ]
-      },
-      {
-        id:'4', name:'ARC Confirmation Flow', description:'Automatically delivers ARC copy and confirmation when a reader opts into your launch team', status:'active', triggers:156,
-        steps:[
-          { id:'s1', type:'trigger', label:'Trigger', detail:'Tag added: arc-reader' },
-          { id:'s2', type:'email', label:'Confirmation Email', detail:'Subject: You\'re in — here\'s your advance copy' },
-          { id:'s3', type:'wait', label:'Wait 3 Days', detail:'Delay: 3 days — give them time to start reading' },
-          { id:'s4', type:'email', label:'Check-In Email', detail:'Subject: How\'s the reading going?' },
-          { id:'s5', type:'condition', label:'Opened?', detail:'If opened → tag as engaged-arc-reader' },
-        ]
-      },
-    ];
+    return FLOWS_DATA;
+  }
+
+  getFlowTemplates(): FlowTemplate[] {
+    return FLOW_TEMPLATES_DATA;
   }
 
   getTemplates(): Template[] {
