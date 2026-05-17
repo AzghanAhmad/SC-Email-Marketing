@@ -16,7 +16,10 @@ import { AuthService } from '../../core/services/auth.service';
             <span class="logo-mark">
               <img src="favicon_new.png" alt="ScribeCount" style="width:100%;height:100%;object-fit:contain;border-radius:8px;" />
             </span>
-            <span class="logo-text">ScribeCount Email</span>
+            <span class="logo-text-group">
+              <span class="logo-text">ScribeCount</span>
+              <span class="logo-sub">EMAIL</span>
+            </span>
           </a>
           <nav class="nav-links">
             <a routerLink="/login" class="nav-active">Log In</a>
@@ -134,9 +137,11 @@ import { AuthService } from '../../core/services/auth.service';
     .nav.scrolled { background:rgba(16,28,46,.95);backdrop-filter:blur(18px);box-shadow:0 4px 30px rgba(0,0,0,.3); }
     .nav-inner { max-width:1200px;margin:0 auto;padding:.85rem 1.5rem;display:flex;align-items:center;justify-content:space-between; }
     .nav-logo { display:flex;align-items:center;gap:.6rem;text-decoration:none;color:white; }
-    .logo-mark { width:32px;height:32px;display:flex;align-items:center;justify-content:center; }
+    .logo-mark { width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:#ffffff;border-radius:8px;overflow:hidden; }
     .logo-mark svg { width:100%;height:100%; }
-    .logo-text { font-weight:700;font-size:1.05rem;letter-spacing:-.02em; }
+    .logo-text { font-weight:700;font-size:1.05rem;letter-spacing:-.02em;line-height:1.2; }
+    .logo-text-group { display:flex;flex-direction:column; }
+    .logo-sub { font-size:.55rem;font-weight:700;color:#38bdf8;letter-spacing:.12em;text-transform:uppercase;line-height:1; }
     .nav-links { display:flex;align-items:center;gap:1.5rem; }
     .nav-links a { color:rgba(255,255,255,.7);text-decoration:none;font-size:.9rem;font-weight:500;transition:color .2s; }
     .nav-links a:hover,.nav-active { color:white !important; }
