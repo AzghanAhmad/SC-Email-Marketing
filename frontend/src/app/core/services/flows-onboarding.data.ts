@@ -25,11 +25,13 @@ export const ONBOARDING_FLOWS: Flow[] = [
     status: 'active', triggers: 934,
     goalExit: 'Free content delivered and reader opens the download link',
     steps: [
-      { id: 's1', type: 'trigger', label: 'Trigger', detail: 'New subscriber opts in via reader magnet form' },
-      { id: 's2', type: 'email', label: 'Delivery Email', detail: 'Subject: Here is your free [book/story/guide]! — Lead with download link prominently. Brief warm note framing the gift as the beginning of a relationship, not a standalone transaction. Invite reply or connection. Goal: fulfill promise instantly, establish credibility and trust, create strongest possible first impression at highest-intent moment.' },
-      { id: 's3', type: 'wait', label: 'Wait 1 Day', detail: 'Delay: 1 day' },
-      { id: 's4', type: 'condition', label: 'Downloaded?', detail: 'If clicked download — tag as engaged, transition to Welcome Sequence; else — resend nudge' },
-      { id: 's5', type: 'goal-exit', label: 'Goal Exit', detail: 'Reader opens download link — transitions to Welcome Sequence' },
+      { id: 's1', type: 'trigger', label: 'Trigger', detail: 'New subscriber opts in via reader magnet form — fires within seconds of form submission confirmation' },
+      { id: 's2', type: 'email', label: 'Delivery Email', detail: 'Subject: Your copy of [Title] is here — Lead with download link first, above everything else. Brief warm introduction (2–3 sentences). Forward frame: "I\'ll be in touch soon with a bit more about who I am." Goal: fulfill promise instantly, establish credibility, create strongest possible first impression.' },
+      { id: 's3', type: 'wait', label: 'Wait 24–48 Hours', detail: 'Delay: 24–48 hours — ScribeCount checks whether the reader clicked the download link during this window' },
+      { id: 's4', type: 'condition', label: 'Downloaded? (Link Clicked?)', detail: 'YES: tag as confirmed-download, move to Welcome Sequence. NO: send delivery follow-up email before proceeding to Welcome Sequence.' },
+      { id: 's5', type: 'email', label: 'Delivery Follow-Up (Non-Downloaders)', detail: 'Subject: Did your copy of [Title] arrive okay? — Warm, helpful tone. Resend download link prominently. Acknowledge email may have gone to spam. Invite reply for direct support. No pressure, no urgency. Goal: remove whatever barrier prevented the first download.' },
+      { id: 's6', type: 'wait', label: 'Wait 1–2 Days', detail: 'Delay: 1–2 days — then move to Welcome Sequence regardless of download status' },
+      { id: 's7', type: 'goal-exit', label: 'Goal Exit', detail: 'Reader clicks download link (either delivery email or follow-up) — tagged as confirmed-download, transitions to Welcome Sequence' },
     ]
   },
 ];

@@ -1,11 +1,12 @@
 import { Component, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { StoreConnectionGuideComponent } from './store-connection/store-connection-guide.component';
 
 @Component({
   selector: 'app-integrations',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, StoreConnectionGuideComponent],
   template: `
     <div class="page-wrapper">
 
@@ -488,6 +489,9 @@ import { FormsModule } from '@angular/forms';
             <p class="page-subtitle">Connect ScribeCount Email with your tools and platforms</p>
           </div>
         </div>
+
+        <app-store-connection-guide></app-store-connection-guide>
+
         <div class="int-sections" *ngFor="let section of sections">
           <h2 class="section-heading">{{ section.title }}</h2>
           <div class="int-grid">

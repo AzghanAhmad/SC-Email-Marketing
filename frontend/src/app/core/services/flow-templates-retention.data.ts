@@ -20,13 +20,17 @@ export const RETENTION_TEMPLATES: FlowTemplate[] = [
   },
   {
     id: 't10', name: 'Milestone Celebration', family: 'retention', priority: 'mature',
-    description: 'Triggered by meaningful dates: subscriber anniversary, birthday, or reading milestone. Genuinely personal and celebratory — reader feels seen, not marketed to.',
+    description: 'Relationship-forward automation for anniversaries, birthdays, and catalog milestones. Reader feels seen, not marketed to.',
     goalExit: 'Milestone email opened and reader engages',
     estimatedSetupMinutes: 15,
     steps: [
-      { id: 's1', type: 'trigger', label: 'Trigger', detail: 'Subscriber anniversary date, birthday, or reading milestone' },
-      { id: 's2', type: 'email', label: 'Milestone Email', detail: 'Lead with acknowledgment of milestone before anything else. Offer small meaningful gift: discount, free short story, or early access.' },
-      { id: 's3', type: 'goal-exit', label: 'Goal Exit', detail: 'Email opened — milestone acknowledged' },
+      { id: 's1', type: 'trigger', label: 'Anniversary Trigger', detail: 'Join date anniversary — automatic from subscriber record' },
+      { id: 's2', type: 'email', label: 'Anniversary Email', detail: 'Recognition first, optional gift second' },
+      { id: 's3', type: 'trigger', label: 'Birthday Trigger', detail: 'Birth month/day in profile — on birth date' },
+      { id: 's4', type: 'email', label: 'Birthday Email', detail: 'Brief, warm, genuinely celebratory' },
+      { id: 's5', type: 'trigger', label: 'Catalog Trigger', detail: 'Purchase count threshold via store webhook' },
+      { id: 's6', type: 'email', label: 'Catalog Milestone Email', detail: 'Acknowledge purchase milestone, optional community invite' },
+      { id: 's7', type: 'goal-exit', label: 'Goal Exit', detail: 'Opened and engaged — loyalty deepened' },
     ]
   },
   {

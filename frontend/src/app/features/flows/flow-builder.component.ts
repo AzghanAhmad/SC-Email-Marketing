@@ -2,11 +2,19 @@ import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Flow, FlowStep, SubscriptionMetrics } from '../../core/services/mock-data.service';
 import { UnsubscribeDetailPanelComponent } from './unsubscribe/unsubscribe-detail-panel.component';
+import { WelcomeSequenceDetailPanelComponent } from './welcome-sequence/welcome-sequence-detail-panel.component';
+import { ReaderMagnetDetailPanelComponent } from './reader-magnet/reader-magnet-detail-panel.component';
+import { PostPurchaseDetailPanelComponent } from './post-purchase/post-purchase-detail-panel.component';
+import { AbandonedCartDetailPanelComponent } from './abandoned-cart/abandoned-cart-detail-panel.component';
+import { PreorderDetailPanelComponent } from './preorder/preorder-detail-panel.component';
+import { SeriesCompletionDetailPanelComponent } from './series-completion/series-completion-detail-panel.component';
+import { ReEngagementDetailPanelComponent } from './re-engagement/re-engagement-detail-panel.component';
+import { MilestoneCelebrationDetailPanelComponent } from './milestone-celebration/milestone-celebration-detail-panel.component';
 
 @Component({
   selector: 'app-flow-builder',
   standalone: true,
-  imports: [CommonModule, UnsubscribeDetailPanelComponent],
+  imports: [CommonModule, UnsubscribeDetailPanelComponent, WelcomeSequenceDetailPanelComponent, ReaderMagnetDetailPanelComponent, PostPurchaseDetailPanelComponent, AbandonedCartDetailPanelComponent, PreorderDetailPanelComponent, SeriesCompletionDetailPanelComponent, ReEngagementDetailPanelComponent, MilestoneCelebrationDetailPanelComponent],
   template: `
     <div class="builder-wrapper">
 
@@ -132,8 +140,54 @@ import { UnsubscribeDetailPanelComponent } from './unsubscribe/unsubscribe-detai
             [flow]="flow">
           </app-unsubscribe-detail-panel>
 
+          <!-- Welcome Sequence: use dedicated panel -->
+          <app-welcome-sequence-detail-panel
+            *ngIf="isWelcomeSequenceFlow">
+          </app-welcome-sequence-detail-panel>
+
+          <!-- Reader Magnet Delivery: use dedicated panel -->
+          <app-reader-magnet-detail-panel
+            *ngIf="isReaderMagnetFlow">
+          </app-reader-magnet-detail-panel>
+
+          <!-- Post-Purchase flows: use dedicated panel -->
+          <app-post-purchase-detail-panel
+            *ngIf="isPostPurchaseFlow"
+            [flow]="flow">
+          </app-post-purchase-detail-panel>
+
+          <!-- Abandoned Cart / Checkout flows: use dedicated panel -->
+          <app-abandoned-cart-detail-panel
+            *ngIf="isAbandonedFlow"
+            [flow]="flow">
+          </app-abandoned-cart-detail-panel>
+
+          <!-- Preorder flow: use dedicated panel -->
+          <app-preorder-detail-panel
+            *ngIf="isPreorderFlow"
+            [flow]="flow">
+          </app-preorder-detail-panel>
+
+          <!-- Series Completion flow: use dedicated panel -->
+          <app-series-completion-detail-panel
+            *ngIf="isSeriesCompletionFlow"
+            [flow]="flow">
+          </app-series-completion-detail-panel>
+
+          <!-- Re-engagement flow: use dedicated panel -->
+          <app-re-engagement-detail-panel
+            *ngIf="isReEngagementFlow"
+            [flow]="flow">
+          </app-re-engagement-detail-panel>
+
+          <!-- Milestone Celebration flow: use dedicated panel -->
+          <app-milestone-celebration-detail-panel
+            *ngIf="isMilestoneCelebrationFlow"
+            [flow]="flow">
+          </app-milestone-celebration-detail-panel>
+
           <!-- All other flows: standard detail panel -->
-          <ng-container *ngIf="!isUnsubscribeFlow">
+          <ng-container *ngIf="!isUnsubscribeFlow && !isWelcomeSequenceFlow && !isReaderMagnetFlow && !isPostPurchaseFlow && !isAbandonedFlow && !isPreorderFlow && !isSeriesCompletionFlow && !isReEngagementFlow && !isMilestoneCelebrationFlow">
 
             <!-- No step selected: flow overview -->
             <ng-container *ngIf="!selectedStep">
@@ -299,15 +353,33 @@ import { UnsubscribeDetailPanelComponent } from './unsubscribe/unsubscribe-detai
     }
     .btn-primary:hover { background: #2563eb; }
 
-    /* Body */
+    /* Body — detail panel gets more width than the steps canvas */
     .builder-body {
-      display: grid; grid-template-columns: 1fr 300px; gap: 2rem; align-items: start;
+      display: grid;
+      grid-template-columns: minmax(260px, 0.85fr) minmax(380px, 1.35fr);
+      gap: 1.5rem;
+      align-items: start;
     }
-    @media (max-width: 900px) { .builder-body { grid-template-columns: 1fr; } }
+    @media (max-width: 1100px) {
+      .builder-body {
+        grid-template-columns: minmax(220px, 0.75fr) minmax(320px, 1.25fr);
+        gap: 1.25rem;
+      }
+    }
+    @media (max-width: 900px) {
+      .builder-body { grid-template-columns: 1fr; }
+      .detail-panel { order: -1; }
+    }
 
     /* Steps canvas */
-    .steps-canvas { display: flex; flex-direction: column; align-items: center; }
-    .step-wrapper { display: flex; flex-direction: column; align-items: center; width: 100%; max-width: 500px; }
+    .steps-canvas {
+      display: flex; flex-direction: column; align-items: center;
+      min-width: 0; max-width: 100%;
+    }
+    .step-wrapper {
+      display: flex; flex-direction: column; align-items: center;
+      width: 100%; max-width: min(500px, 100%);
+    }
 
     .flow-step {
       width: 100%; display: flex; align-items: center; gap: .875rem;
@@ -360,7 +432,9 @@ import { UnsubscribeDetailPanelComponent } from './unsubscribe/unsubscribe-detai
     .detail-panel {
       background: #fff; border: 1.5px solid #e2e8f0; border-radius: 16px;
       padding: 1.375rem; position: sticky; top: 80px;
+      min-width: 0; width: 100%; overflow: hidden; box-sizing: border-box;
     }
+    .detail-panel > * { min-width: 0; max-width: 100%; }
     .detail-heading { font-size: .9375rem; font-weight: 700; color: #0f172a; margin: 0 0 1rem; }
     .detail-stats { display: flex; gap: 1.5rem; margin-bottom: 1.25rem; }
     .d-stat { display: flex; flex-direction: column; }
@@ -445,6 +519,44 @@ export class FlowBuilderComponent {
 
   get isUnsubscribeFlow(): boolean {
     return this.flow?.id === '13a' || this.flow?.id === '13b';
+  }
+
+  get isWelcomeSequenceFlow(): boolean {
+    return this.flow?.id === '1';
+  }
+
+  get isReaderMagnetFlow(): boolean {
+    return this.flow?.id === '2';
+  }
+
+  /** Post-purchase transaction flows: Order Confirmation, Thank You, Follow-Up, Review Request, Repeat Thank You */
+  get isPostPurchaseFlow(): boolean {
+    return ['3', '4', '20', '21', '22'].includes(this.flow?.id ?? '');
+  }
+
+  /** Abandoned Cart and Abandoned Checkout flows */
+  get isAbandonedFlow(): boolean {
+    return ['5', '6'].includes(this.flow?.id ?? '');
+  }
+
+  /** Preorder Confirmation & Nurture flow */
+  get isPreorderFlow(): boolean {
+    return this.flow?.id === '8';
+  }
+
+  /** Series Completion flow */
+  get isSeriesCompletionFlow(): boolean {
+    return this.flow?.id === '9';
+  }
+
+  /** Re-engagement flow */
+  get isReEngagementFlow(): boolean {
+    return this.flow?.id === '11';
+  }
+
+  /** Milestone Celebration flow */
+  get isMilestoneCelebrationFlow(): boolean {
+    return this.flow?.id === '12';
   }
 
   selectStep(step: FlowStep) {

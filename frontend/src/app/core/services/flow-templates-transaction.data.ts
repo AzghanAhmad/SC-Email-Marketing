@@ -48,26 +48,46 @@ export const TRANSACTION_TEMPLATES: FlowTemplate[] = [
   },
   {
     id: 't5', name: 'Abandoned Cart', family: 'transaction', priority: 'pre-store',
-    description: 'Gentle timely reminder 3 hours after abandonment. Removes hesitation by addressing friction points. Recovers sale from warm buyer at moment closest to purchasing decision.',
+    description: 'First email fires 1 hour after abandonment — while the book is still in the reader\'s mental foreground. Two-email sequence. Conversion rate 5–15%. Lead with the book, not the cart. Include cover image and social proof.',
     goalExit: 'Reader completes the purchase',
     estimatedSetupMinutes: 25,
     steps: [
-      { id: 's1', type: 'trigger', label: 'Trigger', detail: 'Reader adds to cart and closes browser' },
-      { id: 's2', type: 'wait', label: 'Wait 3 Hours', detail: 'Delay: 3 hours' },
-      { id: 's3', type: 'email', label: 'Cart Reminder', detail: 'Gentle reminder book is still waiting. Address friction: discount, guarantee, or remind why they wanted it.' },
-      { id: 's4', type: 'goal-exit', label: 'Goal Exit', detail: 'Reader completes purchase' },
+      { id: 's1', type: 'trigger', label: 'Trigger', detail: 'Reader adds book to cart and leaves without progressing to checkout' },
+      { id: 's2', type: 'wait', label: 'Wait 1 Hour', detail: 'Delay: 1 hour (configurable) — confirms real abandonment without letting interest cool' },
+      { id: 's3', type: 'condition', label: 'Already Purchased?', detail: 'If purchase event received — goal exit; else — send reminder' },
+      { id: 's4', type: 'email', label: 'Cart Reminder — Email 1', detail: 'Lead with the book. Cover image. Brief hook. One line of reader praise. One button back to product page or pre-populated cart.' },
+      { id: 's5', type: 'wait', label: 'Wait 24 Hours', detail: 'Delay: 24 hours' },
+      { id: 's6', type: 'condition', label: 'Purchased?', detail: 'If purchased — goal exit; else — final nudge' },
+      { id: 's7', type: 'email', label: 'Final Nudge — Email 2', detail: 'Two or three sentences. Light reminder, no urgency language. After two emails, flow ends.' },
+      { id: 's8', type: 'goal-exit', label: 'Goal Exit', detail: 'Reader completes purchase — post-purchase sequence begins' },
     ]
   },
   {
     id: 't5b', name: 'Abandoned Checkout', family: 'transaction', priority: 'pre-store',
-    description: 'Higher intent than abandoned cart — reader entered payment info. One of the highest ROI emails in the direct sales funnel. Address last-minute hesitation with trust signals.',
+    description: 'First email fires in 30 minutes — faster than cart because intent is higher. Reader entered payment info. Two-email sequence. Direct acknowledgment, friction removal, cart restoration link.',
     goalExit: 'Reader completes checkout',
     estimatedSetupMinutes: 20,
     steps: [
-      { id: 's1', type: 'trigger', label: 'Trigger', detail: 'Reader reaches checkout, enters payment info, but does not complete' },
-      { id: 's2', type: 'wait', label: 'Wait 1 Hour', detail: 'Delay: 1 hour' },
-      { id: 's3', type: 'email', label: 'Checkout Reminder', detail: 'Address last-minute hesitation. Reassure with trust signals: secure payment, satisfaction guarantee. Make returning frictionless.' },
-      { id: 's4', type: 'goal-exit', label: 'Goal Exit', detail: 'Reader completes purchase' },
+      { id: 's1', type: 'trigger', label: 'Trigger', detail: 'Reader reaches checkout, enters payment or shipping info, but does not complete' },
+      { id: 's2', type: 'wait', label: 'Wait 30 Minutes', detail: 'Delay: 30 minutes (configurable) — higher intent warrants faster response' },
+      { id: 's3', type: 'condition', label: 'Already Purchased?', detail: 'If purchase event received — goal exit; else — send reminder' },
+      { id: 's4', type: 'email', label: 'Checkout Reminder — Email 1', detail: 'Direct acknowledgment. Address technical friction: payment methods, guest checkout, money-back guarantee. "Hit reply and I\'ll sort it out personally." Cart restoration link if platform supports it.' },
+      { id: 's5', type: 'wait', label: 'Wait 24 Hours', detail: 'Delay: 24 hours' },
+      { id: 's6', type: 'condition', label: 'Purchased?', detail: 'If purchased — goal exit; else — 24-hour follow-up' },
+      { id: 's7', type: 'email', label: '24-Hour Follow-Up — Email 2', detail: 'Shorter, warmer. Invitation to reach out if anything went wrong. After two emails, flow ends.' },
+      { id: 's8', type: 'goal-exit', label: 'Goal Exit', detail: 'Reader completes purchase — post-purchase sequence begins' },
+    ]
+  },
+  {
+    id: 't4d', name: 'Review Request', family: 'transaction', priority: 'pre-store',
+    description: 'A focused, standalone automation dedicated entirely to generating social proof. Fires 4–7 days after purchase as a single clear ask. More effective than burying the review request inside a longer email with multiple purposes.',
+    goalExit: 'Reader clicks a review link on any platform',
+    estimatedSetupMinutes: 20,
+    steps: [
+      { id: 's1', type: 'trigger', label: 'Trigger', detail: '4–7 days after completed purchase' },
+      { id: 's2', type: 'condition', label: 'Already Left Review?', detail: 'If reader clicked review link in Post-Purchase Follow-Up — goal exit; else — continue' },
+      { id: 's3', type: 'email', label: 'Review Request', detail: 'Single focused ask with direct links to review submission pages on each platform. Personal framing, genuine curiosity about reader\'s experience.' },
+      { id: 's4', type: 'goal-exit', label: 'Goal Exit', detail: 'Reader clicks any review link — no further review requests sent for this title' },
     ]
   },
   {

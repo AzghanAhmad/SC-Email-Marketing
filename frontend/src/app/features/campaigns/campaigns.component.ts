@@ -2,6 +2,18 @@ import { Component, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MockDataService, Campaign } from '../../core/services/mock-data.service';
+import { CampaignListComponent } from './campaign-list.component';
+import { CampaignCalendarComponent } from './campaign-calendar.component';
+import { CampaignNewsletterComponent } from './campaign-newsletter.component';
+import { CampaignAbTestComponent } from './campaign-ab-test.component';
+import { NewsletterSwapGuidanceComponent } from './newsletter-swap-guidance.component';
+import { FlashSaleGuidanceComponent } from './flash-sale-guidance.component';
+import { PriceDropGuidanceComponent } from './price-drop-guidance.component';
+import { BoxSetGuidanceComponent } from './box-set-guidance.component';
+import { SurveyGuidanceComponent } from './survey-guidance.component';
+import { EventAnnouncementGuidanceComponent } from './event-announcement-guidance.component';
+import { ReaderCommunityGuidanceComponent } from './reader-community-guidance.component';
+import { BacklistSpotlightGuidanceComponent } from './backlist-spotlight-guidance.component';
 
 type CampaignTab = 'list' | 'create' | 'newsletter' | 'ab-test' | 'calendar';
 
@@ -72,7 +84,7 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
 @Component({
   selector: 'app-campaigns',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, CampaignListComponent, CampaignCalendarComponent, CampaignNewsletterComponent, CampaignAbTestComponent, NewsletterSwapGuidanceComponent, FlashSaleGuidanceComponent, PriceDropGuidanceComponent, BoxSetGuidanceComponent, SurveyGuidanceComponent, EventAnnouncementGuidanceComponent, ReaderCommunityGuidanceComponent, BacklistSpotlightGuidanceComponent],
   template: `
     <div class="page-wrapper">
       <div class="page-header">
@@ -106,6 +118,20 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
 
       <!-- ===== CAMPAIGN CALENDAR TAB ===== -->
       <div *ngIf="activeTab() === 'calendar'">
+        <app-campaign-calendar
+          [campaignTypes]="campaignTypes"
+          [calendarEvents]="calendarEvents"
+          [launchSequence]="launchSequence"
+          [baselineCampaigns]="baselineCampaigns"
+          (onCreateFromBaseline)="createFromBaseline($event)"
+          (onStartCreateWithType)="startCreateWithType($event)"
+          (onAddEvent)="addCalendarEvent()"
+          (onGoToCreate)="activeTab.set('create')">
+        </app-campaign-calendar>
+      </div>
+
+      <!-- ===== CALENDAR TAB ORIGINAL (hidden) ===== -->
+      <div *ngIf="false">
 
         <!-- Campaigns vs Flows explainer -->
         <div class="cvf-callout glass-card">
@@ -245,9 +271,17 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
           </div>
         </div>
       </div>
+      <!-- end hidden calendar original -->
 
       <!-- ===== NEWSLETTER TAB ===== -->
       <div *ngIf="activeTab() === 'newsletter'">
+        <app-campaign-newsletter
+          (onWriteNextIssue)="activeTab.set('create')"
+          (onSave)="showToast('Newsletter schedule saved!', 'success')">
+        </app-campaign-newsletter>
+      </div>
+      <!-- ===== NEWSLETTER ORIGINAL (hidden) ===== -->
+      <div *ngIf="false">
 
         <!-- Explainer callout -->
         <div class="newsletter-callout glass-card">
@@ -435,10 +469,16 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
           </div>
         </div>
       </div>
+      <!-- end hidden newsletter original -->
 
       <!-- ===== A/B TESTING TAB ===== -->
       <div *ngIf="activeTab() === 'ab-test'">
-
+        <app-campaign-ab-test
+          (onToast)="showToast($event.message, $event.type)">
+        </app-campaign-ab-test>
+      </div>
+      <!-- ===== A/B ORIGINAL (hidden) ===== -->
+      <div *ngIf="false">
         <div class="glass-card step-card">
           <div class="ab-header-row">
             <div>
@@ -574,13 +614,21 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
 
       <!-- ===== CAMPAIGN LIST ===== -->
       <div *ngIf="activeTab() === 'list'">
+        <app-campaign-list
+          [campaigns]="campaigns"
+          (onEdit)="editCampaign($event)"
+          (onDelete)="deleteCampaign($event)">
+        </app-campaign-list>
+      </div>
+      <!-- ===== LIST ORIGINAL (hidden) ===== -->
+      <div *ngIf="false">
 
         <!-- Inline Report Panel -->
         <div class="glass-card report-panel" *ngIf="reportCampaign">
           <div class="report-panel-header">
             <div>
-              <h3 class="report-panel-title">{{ reportCampaign.name }}</h3>
-              <p class="report-panel-sub">{{ reportCampaign.subject }}</p>
+              <h3 class="report-panel-title">{{ rc.name }}</h3>
+              <p class="report-panel-sub">{{ rc.subject }}</p>
             </div>
             <button class="close-report-btn" (click)="reportCampaign = null">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -588,54 +636,54 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
           </div>
           <div class="report-stats-grid">
             <div class="report-stat">
-              <span class="rs-val">{{ reportCampaign.sent | number }}</span>
+              <span class="rs-val">{{ rc.sent | number }}</span>
               <span class="rs-label">Emails Sent</span>
             </div>
             <div class="report-stat">
-              <span class="rs-val">{{ reportCampaign.openRate > 0 ? reportCampaign.openRate + '%' : '—' }}</span>
+              <span class="rs-val">{{ rc.openRate > 0 ? rc.openRate + '%' : '—' }}</span>
               <span class="rs-label">Open Rate
                 <span class="rs-caveat" data-tooltip="Apple Mail Privacy Protection inflates open rates. Use click rate and conversion rate as primary success metrics.">⚠</span>
               </span>
-              <div class="rs-bar" *ngIf="reportCampaign.openRate > 0">
-                <div class="rs-bar-fill blue" [style.width]="reportCampaign.openRate + '%'"></div>
+              <div class="rs-bar" *ngIf="rc.openRate > 0">
+                <div class="rs-bar-fill blue" [style.width]="rc.openRate + '%'"></div>
               </div>
             </div>
             <div class="report-stat">
-              <span class="rs-val" [class.rs-accent]="reportCampaign.clickRate > 0">{{ reportCampaign.clickRate > 0 ? reportCampaign.clickRate + '%' : '—' }}</span>
+              <span class="rs-val" [class.rs-accent]="rc.clickRate > 0">{{ rc.clickRate > 0 ? rc.clickRate + '%' : '—' }}</span>
               <span class="rs-label">Click Rate</span>
-              <div class="rs-bar" *ngIf="reportCampaign.clickRate > 0">
-                <div class="rs-bar-fill purple" [style.width]="(reportCampaign.clickRate * 3) + '%'"></div>
+              <div class="rs-bar" *ngIf="rc.clickRate > 0">
+                <div class="rs-bar-fill purple" [style.width]="(rc.clickRate * 3) + '%'"></div>
               </div>
             </div>
             <div class="report-stat">
-              <span class="rs-val green">{{ reportCampaign.sent > 0 && reportCampaign.clickRate > 0 ? (reportCampaign.clickRate * 0.35 | number:'1.1-1') + '%' : '—' }}</span>
+              <span class="rs-val green">{{ rc.sent > 0 && rc.clickRate > 0 ? (rc.clickRate * 0.35 | number:'1.1-1') + '%' : '—' }}</span>
               <span class="rs-label">Conversion Rate
                 <span class="info-icon" data-tooltip="% of recipients who completed the action — purchase, ARC signup, event registration. The metric that connects email to business outcomes.">?</span>
               </span>
             </div>
             <div class="report-stat">
-              <span class="rs-val green">{{ reportCampaign.sent > 0 ? (reportCampaign.sent * reportCampaign.openRate / 100 | number:'1.0-0') : '—' }}</span>
+              <span class="rs-val green">{{ rc.sent > 0 ? (rc.sent * rc.openRate / 100 | number:'1.0-0') : '—' }}</span>
               <span class="rs-label">Unique Opens</span>
             </div>
             <div class="report-stat">
-              <span class="rs-val purple">{{ reportCampaign.sent > 0 ? (reportCampaign.sent * reportCampaign.clickRate / 100 | number:'1.0-0') : '—' }}</span>
+              <span class="rs-val purple">{{ rc.sent > 0 ? (rc.sent * rc.clickRate / 100 | number:'1.0-0') : '—' }}</span>
               <span class="rs-label">Unique Clicks</span>
             </div>
             <div class="report-stat">
-              <span class="rs-val" [class.green]="reportCampaign.sent > 0 && reportCampaign.clickRate > 0">{{ reportCampaign.sent > 0 && reportCampaign.clickRate > 0 ? '$' + (reportCampaign.clickRate * 0.14 | number:'1.2-2') : '—' }}</span>
+              <span class="rs-val" [class.green]="rc.sent > 0 && rc.clickRate > 0">{{ rc.sent > 0 && rc.clickRate > 0 ? '$' + (rc.clickRate * 0.14 | number:'1.2-2') : '—' }}</span>
               <span class="rs-label">Revenue / Email
                 <span class="info-icon" data-tooltip="Calculated from real purchase events connected to this campaign. The plainest measure of whether this campaign earned its place in your calendar.">?</span>
               </span>
             </div>
             <div class="report-stat">
-              <span class="rs-val">{{ reportCampaign.date }}</span>
+              <span class="rs-val">{{ rc.date }}</span>
               <span class="rs-label">Sent Date</span>
             </div>
           </div>
           <div class="report-status-row">
-            <span class="badge" [ngClass]="'badge-' + reportCampaign.status">{{ reportCampaign.status }}</span>
-            <span class="report-note" *ngIf="reportCampaign.status === 'draft'">This campaign hasn't been sent yet — no stats available.</span>
-            <span class="report-note" *ngIf="reportCampaign.status === 'scheduled'">This campaign is scheduled — stats will appear after sending.</span>
+            <span class="badge" [ngClass]="'badge-' + rc.status">{{ rc.status }}</span>
+            <span class="report-note" *ngIf="rc.status === 'draft'">This campaign hasn't been sent yet — no stats available.</span>
+            <span class="report-note" *ngIf="rc.status === 'scheduled'">This campaign is scheduled — stats will appear after sending.</span>
           </div>
         </div>
         <div class="glass-card table-card">
@@ -701,6 +749,7 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
           </table>
         </div>
       </div>
+      <!-- end hidden list original -->
 
       <!-- ===== CREATE CAMPAIGN WIZARD ===== -->
       <div *ngIf="activeTab() === 'create'">
@@ -762,6 +811,62 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
                   <span class="spt-desc">Before writing, answer: what is the one thing I want this reader to do? One purpose = one call to action. Campaigns with multiple competing CTAs consistently underperform focused ones.</span>
                 </div>
               </div>
+
+              <!-- ===== NEWSLETTER SWAP GUIDANCE ===== -->
+              <app-newsletter-swap-guidance
+                *ngIf="draft.campaignType === 'nl-swap'"
+                (onSubjectSuggestion)="draft.subject = $event">
+              </app-newsletter-swap-guidance>
+              <!-- ===== END NEWSLETTER SWAP GUIDANCE ===== -->
+
+              <!-- ===== FLASH SALE GUIDANCE ===== -->
+              <app-flash-sale-guidance
+                *ngIf="draft.campaignType === 'flash-sale'"
+                (onSubjectSuggestion)="draft.subject = $event">
+              </app-flash-sale-guidance>
+              <!-- ===== END FLASH SALE GUIDANCE ===== -->
+
+              <!-- ===== PRICE DROP GUIDANCE ===== -->
+              <app-price-drop-guidance
+                *ngIf="draft.campaignType === 'price-drop' || draft.campaignType === 'price-drop-2'"
+                (onSubjectSuggestion)="draft.subject = $event">
+              </app-price-drop-guidance>
+              <!-- ===== END PRICE DROP GUIDANCE ===== -->
+
+              <!-- ===== BOX SET GUIDANCE ===== -->
+              <app-box-set-guidance
+                *ngIf="draft.campaignType === 'box-set'"
+                (onSubjectSuggestion)="draft.subject = $event">
+              </app-box-set-guidance>
+              <!-- ===== END BOX SET GUIDANCE ===== -->
+
+              <!-- ===== SURVEY GUIDANCE ===== -->
+              <app-survey-guidance
+                *ngIf="draft.campaignType === 'survey'"
+                (onSubjectSuggestion)="draft.subject = $event">
+              </app-survey-guidance>
+              <!-- ===== END SURVEY GUIDANCE ===== -->
+
+              <!-- ===== EVENT ANNOUNCEMENT GUIDANCE ===== -->
+              <app-event-announcement-guidance
+                *ngIf="draft.campaignType === 'event'"
+                (onSubjectSuggestion)="draft.subject = $event">
+              </app-event-announcement-guidance>
+              <!-- ===== END EVENT ANNOUNCEMENT GUIDANCE ===== -->
+
+              <!-- ===== READER COMMUNITY GUIDANCE ===== -->
+              <app-reader-community-guidance
+                *ngIf="draft.campaignType === 'reader-community'"
+                (onSubjectSuggestion)="draft.subject = $event">
+              </app-reader-community-guidance>
+              <!-- ===== END READER COMMUNITY GUIDANCE ===== -->
+
+              <!-- ===== BACKLIST SPOTLIGHT GUIDANCE ===== -->
+              <app-backlist-spotlight-guidance
+                *ngIf="draft.campaignType === 'backlist'"
+                (onSubjectSuggestion)="draft.subject = $event">
+              </app-backlist-spotlight-guidance>
+              <!-- ===== END BACKLIST SPOTLIGHT GUIDANCE ===== -->
 
               <!-- ===== BOOK LAUNCH SPECIFIC GUIDANCE ===== -->
               <div class="launch-guidance" *ngIf="draft.campaignType === 'book-launch'">
@@ -2303,6 +2408,7 @@ export class CampaignsComponent implements OnInit {
   searchQuery = '';
   statusFilter = '';
   reportCampaign: Campaign | null = null;
+  get rc(): Campaign { return this.reportCampaign!; }
   draft = { name: '', fromName: 'Jane Austen', subject: '', previewText: '', sendTo: 'all', content: '', scheduledAt: '', timezoneOptimized: true, campaignType: '', directStoreLink: '', amazonLink: '', arcTag: '', amazonReviewLink: '', appleBooksLink: '', koboLink: '', bnLink: '' };
 
   // Campaign types (all 15 from the article)
@@ -2341,6 +2447,11 @@ export class CampaignsComponent implements OnInit {
     { id: '3', name: 'Book Launch — The Ember Crown', type: 'Book Launch', date: 'May 1, 2026', status: 'sent' },
     { id: '4', name: 'Post-Launch Backlist', type: 'Backlist Spotlight', date: 'May 8, 2026', status: 'scheduled' },
     { id: '5', name: 'Flash Sale — Summer Promo', type: 'Flash Sale', date: 'Jun 15, 2026', status: 'planned' },
+    { id: '6', name: 'Parnassus Books Signing — Nashville', type: 'Event Announcement', date: 'Apr 5, 2026', status: 'sent' },
+    { id: '7', name: 'Live Q&A — The Ember Crown', type: 'Event Announcement', date: 'May 22, 2026', status: 'scheduled' },
+    { id: '8', name: 'Event Reminder — Live Q&A', type: 'Event Announcement', date: 'May 21, 2026', status: 'planned' },
+    { id: '9', name: 'Reader Community — Founding Invitation', type: 'Reader Community', date: 'Jun 1, 2026', status: 'draft' },
+    { id: '10', name: 'Backlist Spotlight — The Ashford Inheritance', type: 'Backlist Spotlight', date: 'Jun 20, 2026', status: 'planned' },
   ];
 
   readonly baselineCampaigns = [
@@ -2716,7 +2827,7 @@ export class CampaignsComponent implements OnInit {
     this.activeTab.set('list');
   }
 
-  private showToast(msg: string, type: 'success' | 'warn') {
+  showToast(msg: string, type: 'success' | 'warn') {
     this.toastMessage = msg;
     this.toastType = type;
     if (this.toastTimer) clearTimeout(this.toastTimer);
