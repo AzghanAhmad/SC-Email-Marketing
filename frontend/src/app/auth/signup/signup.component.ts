@@ -14,13 +14,7 @@ import { AuthService } from '../../core/services/auth.service';
         <div class="nav-inner">
           <a routerLink="/login" class="nav-logo">
             <span class="logo-mark">
-              <svg viewBox="0 0 36 36" fill="none">
-                <defs><linearGradient id="lg" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stop-color="#60a5fa"/><stop offset="50%" stop-color="#818cf8"/><stop offset="100%" stop-color="#a78bfa"/>
-                </linearGradient></defs>
-                <rect width="36" height="36" rx="10" fill="url(#lg)" opacity="0.2"/>
-                <path d="M10 12h16M10 17h10M10 22h13" stroke="url(#lg)" stroke-width="2.2" stroke-linecap="round"/>
-              </svg>
+              <img src="favicon_new.png" alt="ScribeCount" style="width:100%;height:100%;object-fit:contain;border-radius:8px;" />
             </span>
             <span class="logo-text">ScribeCount Email</span>
           </a>

@@ -27,19 +27,12 @@ interface NavGroup {
       <!-- Logo -->
       <div class="sidebar-logo">
         <div class="logo-mark">
-          <svg viewBox="0 0 36 36" fill="none">
-            <defs>
-              <linearGradient id="slg" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stop-color="#60a5fa"/>
-                <stop offset="50%" stop-color="#818cf8"/>
-                <stop offset="100%" stop-color="#a78bfa"/>
-              </linearGradient>
-            </defs>
-            <rect width="36" height="36" rx="10" fill="url(#slg)" opacity="0.2"/>
-            <path d="M10 12h16M10 17h10M10 22h13" stroke="url(#slg)" stroke-width="2.2" stroke-linecap="round"/>
-          </svg>
+          <img src="favicon_new.png" alt="ScribeCount" />
         </div>
-        <span class="logo-text">ScribeCount</span>
+        <div class="logo-text-group">
+          <span class="logo-text">ScribeCount</span>
+          <span class="logo-subtitle">EMAIL</span>
+        </div>
       </div>
 
       <!-- Nav -->
@@ -132,9 +125,11 @@ interface NavGroup {
       border-bottom:1px solid rgba(255,255,255,0.06);
       min-height:68px;
     }
-    .logo-mark { width:34px; height:34px; flex-shrink:0; }
-    .logo-mark svg { width:100%; height:100%; }
-    .logo-text { font-size:1rem; font-weight:800; color:white; letter-spacing:-.02em; white-space:nowrap; }
+    .logo-mark { width:38px; height:38px; flex-shrink:0; background:#ffffff; border-radius:10px; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+    .logo-mark img { width:100%; height:100%; object-fit:contain; border-radius:10px; }
+    .logo-text-group { display:flex; flex-direction:column; gap:0; }
+    .logo-text { font-size:1.05rem; font-weight:800; color:white; letter-spacing:-.02em; white-space:nowrap; line-height:1.2; }
+    .logo-subtitle { font-size:.6rem; font-weight:700; color:#38bdf8; letter-spacing:.12em; text-transform:uppercase; line-height:1; }
     .sidebar-nav {
       flex:1; padding:.625rem .75rem;
       display:flex; flex-direction:column; gap:.0625rem;
