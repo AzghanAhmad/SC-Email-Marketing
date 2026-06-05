@@ -244,7 +244,7 @@ export class SignupComponent {
       next: () => {
         this.successMessage.set('Account created! Redirecting...');
         this.isSubmitting.set(false);
-        setTimeout(() => this.router.navigate(['/dashboard']), 1500);
+        setTimeout(() => this.router.navigate(['/email/inbox']), 1500);
       },
       error: (err) => { this.generalError.set(err.message); this.isSubmitting.set(false); }
     });

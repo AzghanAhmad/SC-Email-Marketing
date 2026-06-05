@@ -2,7 +2,7 @@ import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
 
 export const routes: Routes = [
-  { path: '', redirectTo: '/dashboard', pathMatch: 'full' },
+  { path: '', redirectTo: '/email/inbox', pathMatch: 'full' },
   {
     path: 'login',
     loadComponent: () => import('./auth/login/login.component').then(m => m.LoginComponent)
@@ -103,11 +103,7 @@ export const routes: Routes = [
         path: 'analytics/link-clicks',
         loadComponent: () => import('./features/analytics/link-clicks/link-clicks.component').then(m => m.LinkClicksComponent)
       },
-      // AuthorVault
-      {
-        path: 'author-vault',
-        loadComponent: () => import('./features/author-vault/author-vault.component').then(m => m.AuthorVaultComponent)
-      },
+
       // Advanced
       {
         path: 'marketing-analytics',
@@ -141,5 +137,5 @@ export const routes: Routes = [
       },
     ]
   },
-  { path: '**', redirectTo: '/dashboard' }
+  { path: '**', redirectTo: '/email/inbox' }
 ];

@@ -1,5 +1,6 @@
-import { Component, signal } from '@angular/core';
+import { Component, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { DomSanitizer } from '@angular/platform-browser';
 
 @Component({
   selector: 'app-deliverability',
@@ -168,7 +169,7 @@ import { CommonModule } from '@angular/common';
           <div class="bounce-grid">
             <div class="bounce-card" *ngFor="let b of bounceData">
               <div class="bounce-icon" [style.background]="b.iconBg">
-                <span [innerHTML]="b.icon"></span>
+                <span [innerHTML]="b.safeIcon"></span>
               </div>
               <span class="bounce-val">{{ b.value }}</span>
               <span class="bounce-label">{{ b.label }}</span>
@@ -269,7 +270,7 @@ import { CommonModule } from '@angular/common';
     .bounce-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:1rem; margin-bottom:1.5rem; }
     .bounce-card { display:flex; flex-direction:column; align-items:center; gap:.5rem; padding:1.25rem; background:#f8fafc; border-radius:12px; border:1px solid #f1f5f9; text-align:center; }
     .bounce-icon { width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; }
-    .bounce-icon :global(svg) { width:18px; height:18px; }
+    .bounce-icon svg { width:18px; height:18px; display: block; }
     .bounce-val { font-size:1.5rem; font-weight:800; color:#0f172a; }
     .bounce-label { font-size:.78rem; font-weight:600; color:#334155; }
     .bounce-pct { font-size:.7rem; color:#94a3b8; }
@@ -282,6 +283,8 @@ import { CommonModule } from '@angular/common';
   `]
 })
 export class DeliverabilityComponent {
+  private sanitizer = inject(DomSanitizer);
+
   activeSubTab = signal('score');
   scoreView = signal<'factors' | 'time'>('factors');
 
@@ -332,7 +335,7 @@ export class DeliverabilityComponent {
     { name: 'Holiday Special', sent: 5100, delivered: 5049, bounced: 51, rate: 99.0 },
   ];
 
-  bounceData = [
+  bounceData: any[] = [
     { label: 'Hard Bounces', value: '127', pct: '0.51', iconBg: 'rgba(239,68,68,0.1)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>' },
     { label: 'Soft Bounces', value: '308', pct: '1.24', iconBg: 'rgba(245,158,11,0.1)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>' },
     { label: 'Suppressed', value: '45', pct: '0.18', iconBg: 'rgba(99,102,241,0.1)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2"><path d="M18.36 6.64a9 9 0 0 1 .22 12.73M1 1l22 22"/></svg>' },
@@ -347,6 +350,9 @@ export class DeliverabilityComponent {
   ];
 
   constructor() {
+    this.bounceData.forEach(b => {
+      b.safeIcon = this.sanitizer.bypassSecurityTrustHtml(b.icon);
+    });
     this.buildTimeChart();
   }
 

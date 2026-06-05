@@ -1,5 +1,6 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { DomSanitizer } from '@angular/platform-browser';
 
 @Component({
   selector: 'app-analytics-dashboards',
@@ -26,7 +27,7 @@ import { CommonModule } from '@angular/common';
       <div class="kpi-grid">
         <div class="glass-card kpi-card" *ngFor="let k of kpis">
           <div class="kpi-icon" [style.background]="k.iconBg">
-            <span [innerHTML]="k.icon"></span>
+            <span [innerHTML]="k.safeIcon"></span>
           </div>
           <div class="kpi-body">
             <span class="kpi-val">{{ k.value }}</span>
@@ -170,7 +171,7 @@ import { CommonModule } from '@angular/common';
     .kpi-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:1.25rem; margin-bottom:1.75rem; }
     .kpi-card { display:flex; align-items:center; gap:1rem; padding:1.25rem 1.375rem; position:relative; }
     .kpi-icon { width:42px; height:42px; border-radius:12px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-    .kpi-icon :global(svg) { width:20px; height:20px; }
+    .kpi-icon svg { width:20px; height:20px; display: block; }
     .kpi-body { flex:1; display:flex; flex-direction:column; }
     .kpi-val { font-size:1.5rem; font-weight:800; color:#0f172a; letter-spacing:-.03em; line-height:1.1; }
     .kpi-label { font-size:.7rem; font-weight:600; color:#94a3b8; text-transform:uppercase; letter-spacing:.06em; margin-top:.2rem; }
@@ -221,7 +222,9 @@ import { CommonModule } from '@angular/common';
   `]
 })
 export class AnalyticsDashboardsComponent {
-  kpis = [
+  private sanitizer = inject(DomSanitizer);
+
+  kpis: any[] = [
     { label: 'Emails Sent', value: '24,830', change: 8.1, iconBg: 'rgba(59,130,246,0.1)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>' },
     { label: 'Open Rate (MPP adj.)', value: '54.2%', change: 3.2, iconBg: 'rgba(16,185,129,0.1)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>' },
     { label: 'Click Rate', value: '12.8%', change: 1.4, iconBg: 'rgba(99,102,241,0.1)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>' },
@@ -270,6 +273,9 @@ export class AnalyticsDashboardsComponent {
   ];
 
   constructor() {
+    this.kpis.forEach(k => {
+      k.safeIcon = this.sanitizer.bypassSecurityTrustHtml(k.icon);
+    });
     this.buildCharts();
   }
 

@@ -1,7 +1,8 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { MockDataService } from '../../core/services/mock-data.service';
+import { DomSanitizer } from '@angular/platform-browser';
 
 @Component({
   selector: 'app-dashboard',
@@ -12,7 +13,7 @@ import { MockDataService } from '../../core/services/mock-data.service';
       <!-- Welcome Header -->
       <div class="welcome-section">
         <div class="welcome-text">
-          <h1 class="welcome-title">Welcome to ScribeCount Email</h1>
+          <h1 class="welcome-title">Overview</h1>
           <p class="welcome-sub">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
             Customize this message with your name in Settings. <a routerLink="/settings" class="welcome-link">Update Profile</a>
@@ -43,7 +44,7 @@ import { MockDataService } from '../../core/services/mock-data.service';
       <div class="stats-grid">
         <div class="stat-card anim-up d1" *ngFor="let stat of stats; let i = index">
           <div class="stat-icon" [style.background]="stat.iconBg">
-            <span [innerHTML]="stat.icon"></span>
+            <span [innerHTML]="stat.safeIcon"></span>
           </div>
           <div class="stat-body">
             <span class="stat-value">{{ stat.value }}</span>
@@ -87,7 +88,7 @@ import { MockDataService } from '../../core/services/mock-data.service';
           <h4 class="attr-title">Attributed Revenue</h4>
           <div class="attr-grid">
             <div class="attr-item" *ngFor="let a of attributionData">
-              <div class="attr-svg-icon" [innerHTML]="a.svgIcon"></div>
+              <div class="attr-svg-icon" [innerHTML]="a.safeSvg"></div>
               <span class="attr-label">{{ a.label }}</span>
               <span class="attr-val">{{ a.value }}</span>
               <span class="attr-pct">{{ a.pct }}</span>
@@ -130,7 +131,7 @@ import { MockDataService } from '../../core/services/mock-data.service';
             </div>
             <div class="growth-legend">
               <span class="legend-item"><span class="legend-dot" style="background:#1e3a5f"></span>Actual</span>
-              <span class="legend-item"><span class="legend-dot legend-dot-dash" style="background:#94a3b8"></span>Target</span>
+              <span class="legend-item"><span class="legend-dot legend-dot-dash" style="background:#64748b"></span>Target</span>
             </div>
           </div>
           <!-- Proper line chart with axes -->
@@ -149,7 +150,7 @@ import { MockDataService } from '../../core/services/mock-data.service';
                 <!-- Grid lines -->
                 <line *ngFor="let gl of gridLines" [attr.x1]="0" [attr.y1]="gl" [attr.x2]="svgW" [attr.y2]="gl" stroke="#e2e8f0" stroke-width="1"/>
                 <!-- Target dashed line -->
-                <line [attr.x1]="growthDots[0]?.x" [attr.y1]="growthDots[0]?.y" [attr.x2]="growthDots[growthDots.length-1]?.x" [attr.y2]="growthDots[growthDots.length-1]?.y" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="5 4"/>
+                <line [attr.x1]="growthDots[0]?.x" [attr.y1]="growthDots[0]?.y" [attr.x2]="growthDots[growthDots.length-1]?.x" [attr.y2]="growthDots[growthDots.length-1]?.y" stroke="#64748b" stroke-width="1.5" stroke-dasharray="5 4"/>
                 <!-- Area fill -->
                 <polygon [attr.points]="growthAreaPoints" fill="url(#growthGrad)"/>
                 <!-- Main line -->
@@ -251,7 +252,7 @@ import { MockDataService } from '../../core/services/mock-data.service';
     /* Welcome Section */
     .welcome-section { margin-bottom:1.5rem; }
     .welcome-title { font-size:1.75rem; font-weight:800; color:#0f172a; letter-spacing:-.03em; margin:0 0 .35rem; }
-    .welcome-sub { display:flex; align-items:center; gap:.375rem; font-size:.8125rem; color:#94a3b8; margin:0; }
+    .welcome-sub { display:flex; align-items:center; gap:.375rem; font-size:.8125rem; color:#64748b; margin:0; }
     .welcome-link { color:#3b82f6; text-decoration:none; font-weight:500; }
     .welcome-link:hover { text-decoration:underline; }
 
@@ -262,7 +263,7 @@ import { MockDataService } from '../../core/services/mock-data.service';
     .conv-controls { display:flex; align-items:center; gap:.5rem; }
     .conv-select { padding:.4rem .75rem; background:white; border:1.5px solid #e2e8f0; border-radius:8px; font-size:.8rem; font-family:inherit; color:#334155; outline:none; cursor:pointer; }
     .conv-period-btn { display:flex; align-items:center; gap:.375rem; padding:.4rem .75rem !important; border:1.5px solid #e2e8f0 !important; border-radius:8px !important; font-size:.8rem !important; }
-    .conv-date-range { font-size:.78rem; color:#94a3b8; margin-left:auto; }
+    .conv-date-range { font-size:.78rem; color:#64748b; margin-left:auto; }
 
     .stats-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:1.25rem; margin-bottom:1.75rem; }
     .stat-card {
@@ -277,7 +278,7 @@ import { MockDataService } from '../../core/services/mock-data.service';
     .stat-icon :global(svg) { width:22px; height:22px; }
     .stat-body { flex:1; display:flex; flex-direction:column; }
     .stat-value { font-size:1.625rem; font-weight:800; color:#0f172a; letter-spacing:-.03em; line-height:1.1; }
-    .stat-label { font-size:.7rem; font-weight:600; color:#94a3b8; text-transform:uppercase; letter-spacing:.06em; margin-top:.2rem; }
+    .stat-label { font-size:.75rem; font-weight:600; color:#64748b; text-transform:uppercase; letter-spacing:.06em; margin-top:.2rem; }
     .stat-trend { display:flex; align-items:center; gap:.2rem; font-size:.75rem; font-weight:700; padding:.25rem .5rem; border-radius:6px; position:absolute; top:1rem; right:2.5rem; }
     .stat-trend.up { color:#059669; background:rgba(16,185,129,0.1); }
     .stat-trend.down { color:#dc2626; background:rgba(239,68,68,0.1); }
@@ -287,12 +288,12 @@ import { MockDataService } from '../../core/services/mock-data.service';
     .perf-summary { padding:1.75rem; margin-bottom:1.75rem; }
     .perf-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:1.5rem; }
     .perf-title { font-size:1.125rem; font-weight:700; color:#0f172a; margin:0 0 .2rem; }
-    .perf-period { font-size:.8125rem; color:#94a3b8; margin:0; }
+    .perf-period { font-size:.8125rem; color:#64748b; margin:0; }
     .perf-kpi-row { display:grid; grid-template-columns:1fr 1fr; gap:2rem; padding:1.5rem; background:#f8fafc; border-radius:14px; margin-bottom:1.5rem; }
     .perf-kpi { display:flex; flex-direction:column; }
     .pk-val { font-size:2rem; font-weight:800; color:#0f172a; letter-spacing:-.03em; }
     .pk-label { font-size:.8125rem; color:#64748b; margin-top:.25rem; }
-    .pk-change { font-size:.78rem; color:#94a3b8; margin-top:.25rem; }
+    .pk-change { font-size:.78rem; color:#64748b; margin-top:.25rem; }
     .attr-title { font-size:.8125rem; font-weight:700; color:#0f172a; margin:0 0 1rem; }
     .attr-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:1rem; }
     .attr-item { display:flex; flex-direction:column; align-items:center; gap:.25rem; padding:.875rem; background:#f8fafc; border-radius:12px; border:1px solid #f1f5f9; }
@@ -300,13 +301,13 @@ import { MockDataService } from '../../core/services/mock-data.service';
     .attr-svg-icon :global(svg) { width:18px; height:18px; }
     .attr-label { font-size:.72rem; font-weight:600; color:#64748b; text-align:center; }
     .attr-val { font-size:1.0625rem; font-weight:800; color:#0f172a; }
-    .attr-pct { font-size:.7rem; color:#94a3b8; }
+    .attr-pct { font-size:.7rem; color:#64748b; }
 
     .charts-row { display:grid; grid-template-columns:1.4fr 1fr; gap:1.5rem; margin-bottom:1.5rem; }
     .chart-card { padding:1.5rem; }
     .chart-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:1.5rem; }
     .chart-title { font-size:1rem; font-weight:700; color:#0f172a; margin:0 0 .2rem; }
-    .chart-sub { font-size:.78rem; color:#94a3b8; margin:0; }
+    .chart-sub { font-size:.78rem; color:#64748b; margin:0; }
     .chart-legend { display:flex; gap:.875rem; }
     .legend-item { display:flex; align-items:center; gap:.375rem; font-size:.75rem; color:#64748b; font-weight:500; }
     .legend-dot { width:8px; height:8px; border-radius:50%; }
@@ -318,20 +319,20 @@ import { MockDataService } from '../../core/services/mock-data.service';
     .bar:hover { opacity:.8; }
     .bar.sent { background:linear-gradient(180deg,#3b82f6,rgba(59,130,246,0.4)); }
     .bar.opened { background:linear-gradient(180deg,#8b5cf6,rgba(139,92,246,0.4)); }
-    .bar-label { font-size:.7rem; color:#94a3b8; font-weight:500; }
+    .bar-label { font-size:.7rem; color:#64748b; font-weight:500; }
 
     .line-chart-wrap { position:relative; margin-bottom:.75rem; }
     .line-svg { width:100%; height:120px; }
-    .line-labels { display:flex; justify-content:space-between; font-size:.7rem; color:#94a3b8; margin-top:.25rem; }
+    .line-labels { display:flex; justify-content:space-between; font-size:.7rem; color:#64748b; margin-top:.25rem; }
     .growth-legend { display:flex; gap:.875rem; }
     .growth-chart-container { display:flex; gap:.5rem; margin-bottom:.75rem; }
-    .growth-y-axis { display:flex; flex-direction:column; justify-content:space-between; text-align:right; font-size:.65rem; color:#94a3b8; font-weight:500; width:38px; padding-bottom:1.5rem; flex-shrink:0; }
+    .growth-y-axis { display:flex; flex-direction:column; justify-content:space-between; text-align:right; font-size:.65rem; color:#64748b; font-weight:500; width:38px; padding-bottom:1.5rem; flex-shrink:0; }
     .growth-chart-inner { flex:1; position:relative; }
     .growth-svg { width:100%; height:160px; display:block; }
-    .growth-x-labels { display:flex; justify-content:space-between; font-size:.68rem; color:#94a3b8; margin-top:.25rem; padding:0 2px; }
+    .growth-x-labels { display:flex; justify-content:space-between; font-size:.68rem; color:#64748b; margin-top:.25rem; padding:0 2px; }
     .growth-footer { display:flex; align-items:baseline; gap:.625rem; margin-top:.5rem; }
     .growth-current { font-size:1.625rem; font-weight:800; color:#0f172a; letter-spacing:-.03em; }
-    .growth-label { font-size:.8rem; color:#94a3b8; }
+    .growth-label { font-size:.8rem; color:#64748b; }
     .growth-change { font-size:.75rem; font-weight:700; padding:.2rem .5rem; border-radius:6px; }
     .growth-change.up { color:#059669; background:rgba(16,185,129,0.1); }
 
@@ -351,7 +352,7 @@ import { MockDataService } from '../../core/services/mock-data.service';
     .act-scheduled { background:rgba(245,158,11,0.1); color:#d97706; }
     .activity-body { display:flex; flex-direction:column; gap:.2rem; }
     .activity-msg { font-size:.8125rem; color:#334155; line-height:1.4; margin:0; }
-    .activity-time { font-size:.7rem; color:#94a3b8; }
+    .activity-time { font-size:.7rem; color:#64748b; }
 
     .quick-actions { display:flex; flex-direction:column; gap:.5rem; }
     .quick-action { display:flex; align-items:center; gap:.875rem; padding:.875rem 1rem; border-radius:12px; background:#f8fafc; border:1.5px solid #f1f5f9; text-decoration:none; transition:all .2s; cursor:pointer; }
@@ -360,7 +361,7 @@ import { MockDataService } from '../../core/services/mock-data.service';
     .qa-icon svg { width:18px; height:18px; }
     .qa-body { flex:1; display:flex; flex-direction:column; }
     .qa-title { font-size:.875rem; font-weight:600; color:#0f172a; }
-    .qa-sub { font-size:.75rem; color:#94a3b8; }
+    .qa-sub { font-size:.75rem; color:#64748b; }
     .qa-arrow { color:#cbd5e1; transition:transform .2s; }
     .quick-action:hover .qa-arrow { transform:translateX(3px); color:#3b82f6; }
 
@@ -370,6 +371,8 @@ import { MockDataService } from '../../core/services/mock-data.service';
   `]
 })
 export class DashboardComponent implements OnInit {
+  private sanitizer = inject(DomSanitizer);
+
   stats: any[] = [];
   campaignData: any[] = [];
   growthData: any[] = [];
@@ -383,15 +386,21 @@ export class DashboardComponent implements OnInit {
   svgW = 400;
   svgH = 160;
 
-  attributionData = [
-    { label: 'Per Recipient', value: '$0.17', pct: '', svgIcon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>' },
-    { label: 'Campaigns', value: '$2,870', pct: '67.1%', svgIcon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>' },
-    { label: 'Flows', value: '$1,020', pct: '23.8%', svgIcon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>' },
-    { label: 'Email', value: '$3,890', pct: '90.9%', svgIcon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>' },
-    { label: 'Direct Sales', value: '$390', pct: '9.1%', svgIcon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>' },
-  ];
+  attributionData: any[] = [];
 
-  constructor(private mockData: MockDataService) {}
+  constructor(private mockData: MockDataService) {
+    const rawAttribution = [
+      { label: 'Per Recipient', value: '$0.17', pct: '', svgIcon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>' },
+      { label: 'Campaigns', value: '$2,870', pct: '67.1%', svgIcon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>' },
+      { label: 'Flows', value: '$1,020', pct: '23.8%', svgIcon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>' },
+      { label: 'Email', value: '$3,890', pct: '90.9%', svgIcon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>' },
+      { label: 'Direct Sales', value: '$390', pct: '9.1%', svgIcon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>' },
+    ];
+    this.attributionData = rawAttribution.map(a => ({
+      ...a,
+      safeSvg: this.sanitizer.bypassSecurityTrustHtml(a.svgIcon)
+    }));
+  }
 
   ngOnInit() {
     const s = this.mockData.getDashboardStats();
@@ -400,7 +409,10 @@ export class DashboardComponent implements OnInit {
       { label:'Emails Sent', value: s.emailsSent.toLocaleString(), growth: s.emailsGrowth, iconBg:'rgba(99,102,241,0.1)', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>', tooltip:'Total emails sent this month' },
       { label:'Open Rate', value: s.openRate + '%', growth: s.openRateGrowth, iconBg:'rgba(16,185,129,0.1)', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>', tooltip:'Percentage of emails opened by recipients' },
       { label:'Revenue', value: '$' + s.revenue.toLocaleString(), growth: s.revenueGrowth, iconBg:'rgba(245,158,11,0.1)', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>', tooltip:'Estimated revenue attributed to email campaigns' },
-    ];
+    ].map(stat => ({
+      ...stat,
+      safeIcon: this.sanitizer.bypassSecurityTrustHtml(stat.icon)
+    }));
 
     this.campaignData = this.mockData.getCampaignChartData();
     this.maxSent = Math.max(...this.campaignData.map(d => d.sent));

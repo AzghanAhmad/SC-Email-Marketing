@@ -253,7 +253,7 @@ export class LoginComponent {
     this.isSubmitting.set(true);
     this.generalError.set('');
     this.authService.login(this.email, this.password).subscribe({
-      next: () => this.router.navigate(['/dashboard']),
+      next: () => this.router.navigate(['/email/inbox']),
       error: (err) => { this.generalError.set(err.message); this.isSubmitting.set(false); }
     });
   }

@@ -28,7 +28,7 @@ import { Email } from './email.service';
       </div>
 
       <!-- Email rows -->
-      <div class="email-rows" *ngIf="filteredEmails.length > 0">
+      <div class="email-rows" *ngIf="!loading && filteredEmails.length > 0">
         <div class="email-row"
              *ngFor="let email of filteredEmails; trackBy: trackByEmail"
              [class.unread]="!email.read"
@@ -62,7 +62,7 @@ import { Email } from './email.service';
       </div>
 
       <!-- Empty State -->
-      <div class="empty-state" *ngIf="filteredEmails.length === 0">
+      <div class="empty-state" *ngIf="!loading && filteredEmails.length === 0">
         <div class="empty-state-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48">
             <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/>

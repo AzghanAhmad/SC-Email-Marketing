@@ -14,7 +14,7 @@ import { MockDataService, Subscriber } from '../../../core/services/mock-data.se
           <h1 class="page-title">Profiles</h1>
           <p class="page-subtitle">View and manage individual subscriber profiles</p>
         </div>
-        <button class="btn-primary" data-tooltip="Add a new subscriber profile">
+        <button class="btn-primary" data-tooltip="Add a new subscriber profile" (click)="openAddProfileModal()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           Add Profile
         </button>
@@ -69,6 +69,53 @@ import { MockDataService, Subscriber } from '../../../core/services/mock-data.se
           </tbody>
         </table>
       </div>
+
+      <!-- Add Profile Modal -->
+      <div class="modal-backdrop" *ngIf="showAddProfileModal" (click)="closeAddProfileModal()">
+        <div class="modal-card" (click)="$event.stopPropagation()">
+          <div class="modal-header">
+            <h3 class="modal-title">Add Subscriber Profile</h3>
+            <button class="close-btn" (click)="closeAddProfileModal()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+          <div class="modal-body">
+            <div class="setup-field">
+              <label>Name</label>
+              <input type="text" [(ngModel)]="newProfile.name" placeholder="John Doe" class="text-input">
+            </div>
+            <div class="setup-field">
+              <label>Email Address</label>
+              <input type="email" [(ngModel)]="newProfile.email" placeholder="john.doe@example.com" class="text-input">
+            </div>
+            <div class="setup-field">
+              <label>Status</label>
+              <select [(ngModel)]="newProfile.status" class="select-input">
+                <option value="active">Active</option>
+                <option value="unsubscribed">Unsubscribed</option>
+                <option value="bounced">Bounced</option>
+              </select>
+            </div>
+            <div class="setup-field">
+              <label>Tags (comma separated)</label>
+              <input type="text" [(ngModel)]="newProfile.tagsString" placeholder="fantasy, launch-list, vip" class="text-input">
+            </div>
+            <div class="setup-field">
+              <label>Open Rate (Engagement %)</label>
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <input type="range" min="0" max="100" [(ngModel)]="newProfile.openRate" style="flex: 1; cursor: pointer;">
+                <span style="font-size: 0.875rem; font-weight: 600; min-width: 36px; text-align: right;">{{ newProfile.openRate }}%</span>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn-secondary" (click)="closeAddProfileModal()">Cancel</button>
+            <button class="btn-primary" (click)="addProfile()" [disabled]="!newProfile.name || !newProfile.email">Add Profile</button>
+          </div>
+        </div>
+      </div>
     </div>
   `,
   styles: [`
@@ -80,7 +127,7 @@ import { MockDataService, Subscriber } from '../../../core/services/mock-data.se
 
     .profile-cell { display:flex; align-items:center; gap:.75rem; }
     .profile-avatar { width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:.75rem; font-weight:700; color:white; flex-shrink:0; }
-    .profile-name { font-size:.875rem; font-weight:600; color:#0f172a; }
+    .profile-name { font-size:.875rem; font-weight:600; color:#0f172a; margin:0; }
     .email-cell { color:#64748b; font-size:.8125rem; }
     .muted { color:#94a3b8; font-size:.8rem; }
     .tags-cell { display:flex; gap:.3rem; flex-wrap:wrap; }
@@ -93,6 +140,58 @@ import { MockDataService, Subscriber } from '../../../core/services/mock-data.se
     .badge-active { background:rgba(16,185,129,0.1); color:#059669; }
     .badge-unsubscribed { background:#f1f5f9; color:#64748b; }
     .badge-bounced { background:rgba(239,68,68,0.1); color:#dc2626; }
+
+    /* Modal styles */
+    .modal-backdrop {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(15, 23, 42, 0.4);
+      backdrop-filter: blur(8px);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 1000;
+      animation: fadeIn 0.25s ease-out;
+    }
+    .modal-card {
+      background: #ffffff;
+      border: 1px solid rgba(226, 232, 240, 0.8);
+      border-radius: 20px;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+      width: 100%; max-width: 480px;
+      display: flex; flex-direction: column;
+      animation: scaleUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      overflow: hidden;
+    }
+    .modal-header {
+      padding: 1.25rem 1.5rem;
+      border-bottom: 1px solid #f1f5f9;
+      display: flex; align-items: center; justify-content: space-between;
+      position: relative;
+    }
+    .modal-title { font-size: 1rem; font-weight: 700; color: #0f172a; margin: 0; }
+    .close-btn {
+      background: transparent; border: none; color: #94a3b8; cursor: pointer;
+      padding: 4px; border-radius: 6px; display: flex; align-items: center; justify-content: center;
+      transition: all 0.15s;
+    }
+    .close-btn:hover { background: #f1f5f9; color: #475569; }
+    
+    .modal-body { padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; }
+    .modal-footer {
+      padding: 1rem 1.5rem; border-top: 1px solid #f1f5f9;
+      display: flex; justify-content: flex-end; gap: 0.75rem; background: #f8fafc;
+    }
+    
+    /* Input styles */
+    .setup-field { display: flex; flex-direction: column; gap: 6px; }
+    .setup-field label { font-size: 0.8125rem; font-weight: 600; color: #334155; }
+    .text-input, .select-input {
+      padding: 0.625rem 0.875rem; border: 1.5px solid #e2e8f0; border-radius: 8px;
+      font-size: 0.875rem; font-family: inherit; color: #0f172a; outline: none;
+      transition: all 0.15s; width: 100%; box-sizing: border-box;
+    }
+    .text-input:focus, .select-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes scaleUp { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
   `]
 })
 export class ProfilesComponent implements OnInit {
@@ -100,6 +199,15 @@ export class ProfilesComponent implements OnInit {
   filtered: Subscriber[] = [];
   searchQuery = '';
   statusFilter = '';
+
+  showAddProfileModal = false;
+  newProfile = {
+    name: '',
+    email: '',
+    status: 'active' as 'active' | 'unsubscribed' | 'bounced',
+    tagsString: '',
+    openRate: 50
+  };
 
   constructor(private mockData: MockDataService) {}
 
@@ -118,7 +226,45 @@ export class ProfilesComponent implements OnInit {
   }
 
   getAvatarColor(name: string): string {
+    if (!name) return 'linear-gradient(135deg,#3b82f6,#8b5cf6)';
     const colors = ['linear-gradient(135deg,#3b82f6,#8b5cf6)', 'linear-gradient(135deg,#059669,#10b981)', 'linear-gradient(135deg,#d97706,#f59e0b)', 'linear-gradient(135deg,#dc2626,#ef4444)'];
     return colors[name.charCodeAt(0) % colors.length];
+  }
+
+  openAddProfileModal() {
+    this.newProfile = {
+      name: '',
+      email: '',
+      status: 'active',
+      tagsString: '',
+      openRate: 50
+    };
+    this.showAddProfileModal = true;
+  }
+
+  closeAddProfileModal() {
+    this.showAddProfileModal = false;
+  }
+
+  addProfile() {
+    if (!this.newProfile.name || !this.newProfile.email) return;
+
+    const parsedTags = this.newProfile.tagsString
+      ? this.newProfile.tagsString.split(',').map(t => t.trim()).filter(t => t.length > 0)
+      : [];
+
+    const newSub: Subscriber = {
+      id: `${Date.now()}`,
+      name: this.newProfile.name,
+      email: this.newProfile.email,
+      status: this.newProfile.status,
+      tags: parsedTags,
+      openRate: this.newProfile.openRate,
+      joinedAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    };
+
+    this.subscribers.unshift(newSub);
+    this.filter();
+    this.closeAddProfileModal();
   }
 }

@@ -1,5 +1,6 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { DomSanitizer } from '@angular/platform-browser';
 
 @Component({
   selector: 'app-custom-reports',
@@ -21,7 +22,7 @@ import { CommonModule } from '@angular/common';
       <div class="reports-grid">
         <div class="glass-card report-card" *ngFor="let r of reports">
           <div class="rc-icon" [style.background]="r.iconBg">
-            <span [innerHTML]="r.icon"></span>
+            <span [innerHTML]="r.safeIcon"></span>
           </div>
           <div class="rc-body">
             <h3 class="rc-name">{{ r.name }}</h3>
@@ -52,7 +53,7 @@ import { CommonModule } from '@angular/common';
     .reports-grid { display:flex; flex-direction:column; gap:1rem; margin-bottom:1.5rem; }
     .report-card { display:flex; align-items:center; gap:1.25rem; padding:1.375rem 1.5rem; }
     .rc-icon { width:44px; height:44px; border-radius:12px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-    .rc-icon :global(svg) { width:20px; height:20px; }
+    .rc-icon svg { width:20px; height:20px; display: block; }
     .rc-body { flex:1; }
     .rc-name { font-size:.9375rem; font-weight:700; color:#0f172a; margin:0 0 .25rem; }
     .rc-desc { font-size:.8125rem; color:#94a3b8; margin:0 0 .5rem; }
@@ -68,10 +69,18 @@ import { CommonModule } from '@angular/common';
   `]
 })
 export class CustomReportsComponent {
-  reports = [
+  private sanitizer = inject(DomSanitizer);
+
+  reports: any[] = [
     { name: 'Monthly Performance Summary', type: 'Scheduled', description: 'Comprehensive monthly report of campaign and flow performance', lastUpdated: 'Apr 1, 2026', iconBg: 'rgba(59,130,246,0.1)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>' },
     { name: 'Revenue Attribution Report', type: 'Manual', description: 'Track revenue attributed to email campaigns and flows', lastUpdated: 'Mar 28, 2026', iconBg: 'rgba(16,185,129,0.1)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>' },
     { name: 'List Growth Analysis', type: 'Weekly', description: 'New subscriber sources, engagement quality, and list health metrics', lastUpdated: 'Apr 5, 2026', iconBg: 'rgba(139,92,246,0.1)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>' },
     { name: 'Book Launch ROI', type: 'Manual', description: 'Compare email performance across different book launches', lastUpdated: 'Mar 15, 2026', iconBg: 'rgba(245,158,11,0.1)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>' },
   ];
+
+  constructor() {
+    this.reports.forEach(r => {
+      r.safeIcon = this.sanitizer.bypassSecurityTrustHtml(r.icon);
+    });
+  }
 }

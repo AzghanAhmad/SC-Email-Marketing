@@ -88,6 +88,25 @@ import { Subscription } from 'rxjs';
       overflow: hidden;
       animation: fadeIn .3s ease-out;
       position: relative;
+      width: 100%;
+    }
+    app-email-sidebar {
+      display: block;
+      height: 100%;
+      flex-shrink: 0;
+    }
+    app-email-list {
+      display: block;
+      height: 100%;
+      flex: 1;
+      max-width: 420px;
+      min-width: 320px;
+    }
+    app-email-view {
+      display: block;
+      height: 100%;
+      flex: 1.5;
+      min-width: 0;
     }
     .tips-fab {
       position: absolute;
@@ -150,18 +169,11 @@ export class EmailPageComponent implements OnInit, OnDestroy {
   }
 
   loadFolder(folder: string) {
-    this.loading = true;
+    this.loading = false;
     this.selectedEmailId = null;
     this.selectedEmail = null;
-
-    // Simulate brief loading
-    setTimeout(() => {
-      this.currentEmails = this.emailService.getEmailsByFolder(folder);
-      this.loading = false;
-
-      // Ensure view updates immediately after async folder load.
-      this.cdr.detectChanges();
-    }, 300);
+    this.currentEmails = this.emailService.getEmailsByFolder(folder);
+    this.cdr.detectChanges();
   }
 
   navigateToFolder(folder: string) {
@@ -234,7 +246,9 @@ export class EmailPageComponent implements OnInit, OnDestroy {
     this.composeSubject = '';
     this.composeBody = '';
     this.showCompose = true;
-    this.cdr.detectChanges();
+    setTimeout(() => {
+      this.cdr.detectChanges();
+    });
   }
 
   replyToEmail() {
@@ -252,7 +266,9 @@ export class EmailPageComponent implements OnInit, OnDestroy {
       this.composeBody = '';
     }
     this.showCompose = true;
-    this.cdr.detectChanges();
+    setTimeout(() => {
+      this.cdr.detectChanges();
+    });
   }
 
   forwardEmail() {
@@ -270,7 +286,9 @@ export class EmailPageComponent implements OnInit, OnDestroy {
       this.composeBody = '';
     }
     this.showCompose = true;
-    this.cdr.detectChanges();
+    setTimeout(() => {
+      this.cdr.detectChanges();
+    });
   }
 
   private stripHtml(html: string): string {

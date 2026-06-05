@@ -1,4 +1,4 @@
-import { Component, Output, EventEmitter, Input, OnChanges, OnInit, SimpleChanges, ViewChild, ElementRef } from '@angular/core';
+import { Component, Output, EventEmitter, Input, OnChanges, OnInit, SimpleChanges, ViewChild, ElementRef, ChangeDetectorRef, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
@@ -8,12 +8,12 @@ import { FormsModule } from '@angular/forms';
   imports: [CommonModule, FormsModule],
   template: `
     <!-- Backdrop -->
-    <div class="compose-backdrop" (click)="onClose.emit()" @fadeIn></div>
+    <div class="compose-backdrop" (click)="onClose.emit()"></div>
 
     <!-- Modal -->
-    <div class="compose-modal" @slideUp>
+    <div class="compose-modal">
       <div class="compose-header">
-        <h2 class="compose-title">{{ composeTitle }}</h2>
+        <h2 class="compose-title">{{ composeTitle || 'New Message' }}</h2>
         <button class="compose-close" (click)="onClose.emit()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -181,7 +181,7 @@ import { FormsModule } from '@angular/forms';
       flex-direction: column;
       z-index: 201;
       overflow: hidden;
-      animation: fadeUp .3s cubic-bezier(.4,0,.2,1);
+      animation: modalFadeUp .3s cubic-bezier(.4,0,.2,1);
     }
 
     .compose-header {
@@ -472,13 +472,39 @@ import { FormsModule } from '@angular/forms';
     .schedule-btn {
       gap: .375rem !important;
     }
+
+    @keyframes modalFadeUp {
+      from {
+        opacity: 0;
+        transform: translate(-50%, -40%);
+      }
+      to {
+        opacity: 1;
+        transform: translate(-50%, -50%);
+      }
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
   `]
 })
-export class ComposeModalComponent implements OnChanges, OnInit {
+export class ComposeModalComponent implements OnChanges, OnInit, AfterViewInit {
+  constructor(private cdr: ChangeDetectorRef) {}
   @Input() initialTo = '';
   @Input() initialSubject = '';
   @Input() initialBody = '';
-  @Input() composeTitle = 'New Message';
+  private _composeTitle = 'New Message';
+
+  @Input()
+  get composeTitle(): string {
+    return this._composeTitle;
+  }
+  set composeTitle(value: string) {
+    this._composeTitle = value || 'New Message';
+    this.cdr.detectChanges();
+  }
   @Output() onClose = new EventEmitter<void>();
   @Output() onSend = new EventEmitter<{ to: string; subject: string; body: string }>();
   @Output() onSaveDraft = new EventEmitter<{ to: string; subject: string; body: string }>();
@@ -515,11 +541,17 @@ export class ComposeModalComponent implements OnChanges, OnInit {
 
   ngOnInit(): void {
     this.syncFromInputs();
+    this.cdr.detectChanges();
+  }
+
+  ngAfterViewInit(): void {
+    this.cdr.detectChanges();
   }
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['initialTo'] || changes['initialSubject'] || changes['initialBody']) {
       this.syncFromInputs();
+      this.cdr.detectChanges();
     }
   }
 

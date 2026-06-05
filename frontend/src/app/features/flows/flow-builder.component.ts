@@ -47,6 +47,12 @@ import { MilestoneCelebrationDetailPanelComponent } from './milestone-celebratio
         </div>
 
         <div class="builder-actions">
+          <button class="btn-trigger" (click)="triggerFlow()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+            </svg>
+            Trigger Flow
+          </button>
           <button class="btn-secondary" (click)="toggleStatus()">
             {{ flow.status === 'active' ? 'Pause Flow' : 'Activate Flow' }}
           </button>
@@ -122,13 +128,44 @@ import { MilestoneCelebrationDetailPanelComponent } from './milestone-celebratio
             </div>
           </div>
 
-          <!-- Add step -->
-          <button class="add-step-btn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            Add Step
-          </button>
+          <!-- Add step container & menu -->
+          <div class="add-step-container">
+            <button class="add-step-btn" (click)="showAddStepSelector = !showAddStepSelector">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              Add Step
+            </button>
+
+            <div class="add-step-menu" *ngIf="showAddStepSelector">
+              <button class="menu-item" (click)="addNewStep('email')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                  <polyline points="22,6 12,13 2,6"/>
+                </svg>
+                + Email
+              </button>
+              <button class="menu-item" (click)="addNewStep('wait')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                  <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                </svg>
+                + Wait
+              </button>
+              <button class="menu-item" (click)="addNewStep('condition')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                </svg>
+                + Condition
+              </button>
+              <button class="menu-item" (click)="addNewStep('goal-exit')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                  <polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+                + Exit
+              </button>
+            </div>
+          </div>
         </div>
 
         <!-- Detail / activity panel -->
@@ -297,6 +334,19 @@ import { MilestoneCelebrationDetailPanelComponent } from './milestone-celebratio
 
           </ng-container>
 
+        </div>
+      </div>
+
+      <!-- Toast notification -->
+      <div class="toast" *ngIf="showTriggerToast">
+        <div class="toast-content">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16" class="toast-icon">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          <div class="toast-text">
+            <strong>Flow Triggered!</strong>
+            <span>Successfully initiated flow for test subscriber (Total Triggers: {{ flow.triggers }}).</span>
+          </div>
         </div>
       </div>
     </div>
@@ -509,6 +559,107 @@ import { MilestoneCelebrationDetailPanelComponent } from './milestone-celebratio
     .sub-metric:last-child { margin-bottom: 0; }
     .sub-metric-val { font-size: 1.125rem; font-weight: 800; color: #0f172a; letter-spacing: -.02em; }
     .sub-metric-label { font-size: .75rem; color: #94a3b8; }
+    /* Toast notification styling */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #0f172a;
+      color: #fff;
+      padding: 1rem 1.25rem;
+      border-radius: 12px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+      z-index: 1000;
+      animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      max-width: 380px;
+    }
+    .toast-content {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .toast-icon {
+      color: #10b981;
+      background: rgba(16, 185, 129, 0.15);
+      padding: 4px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .toast-text {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      font-size: 0.8125rem;
+    }
+    .toast-text strong {
+      font-weight: 600;
+      color: #fff;
+    }
+    .toast-text span {
+      color: #94a3b8;
+    }
+    @keyframes slideIn {
+      from { transform: translateY(100px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    .btn-trigger {
+      padding: .5rem 1rem; background: #10b981; border: none;
+      border-radius: 9px; font-size: .8125rem; font-weight: 600; color: #fff;
+      font-family: inherit; cursor: pointer; transition: background .15s;
+      display: flex; align-items: center; justify-content: center; gap: 0.25rem;
+    }
+    .btn-trigger:hover { background: #059669; }
+
+    .add-step-container {
+      position: relative;
+      margin-top: .875rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .add-step-menu {
+      position: absolute;
+      top: 100%;
+      margin-top: 8px;
+      background: #ffffff;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 12px;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+      z-index: 50;
+      width: 180px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      padding: 4px;
+    }
+    .menu-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: transparent;
+      border: none;
+      border-radius: 8px;
+      color: #334155;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      cursor: pointer;
+      text-align: left;
+      font-family: inherit;
+      transition: all 0.15s;
+    }
+    .menu-item:hover {
+      background: #f1f5f9;
+      color: #2563eb;
+    }
+    .menu-item svg {
+      color: #64748b;
+    }
+    .menu-item:hover svg {
+      color: #2563eb;
+    }
   `]
 })
 export class FlowBuilderComponent {
@@ -516,6 +667,43 @@ export class FlowBuilderComponent {
   @Output() onBack = new EventEmitter<void>();
 
   selectedStep: FlowStep | null = null;
+  showAddStepSelector = false;
+  showTriggerToast = false;
+
+  triggerFlow() {
+    this.flow.triggers++;
+    this.showTriggerToast = true;
+    setTimeout(() => {
+      this.showTriggerToast = false;
+    }, 4000);
+  }
+
+  addNewStep(type: 'email' | 'wait' | 'condition' | 'goal-exit') {
+    const stepLabels: Record<string, string> = {
+      email: 'Send Campaign Email',
+      wait: 'Wait Duration',
+      condition: 'Check Email Engagement',
+      'goal-exit': 'Exit Flow Sequence'
+    };
+
+    const stepDetails: Record<string, string> = {
+      email: 'Deliver the next follow-up message to the user',
+      wait: 'Wait 3 days before moving to next step',
+      condition: 'Split path: if user opened previous email, continue',
+      'goal-exit': 'Cleanly terminate automated campaign'
+    };
+
+    const newStep: FlowStep = {
+      id: `${Date.now()}`,
+      type: type as any,
+      label: stepLabels[type],
+      detail: stepDetails[type]
+    };
+
+    this.flow.steps.push(newStep);
+    this.selectedStep = newStep;
+    this.showAddStepSelector = false;
+  }
 
   get isUnsubscribeFlow(): boolean {
     return this.flow?.id === '13a' || this.flow?.id === '13b';
