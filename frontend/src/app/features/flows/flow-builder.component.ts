@@ -1,5 +1,6 @@
 import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { Flow, FlowStep, SubscriptionMetrics } from '../../core/services/mock-data.service';
 import { UnsubscribeDetailPanelComponent } from './unsubscribe/unsubscribe-detail-panel.component';
 import { WelcomeSequenceDetailPanelComponent } from './welcome-sequence/welcome-sequence-detail-panel.component';
@@ -14,7 +15,7 @@ import { MilestoneCelebrationDetailPanelComponent } from './milestone-celebratio
 @Component({
   selector: 'app-flow-builder',
   standalone: true,
-  imports: [CommonModule, UnsubscribeDetailPanelComponent, WelcomeSequenceDetailPanelComponent, ReaderMagnetDetailPanelComponent, PostPurchaseDetailPanelComponent, AbandonedCartDetailPanelComponent, PreorderDetailPanelComponent, SeriesCompletionDetailPanelComponent, ReEngagementDetailPanelComponent, MilestoneCelebrationDetailPanelComponent],
+  imports: [CommonModule, FormsModule, UnsubscribeDetailPanelComponent, WelcomeSequenceDetailPanelComponent, ReaderMagnetDetailPanelComponent, PostPurchaseDetailPanelComponent, AbandonedCartDetailPanelComponent, PreorderDetailPanelComponent, SeriesCompletionDetailPanelComponent, ReEngagementDetailPanelComponent, MilestoneCelebrationDetailPanelComponent],
   template: `
     <div class="builder-wrapper">
 
@@ -56,7 +57,7 @@ import { MilestoneCelebrationDetailPanelComponent } from './milestone-celebratio
           <button class="btn-secondary" (click)="toggleStatus()">
             {{ flow.status === 'active' ? 'Pause Flow' : 'Activate Flow' }}
           </button>
-          <button class="btn-primary">Save Changes</button>
+          <button class="btn-primary" (click)="saveFlow()">Save Changes</button>
         </div>
       </div>
 
@@ -171,164 +172,188 @@ import { MilestoneCelebrationDetailPanelComponent } from './milestone-celebratio
         <!-- Detail / activity panel -->
         <div class="detail-panel">
 
-          <!-- Unsubscribe flows: use dedicated panel -->
-          <app-unsubscribe-detail-panel
-            *ngIf="isUnsubscribeFlow"
-            [flow]="flow">
-          </app-unsubscribe-detail-panel>
-
-          <!-- Welcome Sequence: use dedicated panel -->
-          <app-welcome-sequence-detail-panel
-            *ngIf="isWelcomeSequenceFlow">
-          </app-welcome-sequence-detail-panel>
-
-          <!-- Reader Magnet Delivery: use dedicated panel -->
-          <app-reader-magnet-detail-panel
-            *ngIf="isReaderMagnetFlow">
-          </app-reader-magnet-detail-panel>
-
-          <!-- Post-Purchase flows: use dedicated panel -->
-          <app-post-purchase-detail-panel
-            *ngIf="isPostPurchaseFlow"
-            [flow]="flow">
-          </app-post-purchase-detail-panel>
-
-          <!-- Abandoned Cart / Checkout flows: use dedicated panel -->
-          <app-abandoned-cart-detail-panel
-            *ngIf="isAbandonedFlow"
-            [flow]="flow">
-          </app-abandoned-cart-detail-panel>
-
-          <!-- Preorder flow: use dedicated panel -->
-          <app-preorder-detail-panel
-            *ngIf="isPreorderFlow"
-            [flow]="flow">
-          </app-preorder-detail-panel>
-
-          <!-- Series Completion flow: use dedicated panel -->
-          <app-series-completion-detail-panel
-            *ngIf="isSeriesCompletionFlow"
-            [flow]="flow">
-          </app-series-completion-detail-panel>
-
-          <!-- Re-engagement flow: use dedicated panel -->
-          <app-re-engagement-detail-panel
-            *ngIf="isReEngagementFlow"
-            [flow]="flow">
-          </app-re-engagement-detail-panel>
-
-          <!-- Milestone Celebration flow: use dedicated panel -->
-          <app-milestone-celebration-detail-panel
-            *ngIf="isMilestoneCelebrationFlow"
-            [flow]="flow">
-          </app-milestone-celebration-detail-panel>
-
-          <!-- All other flows: standard detail panel -->
-          <ng-container *ngIf="!isUnsubscribeFlow && !isWelcomeSequenceFlow && !isReaderMagnetFlow && !isPostPurchaseFlow && !isAbandonedFlow && !isPreorderFlow && !isSeriesCompletionFlow && !isReEngagementFlow && !isMilestoneCelebrationFlow">
-
-            <!-- No step selected: flow overview -->
-            <ng-container *ngIf="!selectedStep">
-              <h3 class="detail-heading">Flow Details</h3>
-              <div class="detail-stats">
-                <div class="d-stat">
-                  <span class="d-val">{{ flow.triggers | number }}</span>
-                  <span class="d-label">Total Triggered</span>
+          <!-- 1. Edit Step Panel (shown if selectedStep is defined) -->
+          <ng-container *ngIf="selectedStep">
+            <div class="edit-step-panel">
+              <div class="edit-step-header">
+                <div class="header-left">
+                  <h3 class="detail-heading" style="margin: 0; font-size: 1rem;">Edit Step Settings</h3>
+                  <span class="step-type-badge" [ngClass]="'badge-' + selectedStep.type">{{ selectedStep.type }}</span>
                 </div>
-                <div class="d-stat">
-                  <span class="d-val">{{ flow.steps.length }}</span>
-                  <span class="d-label">Steps</span>
-                </div>
-              </div>
-
-              <!-- Goal exit -->
-              <div class="goal-exit-panel">
-                <div class="goal-exit-header">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                    <polyline points="22 4 12 14.01 9 11.01"/>
-                  </svg>
-                  Goal Exit
-                </div>
-                <p class="goal-exit-text">{{ flow.goalExit }}</p>
-              </div>
-
-              <p class="detail-hint">Click any step to see its details and the activity log.</p>
-
-              <!-- Subscription metrics (billing flows only) -->
-              <div class="sub-metrics-panel" *ngIf="flow.subscriptionMetrics">
-                <div class="sub-metrics-title">
+                <button class="btn-delete-step" (click)="deleteStep(selectedStep)" title="Delete this step">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
-                    <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/>
-                    <line x1="6" y1="20" x2="6" y2="14"/>
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                   </svg>
-                  Billing Metrics
-                </div>
-                <div class="sub-metric" *ngIf="flow.subscriptionMetrics.paymentUpdateRate !== undefined">
-                  <span class="sub-metric-val">{{ flow.subscriptionMetrics.paymentUpdateRate }}%</span>
-                  <span class="sub-metric-label">Payment update rate</span>
-                </div>
-                <div class="sub-metric" *ngIf="flow.subscriptionMetrics.retentionRateDunning !== undefined">
-                  <span class="sub-metric-val">{{ flow.subscriptionMetrics.retentionRateDunning }}%</span>
-                  <span class="sub-metric-label">Retention through dunning</span>
-                </div>
-                <div class="sub-metric" *ngIf="flow.subscriptionMetrics.cancellationRate !== undefined">
-                  <span class="sub-metric-val">{{ flow.subscriptionMetrics.cancellationRate }}%</span>
-                  <span class="sub-metric-label">Cancellation rate</span>
-                </div>
-                <div class="sub-metric" *ngIf="flow.subscriptionMetrics.resubscriptionRate !== undefined">
-                  <span class="sub-metric-val">{{ flow.subscriptionMetrics.resubscriptionRate }}%</span>
-                  <span class="sub-metric-label">Re-subscription rate</span>
-                </div>
-              </div>
-            </ng-container>
-
-            <!-- Step selected: step detail + why panel -->
-            <ng-container *ngIf="selectedStep">
-              <div class="step-detail-header">
-                <h3 class="detail-heading">{{ selectedStep.label }}</h3>
-                <span class="step-type-badge" [ngClass]="'badge-' + selectedStep.type">{{ selectedStep.type }}</span>
-              </div>
-              <p class="step-detail-text">{{ selectedStep.detail }}</p>
-
-              <!-- Why did this send? -->
-              <div class="why-panel">
-                <div class="why-title">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
-                    <circle cx="12" cy="12" r="10"/>
-                    <line x1="12" y1="8" x2="12" y2="12"/>
-                    <line x1="12" y1="16" x2="12.01" y2="16"/>
-                  </svg>
-                  Why did this send?
-                </div>
-                <div class="why-row">
-                  <span class="why-key">Event</span>
-                  <span class="why-val">{{ getWhyEvent(selectedStep) }}</span>
-                </div>
-                <div class="why-row">
-                  <span class="why-key">Timestamp</span>
-                  <span class="why-val">Mar 15, 2026 at 9:42 AM</span>
-                </div>
-                <div class="why-row">
-                  <span class="why-key">Triggered for</span>
-                  <span class="why-val">{{ flow.triggers | number }} subscribers</span>
-                </div>
-                <div class="why-row" *ngIf="selectedStep.type === 'wait'">
-                  <span class="why-key">Quiet hours</span>
-                  <span class="why-val why-green">Applied — sent at 9:00 AM local time</span>
-                </div>
+                  Delete Step
+                </button>
               </div>
 
-              <!-- Goal exit reminder if this is the goal-exit step -->
-              <div class="goal-exit-panel" *ngIf="selectedStep.type === 'goal-exit'">
-                <div class="goal-exit-header">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                    <polyline points="22 4 12 14.01 9 11.01"/>
-                  </svg>
-                  Goal Exit
+              <!-- Form Fields -->
+              <div class="edit-step-fields">
+                <div class="form-group">
+                  <label class="form-label">Step Label</label>
+                  <input type="text" class="form-input" [(ngModel)]="selectedStep.label" (ngModelChange)="updateStepDetail(selectedStep)">
                 </div>
-                <p class="goal-exit-text">{{ flow.goalExit }}</p>
-                <p class="goal-exit-note">Readers who reach this step are removed from the sequence and move to the next appropriate stage of their journey.</p>
+
+                <div class="form-group">
+                  <label class="form-label">Helper / Description Text</label>
+                  <textarea class="form-textarea" rows="2" [(ngModel)]="selectedStep.detail"></textarea>
+                </div>
+
+                <!-- Type specific fields -->
+                <!-- Trigger / Billing Trigger -->
+                <div class="form-group" *ngIf="selectedStep.type === 'trigger' || selectedStep.type === 'billing-trigger'">
+                  <label class="form-label">Trigger Event Source</label>
+                  <select class="form-select" [(ngModel)]="selectedStep.triggerEvent" (ngModelChange)="onTriggerEventChange(selectedStep)">
+                    <option value="subscription">Subscriber joins standard email list</option>
+                    <option value="checkout_started">Checkout initiated (payment processor)</option>
+                    <option value="purchase_completed">Purchase completed (payment processor)</option>
+                    <option value="tag_added">Custom tag applied by automation</option>
+                    <option value="billing_failed">Payment failing (dunning active)</option>
+                    <option value="subscription_canceled">Subscription canceled by subscriber</option>
+                  </select>
+                </div>
+
+                <!-- Email fields -->
+                <ng-container *ngIf="selectedStep.type === 'email'">
+                  <div class="form-group">
+                    <label class="form-label">Email Subject</label>
+                    <input type="text" class="form-input" [(ngModel)]="selectedStep.subject" placeholder="Enter engaging subject line...">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Preview Text</label>
+                    <input type="text" class="form-input" [(ngModel)]="selectedStep.previewText" placeholder="Inbox summary text...">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Email Message Body</label>
+                    <textarea class="form-textarea" rows="8" [(ngModel)]="selectedStep.emailBody" placeholder="Hi Reader, write your message here..."></textarea>
+                  </div>
+                </ng-container>
+
+                <!-- Wait fields -->
+                <ng-container *ngIf="selectedStep.type === 'wait'">
+                  <div class="form-row">
+                    <div class="form-group col-half">
+                      <label class="form-label">Duration</label>
+                      <input type="number" class="form-input" [(ngModel)]="selectedStep.waitDuration" (ngModelChange)="onWaitChange(selectedStep)" min="1">
+                    </div>
+                    <div class="form-group col-half">
+                      <label class="form-label">Unit</label>
+                      <select class="form-select" [(ngModel)]="selectedStep.waitUnit" (ngModelChange)="onWaitChange(selectedStep)">
+                        <option value="minutes">Minutes</option>
+                        <option value="hours">Hours</option>
+                        <option value="days">Days</option>
+                        <option value="weeks">Weeks</option>
+                      </select>
+                    </div>
+                  </div>
+                </ng-container>
+
+                <!-- Condition fields -->
+                <div class="form-group" *ngIf="selectedStep.type === 'condition'">
+                  <label class="form-label">Filter Condition Rule</label>
+                  <select class="form-select" [(ngModel)]="selectedStep.conditionType" (ngModelChange)="onConditionChange(selectedStep)">
+                    <option value="opened_email">Opened previous email in sequence</option>
+                    <option value="clicked_link">Clicked any link in previous email</option>
+                    <option value="has_tag">Subscriber has custom tag</option>
+                    <option value="purchased_book">Subscriber purchased any book</option>
+                  </select>
+                </div>
+              </div>
+
+              <button class="btn-save-step" (click)="selectedStep = null">
+                Apply & Close Step Editor
+              </button>
+            </div>
+          </ng-container>
+
+          <!-- 2. Overview / Setup Mode (shown when no step is selected) -->
+          <ng-container *ngIf="!selectedStep">
+            
+            <!-- Flow Settings (always editable) -->
+            <div class="flow-settings-card">
+              <h3 class="detail-heading" style="margin-top: 0; font-size: 1rem;">Flow Settings</h3>
+              <div class="form-group">
+                <label class="form-label">Flow Name</label>
+                <input type="text" class="form-input" [(ngModel)]="flow.name">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Description</label>
+                <textarea class="form-textarea" rows="2" [(ngModel)]="flow.description"></textarea>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Goal Exit Condition</label>
+                <input type="text" class="form-input" [(ngModel)]="flow.goalExit">
+              </div>
+            </div>
+
+            <!-- Unsubscribe flows: use dedicated panel -->
+            <app-unsubscribe-detail-panel
+              *ngIf="isUnsubscribeFlow"
+              [flow]="flow">
+            </app-unsubscribe-detail-panel>
+
+            <!-- Welcome Sequence: use dedicated panel -->
+            <app-welcome-sequence-detail-panel
+              *ngIf="isWelcomeSequenceFlow">
+            </app-welcome-sequence-detail-panel>
+
+            <!-- Reader Magnet Delivery: use dedicated panel -->
+            <app-reader-magnet-detail-panel
+              *ngIf="isReaderMagnetFlow">
+            </app-reader-magnet-detail-panel>
+
+            <!-- Post-Purchase flows: use dedicated panel -->
+            <app-post-purchase-detail-panel
+              *ngIf="isPostPurchaseFlow"
+              [flow]="flow">
+            </app-post-purchase-detail-panel>
+
+            <!-- Abandoned Cart / Checkout flows: use dedicated panel -->
+            <app-abandoned-cart-detail-panel
+              *ngIf="isAbandonedFlow"
+              [flow]="flow">
+            </app-abandoned-cart-detail-panel>
+
+            <!-- Preorder flow: use dedicated panel -->
+            <app-preorder-detail-panel
+              *ngIf="isPreorderFlow"
+              [flow]="flow">
+            </app-preorder-detail-panel>
+
+            <!-- Series Completion flow: use dedicated panel -->
+            <app-series-completion-detail-panel
+              *ngIf="isSeriesCompletionFlow"
+              [flow]="flow">
+            </app-series-completion-detail-panel>
+
+            <!-- Re-engagement flow: use dedicated panel -->
+            <app-re-engagement-detail-panel
+              *ngIf="isReEngagementFlow"
+              [flow]="flow">
+            </app-re-engagement-detail-panel>
+
+            <!-- Milestone Celebration flow: use dedicated panel -->
+            <app-milestone-celebration-detail-panel
+              *ngIf="isMilestoneCelebrationFlow"
+              [flow]="flow">
+            </app-milestone-celebration-detail-panel>
+
+            <!-- All other flows: standard detail panel -->
+            <ng-container *ngIf="!isUnsubscribeFlow && !isWelcomeSequenceFlow && !isReaderMagnetFlow && !isPostPurchaseFlow && !isAbandonedFlow && !isPreorderFlow && !isSeriesCompletionFlow && !isReEngagementFlow && !isMilestoneCelebrationFlow">
+              <div class="d-stat-summary">
+                <h4 class="form-label" style="margin-bottom: 0.5rem;">Engagement Summary</h4>
+                <div class="detail-stats">
+                  <div class="d-stat">
+                    <span class="d-val">{{ flow.triggers | number }}</span>
+                    <span class="d-label">Total Triggered</span>
+                  </div>
+                  <div class="d-stat">
+                    <span class="d-val">{{ flow.steps.length }}</span>
+                    <span class="d-label">Steps</span>
+                  </div>
+                </div>
               </div>
             </ng-container>
 
@@ -344,8 +369,8 @@ import { MilestoneCelebrationDetailPanelComponent } from './milestone-celebratio
             <polyline points="20 6 9 17 4 12"/>
           </svg>
           <div class="toast-text">
-            <strong>Flow Triggered!</strong>
-            <span>Successfully initiated flow for test subscriber (Total Triggers: {{ flow.triggers }}).</span>
+            <strong>{{ toastTitle }}</strong>
+            <span>{{ toastDescription }}</span>
           </div>
         </div>
       </div>
@@ -660,6 +685,137 @@ import { MilestoneCelebrationDetailPanelComponent } from './milestone-celebratio
     .menu-item:hover svg {
       color: #2563eb;
     }
+
+    /* Form & Editor Styles */
+    .edit-step-panel, .flow-settings-card {
+      background: #ffffff;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 16px;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.125rem;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+      text-align: left;
+    }
+    .flow-settings-card {
+      margin-bottom: 1.25rem;
+      background: #fafafb;
+    }
+    .edit-step-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #f1f5f9;
+      padding-bottom: 0.75rem;
+      margin-bottom: 0.5rem;
+    }
+    .header-left {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      align-items: flex-start;
+    }
+    .btn-delete-step {
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+      padding: 0.4rem 0.75rem;
+      background: #fef2f2;
+      border: 1px solid #fee2e2;
+      border-radius: 8px;
+      color: #ef4444;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.15s;
+    }
+    .btn-delete-step:hover {
+      background: #fee2e2;
+      border-color: #fca5a5;
+    }
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.375rem;
+      align-items: flex-start;
+      width: 100%;
+    }
+    .form-row {
+      display: flex;
+      gap: 1rem;
+      width: 100%;
+    }
+    .col-half {
+      flex: 1;
+    }
+    .form-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .form-input, .form-textarea, .form-select {
+      width: 100%;
+      padding: 0.625rem 0.875rem;
+      border: 1.5px solid #cbd5e1;
+      border-radius: 8px;
+      font-size: 0.8125rem;
+      color: #0f172a;
+      background: #ffffff;
+      font-family: inherit;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      outline: none;
+      box-sizing: border-box;
+    }
+    .form-input:focus, .form-textarea:focus, .form-select:focus {
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+    .form-textarea {
+      resize: vertical;
+      line-height: 1.5;
+    }
+    .field-help {
+      font-size: 0.7rem;
+      color: #94a3b8;
+      margin-top: 0.125rem;
+    }
+    .btn-save-step {
+      margin-top: 0.5rem;
+      padding: 0.625rem;
+      background: #3b82f6;
+      border: none;
+      border-radius: 9px;
+      color: #ffffff;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      transition: background 0.15s;
+      text-align: center;
+      width: 100%;
+    }
+    .btn-save-step:hover {
+      background: #2563eb;
+    }
+    .step-type-badge {
+      font-size: 0.625rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0.15rem 0.45rem;
+      border-radius: 4px;
+      width: fit-content;
+    }
+    .badge-trigger { background: #fef3c7; color: #d97706; }
+    .badge-billing-trigger { background: #d1fae5; color: #065f46; }
+    .badge-email { background: #dbeafe; color: #1e40af; }
+    .badge-wait { background: #f1f5f9; color: #475569; }
+    .badge-condition { background: #f3e8ff; color: #5b21b6; }
+    .badge-goal-exit { background: #dcfce7; color: #166534; }
   `]
 })
 export class FlowBuilderComponent {
@@ -669,13 +825,66 @@ export class FlowBuilderComponent {
   selectedStep: FlowStep | null = null;
   showAddStepSelector = false;
   showTriggerToast = false;
+  toastTitle = 'Flow Triggered!';
+  toastDescription = 'Successfully initiated flow for test subscriber.';
 
   triggerFlow() {
     this.flow.triggers++;
+    this.toastTitle = 'Flow Triggered!';
+    this.toastDescription = `Successfully initiated flow for test subscriber (Total Triggers: ${this.flow.triggers}).`;
     this.showTriggerToast = true;
     setTimeout(() => {
       this.showTriggerToast = false;
     }, 4000);
+  }
+
+  saveFlow() {
+    this.toastTitle = 'Changes Saved!';
+    this.toastDescription = 'All changes to the flow and steps have been saved successfully.';
+    this.showTriggerToast = true;
+    setTimeout(() => {
+      this.showTriggerToast = false;
+    }, 4000);
+  }
+
+  deleteStep(step: FlowStep) {
+    const index = this.flow.steps.findIndex(s => s.id === step.id);
+    if (index > -1) {
+      this.flow.steps.splice(index, 1);
+      this.selectedStep = null;
+    }
+  }
+
+  updateStepDetail(step: FlowStep) {
+    // Optional additional custom reactions
+  }
+
+  onWaitChange(step: FlowStep) {
+    if (step.waitDuration && step.waitUnit) {
+      step.detail = `Wait ${step.waitDuration} ${step.waitUnit} before moving to next step`;
+    }
+  }
+
+  onConditionChange(step: FlowStep) {
+    const map: Record<string, string> = {
+      opened_email: 'Split path: if user opened previous email, continue',
+      clicked_link: 'Split path: if user clicked any link, continue',
+      has_tag: 'Split path: if user has custom tag, continue',
+      purchased_book: 'Split path: if user purchased any book, continue'
+    };
+    step.detail = map[step.conditionType || ''] || step.detail;
+  }
+
+  onTriggerEventChange(step: FlowStep) {
+    const map: Record<string, string> = {
+      subscription: 'Triggered when a subscriber joins the list',
+      checkout_started: 'Triggered when checkout is initiated',
+      purchase_completed: 'Triggered when a purchase completes',
+      tag_added: 'Triggered when a custom tag is applied',
+      billing_failed: 'Triggered on billing payment failure',
+      subscription_canceled: 'Triggered when subscription is canceled'
+    };
+    step.detail = map[step.triggerEvent || ''] || step.detail;
   }
 
   addNewStep(type: 'email' | 'wait' | 'condition' | 'goal-exit') {
@@ -699,6 +908,17 @@ export class FlowBuilderComponent {
       label: stepLabels[type],
       detail: stepDetails[type]
     };
+
+    if (type === 'email') {
+      newStep.subject = 'Follow-up Email';
+      newStep.previewText = 'A quick message for you...';
+      newStep.emailBody = 'Hello! Write your email content here.';
+    } else if (type === 'wait') {
+      newStep.waitDuration = 3;
+      newStep.waitUnit = 'days';
+    } else if (type === 'condition') {
+      newStep.conditionType = 'opened_email';
+    }
 
     this.flow.steps.push(newStep);
     this.selectedStep = newStep;

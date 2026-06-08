@@ -1,4 +1,4 @@
-﻿import { Injectable } from '@angular/core';
+import { Injectable } from '@angular/core';
 import { FLOWS_DATA } from './mock-flows.data';
 import { FLOW_TEMPLATES_DATA } from './mock-flow-templates.data';
 
@@ -57,6 +57,13 @@ export interface FlowStep {
   type: 'trigger' | 'billing-trigger' | 'email' | 'wait' | 'condition' | 'goal-exit';
   label: string;
   detail: string;
+  subject?: string;
+  previewText?: string;
+  emailBody?: string;
+  waitDuration?: number;
+  waitUnit?: 'minutes' | 'hours' | 'days' | 'weeks';
+  conditionType?: string;
+  triggerEvent?: string;
 }
 
 export interface FlowTemplate {
