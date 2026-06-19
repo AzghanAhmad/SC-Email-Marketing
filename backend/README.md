@@ -43,21 +43,33 @@ If your XAMPP MySQL root user has a password, update `ConnectionStrings:DefaultC
 
 ## Deploy on Railway
 
-Railpack was detecting **Python** because the repo root had a misnamed `requirements.txt` (project scope doc). That file is now `docs/SCOPE_OF_WORK.txt`. Deploy the **backend** folder only.
+### Option A (recommended): Root Directory = `backend`
 
-### Railway service settings
+In the **API service** → **Settings** → **Root Directory**, set:
 
-| Setting | Value |
-|---------|--------|
-| **Root Directory** | `backend` |
-| **Builder** | Railpack (default) |
-| `ASPNETCORE_ENVIRONMENT` | `Production` |
-
-`backend/railpack.json` and `backend/railway.toml` tell Railpack to build and run the .NET API:
-
-```bash
-dotnet ScribeCount.Email.dll
 ```
+backend
+```
+
+Railpack will use `backend/railpack.json` and detect the `.csproj` automatically.
+
+### Option B: Deploy from repo root (monorepo)
+
+If Root Directory is left empty (`/`), the repo root includes:
+
+| File | Purpose |
+|------|---------|
+| `railway.toml` | Builds with `Dockerfile.backend` |
+| `Dockerfile.backend` | Multi-stage .NET 10 Docker build |
+| `railpack.json` | Fallback Railpack config (`cd backend && dotnet publish`) |
+
+Push these files and redeploy — no Root Directory change needed.
+
+### Environment variables (API service)
+
+| Variable | Value |
+|----------|--------|
+| `ASPNETCORE_ENVIRONMENT` | `Production` |
 
 ### Database (Production)
 

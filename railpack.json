@@ -1,0 +1,27 @@
+{
+  "$schema": "https://schema.railpack.com",
+  "provider": "dotnet",
+  "packages": {
+    "dotnet": "10"
+  },
+  "steps": {
+    "build": {
+      "inputs": [
+        { "local": true, "include": ["."] }
+      ],
+      "commands": [
+        "cd backend && dotnet restore ScribeCount.Email.csproj",
+        "cd backend && dotnet publish ScribeCount.Email.csproj -c Release -o /app/publish --no-restore"
+      ]
+    }
+  },
+  "deploy": {
+    "startCommand": "dotnet /app/publish/ScribeCount.Email.dll",
+    "variables": {
+      "ASPNETCORE_ENVIRONMENT": "Production"
+    },
+    "inputs": [
+      { "step": "build", "include": ["/app/publish"] }
+    ]
+  }
+}
