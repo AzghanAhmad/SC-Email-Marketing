@@ -81,10 +81,16 @@ Server=thomas.proxy.rlwy.net;Port=17287;Database=railway;User=root;Password=***;
 
 Override with a Railway variable if needed:
 
-| Variable | Example |
-|----------|---------|
-| `ConnectionStrings__DefaultConnection` | Full MySQL connection string |
-| `MYSQL_URL` | Auto-injected when MySQL service is linked |
+| Variable | Value (ADO.NET format — not the `mysql` CLI command) |
+|----------|--------|
+| `ConnectionStrings__DefaultConnection` | `Server=thomas.proxy.rlwy.net;Port=17287;Database=railway;User=root;Password=YOUR_PASSWORD;SslMode=Required;` |
+
+**Do not** paste the `mysql -h ... -u root -p ...` shell command as the connection string. If MySQL is **linked** to the API service, Railway injects `MYSQLHOST`, `MYSQLPASSWORD`, etc. automatically — remove any bad `ConnectionStrings__DefaultConnection` variable and redeploy.
+
+| Auto-injected (linked MySQL) | Description |
+|------------------------------|-------------|
+| `MYSQLHOST`, `MYSQLPORT`, `MYSQLUSER`, `MYSQLPASSWORD`, `MYSQLDATABASE` | Used first when present |
+| `MYSQL_URL` | `mysql://user:pass@host:port/db` also supported |
 
 ### Frontend CORS (after you deploy the Angular app)
 
