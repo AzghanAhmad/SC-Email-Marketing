@@ -1,4 +1,4 @@
-import { Component, Output, EventEmitter } from '@angular/core';
+import { Component, Output, EventEmitter, Input, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
@@ -221,16 +221,21 @@ import { FormsModule } from '@angular/forms';
     @media(max-width:700px) { .form-row-2 { grid-template-columns:1fr; } .ncg-grid { grid-template-columns:1fr; } }
   `]
 })
-export class CampaignNewsletterComponent {
-  @Output() onWriteNextIssue = new EventEmitter<void>();
-  @Output() onSave = new EventEmitter<void>();
-
-  newsletter = {
+export class CampaignNewsletterComponent implements OnChanges {
+  @Input() newsletter = {
     name: 'Monthly Reader Letter', frequency: 'monthly' as 'weekly'|'biweekly'|'monthly',
     dayOfWeek: 'Tuesday', dayOfMonth: '1st', sendTime: '09:00',
     timezoneOptimized: true, subject: '', previewText: '', replyQuestion: '',
     content: '', status: 'draft' as 'active'|'paused'|'draft'
   };
+  @Output() onWriteNextIssue = new EventEmitter<void>();
+  @Output() onSave = new EventEmitter<typeof this.newsletter>();
+
+  ngOnChanges(changes: SimpleChanges) {
+    if (changes['newsletter'] && changes['newsletter'].currentValue) {
+      this.newsletter = { ...changes['newsletter'].currentValue };
+    }
+  }
 
   readonly replyQuestionExamples = [
     "What's the last book you recommended to a friend?",
@@ -248,5 +253,5 @@ export class CampaignNewsletterComponent {
   ];
 
   setReplyQuestion(i: number) { this.newsletter.replyQuestion = this.replyQuestionExamples[i]; }
-  save() { this.onSave.emit(); }
+  save() { this.onSave.emit({ ...this.newsletter }); }
 }

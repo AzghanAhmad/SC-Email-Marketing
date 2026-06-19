@@ -1,97 +1,144 @@
-import { Component, signal } from '@angular/core';
+import { Component, HostListener, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../../core/services/auth.service';
+import { NavbarSearchResult, NavbarSearchService } from '../../core/services/navbar-search.service';
+
+interface AppNotification {
+  id: string;
+  type: 'campaign' | 'subscriber' | 'flow' | 'report';
+  message: string;
+  time: string;
+  read: boolean;
+  route: string;
+}
 
 @Component({
   selector: 'app-topbar',
   standalone: true,
   imports: [CommonModule, RouterModule, FormsModule],
   template: `
-    <header class="topbar">
+    <header class="topbar" (click)="onTopbarClick($event)">
       <div class="topbar-left">
-        <div class="search-wrap">
+        <div class="search-wrap topbar-panel" #searchPanel>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
-          <input class="search-input" type="text" placeholder="Search campaigns, subscribers..." [(ngModel)]="searchQuery" />
+          <input
+            class="search-input"
+            type="text"
+            placeholder="Search campaigns, flows, settings..."
+            [ngModel]="searchQuery()"
+            (ngModelChange)="onSearchChange($event)"
+            (focus)="showSearch.set(true)"
+            (keydown.enter)="selectFirstSearchResult()"
+            (keydown.escape)="closeAllPanels()"
+          />
+          <div class="dropdown search-dropdown" *ngIf="showSearch() && searchQuery().trim()">
+            <div class="dropdown-header">
+              <span>Search results</span>
+            </div>
+            <button
+              type="button"
+              class="search-result"
+              *ngFor="let r of searchResults()"
+              (click)="goToSearchResult(r)">
+              <div>
+                <p class="sr-title">{{ r.title }}</p>
+                <p class="sr-desc">{{ r.description }}</p>
+              </div>
+              <span class="sr-cat">{{ r.category }}</span>
+            </button>
+            <div class="search-empty" *ngIf="searchResults().length === 0">
+              No results for "{{ searchQuery() }}"
+            </div>
+          </div>
         </div>
       </div>
+
       <div class="topbar-right">
         <!-- Notifications -->
-        <button class="icon-btn" (click)="showNotifs.set(!showNotifs())" data-tooltip="Notifications">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-          </svg>
-          <span class="notif-dot"></span>
-        </button>
+        <div class="topbar-panel" #notifPanel>
+          <button class="icon-btn" (click)="toggleNotifs($event)" data-tooltip="Notifications">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+            </svg>
+            <span class="notif-dot" *ngIf="unreadNotifCount() > 0"></span>
+          </button>
 
-        <!-- Notifications Dropdown -->
-        <div class="dropdown notif-dropdown" *ngIf="showNotifs()">
-          <div class="dropdown-header">
-            <span>Notifications</span>
-            <button class="mark-read" (click)="showNotifs.set(false)">Mark all read</button>
-          </div>
-          <div class="notif-item" *ngFor="let n of notifications">
-            <div class="notif-icon-wrap" [class]="'ni-' + n.type">
-              <svg *ngIf="n.type==='campaign'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-              <svg *ngIf="n.type==='subscriber'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
-              <svg *ngIf="n.type==='flow'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-              <svg *ngIf="n.type==='report'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          <div class="dropdown notif-dropdown" *ngIf="showNotifs()">
+            <div class="dropdown-header">
+              <span>Notifications</span>
+              <button type="button" class="mark-read" (click)="markAllNotifsRead()">Mark all read</button>
             </div>
-            <div class="notif-body">
-              <p class="notif-msg">{{ n.message }}</p>
-              <span class="notif-time">{{ n.time }}</span>
-            </div>
+            <button
+              type="button"
+              class="notif-item"
+              *ngFor="let n of notifications"
+              [class.unread]="!n.read"
+              (click)="openNotification(n)">
+              <div class="notif-icon-wrap" [class]="'ni-' + n.type">
+                <svg *ngIf="n.type==='campaign'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                <svg *ngIf="n.type==='subscriber'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+                <svg *ngIf="n.type==='flow'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                <svg *ngIf="n.type==='report'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+              </div>
+              <div class="notif-body">
+                <p class="notif-msg">{{ n.message }}</p>
+                <span class="notif-time">{{ n.time }}</span>
+              </div>
+            </button>
+            <div class="notif-empty" *ngIf="notifications.length === 0">You're all caught up.</div>
           </div>
         </div>
 
         <!-- Hey ScribeCount? AI Assistant -->
-        <button class="icon-btn hey-btn" (click)="showAssistant.set(!showAssistant())" data-tooltip="Hey ScribeCount? — Ask anything about your business">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="17" height="17">
-            <path d="M12 2a10 10 0 0 1 10 10c0 5.52-4.48 10-10 10S2 17.52 2 12 6.48 2 12 2z"/>
-            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
-            <circle cx="12" cy="17" r=".5" fill="currentColor"/>
-          </svg>
-          <span class="hey-label">Hey ScribeCount?</span>
-        </button>
+        <div class="topbar-panel" #assistantPanel>
+          <button class="icon-btn hey-btn" (click)="toggleAssistant($event)" data-tooltip="Hey ScribeCount? — Ask anything about your business">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="17" height="17">
+              <path d="M12 2a10 10 0 0 1 10 10c0 5.52-4.48 10-10 10S2 17.52 2 12 6.48 2 12 2z"/>
+              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+              <circle cx="12" cy="17" r=".5" fill="currentColor"/>
+            </svg>
+            <span class="hey-label">Hey ScribeCount?</span>
+          </button>
 
-        <!-- AI Assistant Panel -->
-        <div class="assistant-panel" *ngIf="showAssistant()">
-          <div class="ap-header">
-            <div class="ap-title-row">
-              <div class="ap-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M12 2a10 10 0 0 1 10 10c0 5.52-4.48 10-10 10S2 17.52 2 12 6.48 2 12 2z"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><circle cx="12" cy="17" r=".5" fill="currentColor"/></svg>
+          <div class="assistant-panel" *ngIf="showAssistant()">
+            <div class="ap-header">
+              <div class="ap-title-row">
+                <div class="ap-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M12 2a10 10 0 0 1 10 10c0 5.52-4.48 10-10 10S2 17.52 2 12 6.48 2 12 2z"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><circle cx="12" cy="17" r=".5" fill="currentColor"/></svg>
+                </div>
+                <span class="ap-title">Hey ScribeCount?</span>
               </div>
-              <span class="ap-title">Hey ScribeCount?</span>
+              <button type="button" class="ap-close" (click)="showAssistant.set(false)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
             </div>
-            <button class="ap-close" (click)="showAssistant.set(false)">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
-          </div>
-          <div class="ap-messages">
-            <div class="ap-msg assistant" *ngFor="let msg of assistantMessages">
-              <div class="ap-msg-bubble" [class.user-bubble]="msg.role === 'user'">{{ msg.text }}</div>
+            <div class="ap-messages">
+              <div class="ap-msg assistant" *ngFor="let msg of assistantMessages">
+                <div class="ap-msg-bubble" [class.user-bubble]="msg.role === 'user'">{{ msg.text }}</div>
+              </div>
+              <div class="ap-typing" *ngIf="assistantTyping()">
+                <span></span><span></span><span></span>
+              </div>
             </div>
-            <div class="ap-typing" *ngIf="assistantTyping()">
-              <span></span><span></span><span></span>
+            <div class="ap-suggestions" *ngIf="assistantMessages.length === 1">
+              <button type="button" class="ap-suggestion" *ngFor="let s of suggestions" (click)="askAssistant(s)">{{ s }}</button>
             </div>
-          </div>
-          <div class="ap-suggestions" *ngIf="assistantMessages.length === 1">
-            <button class="ap-suggestion" *ngFor="let s of suggestions" (click)="askAssistant(s)">{{ s }}</button>
-          </div>
-          <div class="ap-input-row">
-            <input class="ap-input" type="text" placeholder="Ask anything about your business..." [(ngModel)]="assistantQuery" (keydown.enter)="askAssistant(assistantQuery)" />
-            <button class="ap-send" (click)="askAssistant(assistantQuery)" [disabled]="!assistantQuery.trim()">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-            </button>
+            <div class="ap-input-row">
+              <input class="ap-input" type="text" placeholder="Ask anything about your business..." [(ngModel)]="assistantQuery" (keydown.enter)="askAssistant(assistantQuery)" />
+              <button type="button" class="ap-send" (click)="askAssistant(assistantQuery)" [disabled]="!assistantQuery.trim()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+              </button>
+            </div>
           </div>
         </div>
 
-        <!-- Help -->
-        <button class="icon-btn" data-tooltip="Help & Documentation">
+        <!-- About / Help -->
+        <button class="icon-btn" routerLink="/about" (click)="closeAllPanels()" data-tooltip="About ScribeCount Email">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10"/>
             <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
@@ -100,8 +147,8 @@ import { AuthService } from '../../core/services/auth.service';
         </button>
 
         <!-- User Menu -->
-        <div class="user-menu-wrap">
-          <button class="user-btn" (click)="showUserMenu.set(!showUserMenu())">
+        <div class="user-menu-wrap topbar-panel" #userPanel>
+          <button type="button" class="user-btn" (click)="toggleUserMenu($event)">
             <div class="user-avatar">{{ initials() }}</div>
             <span class="user-name-top">{{ firstName() }}</span>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
@@ -117,12 +164,16 @@ import { AuthService } from '../../core/services/auth.service';
               </div>
             </div>
             <div class="dropdown-divider"></div>
-            <a routerLink="/settings" class="dropdown-item" (click)="showUserMenu.set(false)">
+            <a routerLink="/settings" class="dropdown-item" (click)="closeAllPanels()">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
               Settings
             </a>
+            <a routerLink="/about" class="dropdown-item" (click)="closeAllPanels()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              About
+            </a>
             <div class="dropdown-divider"></div>
-            <button class="dropdown-item danger" (click)="logout()">
+            <button type="button" class="dropdown-item danger" (click)="logout()">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
               Logout
             </button>
@@ -141,13 +192,14 @@ import { AuthService } from '../../core/services/auth.service';
       position:fixed; top:0; left:252px; right:0; z-index:40;
       box-shadow:0 1px 0 rgba(0,0,0,0.15);
     }
-    .topbar-left { display:flex; align-items:center; gap:1rem; }
+    .topbar-left { display:flex; align-items:center; gap:1rem; flex:1; max-width:420px; }
     .topbar-right { display:flex; align-items:center; gap:.5rem; position:relative; }
+    .topbar-panel { position:relative; }
 
-    .search-wrap svg {
-      color:rgba(255,255,255,0.45);
-    }
+    .search-wrap { width:100%; min-width:220px; }
+    .search-wrap svg { color:rgba(255,255,255,0.45); }
     .search-input {
+      width:100%; min-width:220px;
       background:rgba(255,255,255,0.08);
       border:1.5px solid rgba(255,255,255,0.1);
       color:rgba(255,255,255,0.95);
@@ -159,11 +211,25 @@ import { AuthService } from '../../core/services/auth.service';
       background:rgba(255,255,255,0.1);
     }
 
+    .search-dropdown { left:0; right:auto; min-width:100%; max-width:380px; }
+    .search-result {
+      display:flex; align-items:center; justify-content:space-between; gap:.75rem;
+      width:100%; padding:.75rem 1rem; border:none; border-bottom:1px solid #f8fafc;
+      background:none; cursor:pointer; text-align:left; font-family:inherit;
+      transition:background .15s;
+    }
+    .search-result:hover { background:#f8fafc; }
+    .search-result:last-child { border-bottom:none; }
+    .sr-title { font-size:.8125rem; font-weight:600; color:#0f172a; margin:0 0 .15rem; }
+    .sr-desc { font-size:.75rem; color:#94a3b8; margin:0; }
+    .sr-cat { font-size:.7rem; font-weight:600; color:#3b82f6; background:#eff6ff; padding:.2rem .5rem; border-radius:100px; white-space:nowrap; }
+    .search-empty, .notif-empty { padding:1rem; font-size:.8125rem; color:#94a3b8; text-align:center; }
+
     .icon-btn {
       width:38px; height:38px; display:flex; align-items:center; justify-content:center;
       background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1);
       border-radius:10px; cursor:pointer; color:rgba(255,255,255,0.55);
-      transition:all .2s; position:relative;
+      transition:all .2s; position:relative; text-decoration:none;
     }
     .icon-btn:hover { background:rgba(255,255,255,0.12); color:rgba(255,255,255,0.95); border-color:rgba(255,255,255,0.14); }
     .icon-btn svg { width:17px; height:17px; }
@@ -210,9 +276,12 @@ import { AuthService } from '../../core/services/auth.service';
     .notif-item {
       display:flex; align-items:flex-start; gap:.75rem;
       padding:.875rem 1rem; border-bottom:1px solid #f8fafc;
-      transition:background .15s;
+      transition:background .15s; width:100%; border-left:none; border-right:none; border-top:none;
+      background:none; cursor:pointer; text-align:left; font-family:inherit;
     }
     .notif-item:hover { background:#f8fafc; }
+    .notif-item.unread { background:#f0f7ff; }
+    .notif-item.unread:hover { background:#e8f2ff; }
     .notif-item:last-child { border-bottom:none; }
     .notif-icon-wrap { width:30px; height:30px; border-radius:8px; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
     .ni-campaign { background:rgba(59,130,246,0.1); color:#3b82f6; }
@@ -220,7 +289,7 @@ import { AuthService } from '../../core/services/auth.service';
     .ni-flow { background:rgba(139,92,246,0.1); color:#8b5cf6; }
     .ni-report { background:rgba(245,158,11,0.1); color:#d97706; }
     .notif-body { display:flex; flex-direction:column; gap:.2rem; }
-    .notif-msg { font-size:.8125rem; color:#334155; line-height:1.4; }
+    .notif-msg { font-size:.8125rem; color:#334155; line-height:1.4; margin:0; }
     .notif-time { font-size:.7rem; color:#94a3b8; }
 
     .dropdown-user-info { display:flex; align-items:center; gap:.75rem; padding:1rem; }
@@ -240,7 +309,6 @@ import { AuthService } from '../../core/services/auth.service';
     .user-menu-wrap { position:relative; }
     .notif-dropdown { min-width:320px; }
 
-    /* Hey ScribeCount assistant */
     .hey-btn { width:auto !important; padding:.4rem .875rem !important; gap:.5rem; border-radius:10px !important; }
     .hey-label { font-size:.8125rem; font-weight:600; color:rgba(255,255,255,0.85); white-space:nowrap; }
     .hey-btn:hover .hey-label { color:white; }
@@ -285,7 +353,8 @@ import { AuthService } from '../../core/services/auth.service';
   `]
 })
 export class TopbarComponent {
-  searchQuery = '';
+  searchQuery = signal('');
+  showSearch = signal(false);
   showNotifs = signal(false);
   showUserMenu = signal(false);
   showAssistant = signal(false);
@@ -294,6 +363,10 @@ export class TopbarComponent {
   assistantMessages: { role: 'user' | 'assistant'; text: string }[] = [
     { role: 'assistant', text: 'Hi! I\'m your ScribeCount assistant. Ask me anything about your email performance, subscriber growth, campaigns, or business data.' }
   ];
+
+  searchResults = computed(() => this.navbarSearch.search(this.searchQuery()));
+
+  unreadNotifCount = computed(() => this.notifications.filter(n => !n.read).length);
 
   suggestions = [
     'Is my email list growing or shrinking this month?',
@@ -315,6 +388,90 @@ export class TopbarComponent {
     'default': 'Based on your current data: your email list has 8,421 subscribers (+6.2% this month), your campaigns average a 54.2% open rate, and your revenue per email is $0.17. What would you like to dig into?'
   };
 
+  notifications: AppNotification[] = [
+    { id: '1', type: 'campaign', message: 'Campaign "March Newsletter" sent successfully', time: '2 hours ago', read: false, route: '/campaigns' },
+    { id: '2', type: 'subscriber', message: '12 new subscribers joined today', time: '4 hours ago', read: false, route: '/audience' },
+    { id: '3', type: 'flow', message: 'Welcome Flow triggered 8 times', time: '6 hours ago', read: false, route: '/flows' },
+    { id: '4', type: 'report', message: 'Weekly report is ready to view', time: '1 day ago', read: true, route: '/analytics/dashboards' },
+  ];
+
+  constructor(
+    public auth: AuthService,
+    private router: Router,
+    private navbarSearch: NavbarSearchService
+  ) {}
+
+  @HostListener('document:click')
+  onDocumentClick() {
+    this.closeAllPanels();
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscape() {
+    this.closeAllPanels();
+  }
+
+  onTopbarClick(event: MouseEvent) {
+    event.stopPropagation();
+  }
+
+  onSearchChange(value: string) {
+    this.searchQuery.set(value);
+    this.showSearch.set(!!value.trim());
+    this.showNotifs.set(false);
+    this.showUserMenu.set(false);
+    this.showAssistant.set(false);
+  }
+
+  selectFirstSearchResult() {
+    const results = this.searchResults();
+    if (results.length) this.goToSearchResult(results[0]);
+  }
+
+  goToSearchResult(result: NavbarSearchResult) {
+    this.closeAllPanels();
+    this.searchQuery.set('');
+    this.router.navigateByUrl(result.route);
+  }
+
+  toggleNotifs(event: MouseEvent) {
+    event.stopPropagation();
+    const next = !this.showNotifs();
+    this.closeAllPanels();
+    this.showNotifs.set(next);
+  }
+
+  toggleUserMenu(event: MouseEvent) {
+    event.stopPropagation();
+    const next = !this.showUserMenu();
+    this.closeAllPanels();
+    this.showUserMenu.set(next);
+  }
+
+  toggleAssistant(event: MouseEvent) {
+    event.stopPropagation();
+    const next = !this.showAssistant();
+    this.closeAllPanels();
+    this.showAssistant.set(next);
+  }
+
+  closeAllPanels() {
+    this.showSearch.set(false);
+    this.showNotifs.set(false);
+    this.showUserMenu.set(false);
+    this.showAssistant.set(false);
+  }
+
+  markAllNotifsRead() {
+    this.notifications.forEach(n => n.read = true);
+  }
+
+  openNotification(n: AppNotification) {
+    n.read = true;
+    this.closeAllPanels();
+    this.router.navigateByUrl(n.route);
+  }
+
   askAssistant(query: string) {
     if (!query.trim()) return;
     this.assistantMessages.push({ role: 'user', text: query });
@@ -331,15 +488,6 @@ export class TopbarComponent {
     }, 900);
   }
 
-  notifications = [
-    { type:'campaign', message:'Campaign "March Newsletter" sent successfully', time:'2 hours ago' },
-    { type:'subscriber', message:'12 new subscribers joined today', time:'4 hours ago' },
-    { type:'flow', message:'Welcome Flow triggered 8 times', time:'6 hours ago' },
-    { type:'report', message:'Weekly report is ready to view', time:'1 day ago' },
-  ];
-
-  constructor(public auth: AuthService, private router: Router) {}
-
   firstName(): string {
     const name = this.auth.user()?.name || '';
     return name.split(' ')[0];
@@ -351,6 +499,7 @@ export class TopbarComponent {
   }
 
   logout(): void {
+    this.closeAllPanels();
     this.auth.logout();
     this.router.navigate(['/login']);
   }

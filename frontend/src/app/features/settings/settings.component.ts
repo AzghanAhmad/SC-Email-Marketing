@@ -1,14 +1,16 @@
-import { Component, signal } from '@angular/core';
+import { Component, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
+import { InboxConnectionComponent } from './inbox-connection.component';
 
-type SettingsTab = 'account' | 'domain' | 'integrations' | 'store' | 'notifications' | 'preferences' | 'billing' | 'help';
+type SettingsTab = 'account' | 'domain' | 'inbox' | 'integrations' | 'store' | 'notifications' | 'preferences' | 'billing' | 'help';
 
 @Component({
   selector: 'app-settings',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, InboxConnectionComponent],
   template: `
     <div class="page-wrapper">
       <div class="page-header">
@@ -121,6 +123,11 @@ type SettingsTab = 'account' | 'domain' | 'integrations' | 'store' | 'notificati
                 </div>
               </div>
             </div>
+          </div>
+
+          <!-- Inbox Connection -->
+          <div *ngIf="activeTab() === 'inbox'">
+            <app-inbox-connection></app-inbox-connection>
           </div>
 
           <!-- Integrations -->
@@ -762,7 +769,7 @@ type SettingsTab = 'account' | 'domain' | 'integrations' | 'store' | 'notificati
     @media(max-width:700px) { .pref-freq-grid { grid-template-columns:1fr 1fr; } }
   `]
 })
-export class SettingsComponent {
+export class SettingsComponent implements OnInit {
   activeTab = signal<SettingsTab>('account');
   showToast = signal(false);
 
@@ -776,6 +783,7 @@ export class SettingsComponent {
   sections = [
     { id: 'account' as SettingsTab, label: 'Account', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>' },
     { id: 'domain' as SettingsTab, label: 'Domain Setup', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>' },
+    { id: 'inbox' as SettingsTab, label: 'Inbox Connection', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>' },
     { id: 'integrations' as SettingsTab, label: 'Integrations', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>' },
     { id: 'store' as SettingsTab, label: 'Store Connection', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>' },
     { id: 'notifications' as SettingsTab, label: 'Notifications', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>' },
@@ -867,7 +875,28 @@ export class SettingsComponent {
     { name: 'New releases only', description: 'Only when I publish something new', icon: '📚', enabled: true },
   ];
 
-  constructor(public auth: AuthService) {}
+  constructor(public auth: AuthService, private route: ActivatedRoute) {
+    this.applyTabFromRoute(this.route.snapshot.queryParamMap.get('tab'));
+  }
+
+  ngOnInit() {
+    this.route.queryParamMap.subscribe(params => {
+      this.applyTabFromRoute(params.get('tab'));
+    });
+    const user = this.auth.user();
+    if (user) {
+      const parts = user.name.split(' ');
+      this.account.firstName = parts[0] ?? '';
+      this.account.lastName = parts.slice(1).join(' ');
+      this.account.email = user.email;
+    }
+  }
+
+  private applyTabFromRoute(tab: string | null) {
+    if (tab && this.sections.some(s => s.id === tab)) {
+      this.activeTab.set(tab as SettingsTab);
+    }
+  }
 
   save() {
     this.showToast.set(true);

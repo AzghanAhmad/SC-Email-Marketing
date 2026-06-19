@@ -1,7 +1,8 @@
-import { Component, OnInit, signal } from '@angular/core';
+import { Component, OnInit, signal, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { MockDataService, Campaign } from '../../core/services/mock-data.service';
+import { Campaign } from '../../core/services/mock-data.service';
+import { CampaignApiService, AbTest, NewsletterSchedule, CalendarEvent } from '../../core/services/campaign-api.service';
 import { CampaignListComponent } from './campaign-list.component';
 import { CampaignCalendarComponent } from './campaign-calendar.component';
 import { CampaignNewsletterComponent } from './campaign-newsletter.component';
@@ -33,42 +34,11 @@ interface SuppressionRule {
   enabled: boolean;
 }
 
-interface CalendarEvent {
-  id: string;
-  name: string;
-  type: string;
-  date: string;
-  status: 'planned' | 'draft' | 'scheduled' | 'sent';
-  daysFromRelease?: number;
-}
+interface CalendarEventLocal extends CalendarEvent {}
 
-interface NewsletterSchedule {
-  name: string;
-  frequency: 'weekly' | 'biweekly' | 'monthly';
-  dayOfWeek: string;
-  dayOfMonth: string;
-  sendTime: string;
-  timezoneOptimized: boolean;
-  subject: string;
-  previewText: string;
-  replyQuestion: string;
-  content: string;
-  status: 'active' | 'paused' | 'draft';
-}
+interface NewsletterScheduleLocal extends NewsletterSchedule {}
 
-interface ABTest {
-  id: string;
-  name: string;
-  subjectA: string;
-  subjectB: string;
-  testSize: number;
-  winnerMetric: 'opens' | 'clicks';
-  waitHours: number;
-  status: 'draft' | 'running' | 'complete';
-  openRateA?: number;
-  openRateB?: number;
-  winner?: 'A' | 'B';
-}
+interface ABTestLocal extends AbTest {}
 
 interface PreflightCheck {
   id: string;
@@ -276,8 +246,9 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
       <!-- ===== NEWSLETTER TAB ===== -->
       <div *ngIf="activeTab() === 'newsletter'">
         <app-campaign-newsletter
+          [newsletter]="newsletter"
           (onWriteNextIssue)="activeTab.set('create')"
-          (onSave)="showToast('Newsletter schedule saved!', 'success')">
+          (onSave)="saveNewsletter($event)">
         </app-campaign-newsletter>
       </div>
       <!-- ===== NEWSLETTER ORIGINAL (hidden) ===== -->
@@ -474,7 +445,9 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
       <!-- ===== A/B TESTING TAB ===== -->
       <div *ngIf="activeTab() === 'ab-test'">
         <app-campaign-ab-test
-          (onToast)="showToast($event.message, $event.type)">
+          [abTests]="abTests"
+          (onToast)="showToast($event.message, $event.type)"
+          (onCreateAbTest)="createAbTest($event)">
         </app-campaign-ab-test>
       </div>
       <!-- ===== A/B ORIGINAL (hidden) ===== -->
@@ -2405,6 +2378,8 @@ export class CampaignsComponent implements OnInit {
   currentStep = signal<number>(0);
   previewMode = signal<'both' | 'desktop' | 'mobile'>('both');
   campaigns: Campaign[] = [];
+  editingCampaignId: string | null = null;
+  loading = false;
   searchQuery = '';
   statusFilter = '';
   reportCampaign: Campaign | null = null;
@@ -2441,18 +2416,7 @@ export class CampaignsComponent implements OnInit {
 
   // Campaign calendar
   calRelease = { title: '', date: '' };
-  calendarEvents: CalendarEvent[] = [
-    { id: '1', name: 'ARC Invitation — The Ember Crown', type: 'ARC Invitation', date: 'Apr 15, 2026', status: 'sent' },
-    { id: '2', name: 'ARC Follow-Up — The Ember Crown', type: 'ARC Follow-Up', date: 'Apr 28, 2026', status: 'sent' },
-    { id: '3', name: 'Book Launch — The Ember Crown', type: 'Book Launch', date: 'May 1, 2026', status: 'sent' },
-    { id: '4', name: 'Post-Launch Backlist', type: 'Backlist Spotlight', date: 'May 8, 2026', status: 'scheduled' },
-    { id: '5', name: 'Flash Sale — Summer Promo', type: 'Flash Sale', date: 'Jun 15, 2026', status: 'planned' },
-    { id: '6', name: 'Parnassus Books Signing — Nashville', type: 'Event Announcement', date: 'Apr 5, 2026', status: 'sent' },
-    { id: '7', name: 'Live Q&A — The Ember Crown', type: 'Event Announcement', date: 'May 22, 2026', status: 'scheduled' },
-    { id: '8', name: 'Event Reminder — Live Q&A', type: 'Event Announcement', date: 'May 21, 2026', status: 'planned' },
-    { id: '9', name: 'Reader Community — Founding Invitation', type: 'Reader Community', date: 'Jun 1, 2026', status: 'draft' },
-    { id: '10', name: 'Backlist Spotlight — The Ashford Inheritance', type: 'Backlist Spotlight', date: 'Jun 20, 2026', status: 'planned' },
-  ];
+  calendarEvents: CalendarEventLocal[] = [];
 
   readonly baselineCampaigns = [
     { timing: '4–6 weeks before', type: 'ARC Invitation', description: 'Recruit advance readers for review copies', offset: -35 },
@@ -2475,8 +2439,7 @@ export class CampaignsComponent implements OnInit {
   toastType: 'success' | 'warn' = 'success';
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // Newsletter schedule
-  newsletter: NewsletterSchedule = {
+  newsletter: NewsletterScheduleLocal = {
     name: 'Monthly Reader Letter',
     frequency: 'monthly',
     dayOfWeek: 'Tuesday',
@@ -2493,9 +2456,7 @@ export class CampaignsComponent implements OnInit {
   // A/B Testing
   showABForm = false;
   abDraft = { subjectA: '', subjectB: '', testSize: 20, winnerMetric: 'opens' as 'opens' | 'clicks', waitHours: 8 };
-  abTests: ABTest[] = [
-    { id: '1', name: 'March Newsletter', subjectA: 'The research that changed my book', subjectB: 'March Newsletter — writing update + picks', testSize: 20, winnerMetric: 'opens', waitHours: 8, status: 'complete', openRateA: 58.4, openRateB: 49.1, winner: 'A' },
-  ];
+  abTests: ABTestLocal[] = [];
 
   readonly audienceSegments = [
     { id: 'all',        name: 'All Subscribers', count: 8421, description: 'Your entire subscriber list' },
@@ -2516,9 +2477,53 @@ export class CampaignsComponent implements OnInit {
     return this.preflightChecks().filter(c => c.category === cat);
   }
 
-  constructor(private mockData: MockDataService) {}
+  constructor(private campaignApi: CampaignApiService, private cdr: ChangeDetectorRef) {}
 
-  ngOnInit() { this.campaigns = this.mockData.getCampaigns(); }
+  ngOnInit() {
+    this.loadCampaignData();
+  }
+
+  private loadCampaignData() {
+    this.loading = true;
+    this.campaignApi.getBundle().subscribe({
+      next: bundle => {
+        this.campaigns = bundle.campaigns;
+        this.calendarEvents = bundle.calendarEvents;
+        this.newsletter = bundle.newsletter;
+        this.abTests = bundle.abTests;
+        this.loading = false;
+        this.cdr.detectChanges();
+      },
+      error: err => {
+        this.loading = false;
+        this.showToast(err.message || 'Could not load campaigns', 'warn');
+        this.cdr.detectChanges();
+      },
+    });
+  }
+
+  private buildCampaignPayload(status = 'draft') {
+    return {
+      name: this.draft.name,
+      subject: this.draft.subject,
+      previewText: this.draft.previewText,
+      content: this.draft.content,
+      campaignType: this.draft.campaignType,
+      fromName: this.draft.fromName,
+      sendToSegment: this.draft.sendTo,
+      status,
+      scheduledAt: this.draft.scheduledAt || null,
+      extras: {
+        directStoreLink: this.draft.directStoreLink,
+        amazonLink: this.draft.amazonLink,
+        arcTag: this.draft.arcTag,
+        amazonReviewLink: this.draft.amazonReviewLink,
+        appleBooksLink: this.draft.appleBooksLink,
+        koboLink: this.draft.koboLink,
+        bnLink: this.draft.bnLink,
+      },
+    };
+  }
 
   get filteredCampaigns() {
     return this.campaigns.filter(c => {
@@ -2540,6 +2545,7 @@ export class CampaignsComponent implements OnInit {
 
   editCampaign(c: Campaign) {
     this.reportCampaign = null;
+    this.editingCampaignId = c.id;
     this.draft = {
       name: c.name,
       fromName: 'Jane Austen',
@@ -2564,16 +2570,55 @@ export class CampaignsComponent implements OnInit {
   }
 
   deleteCampaign(id: string) {
-    this.campaigns = this.campaigns.filter(c => c.id !== id);
-    if (this.reportCampaign?.id === id) this.reportCampaign = null;
+    this.campaignApi.deleteCampaign(id).subscribe({
+      next: () => {
+        this.campaigns = this.campaigns.filter(c => c.id !== id);
+        if (this.reportCampaign?.id === id) this.reportCampaign = null;
+        this.showToast('Campaign deleted', 'success');
+        this.cdr.detectChanges();
+      },
+      error: err => this.showToast(err.message || 'Could not delete campaign', 'warn'),
+    });
   }
   goToStep(i: number) { if (i <= this.currentStep()) this.currentStep.set(i); }
   nextStep() { if (this.currentStep() < this.steps.length - 1) this.currentStep.update(s => s + 1); }
   prevStep() { if (this.currentStep() > 0) this.currentStep.update(s => s - 1); }
-  saveDraft() { this.showToast('Draft saved!', 'success'); }
+  saveDraft() {
+    const payload = this.buildCampaignPayload('draft');
+    if (this.editingCampaignId) {
+      this.campaignApi.updateCampaign(this.editingCampaignId, payload).subscribe({
+        next: updated => {
+          this.campaigns = this.campaigns.map(c => c.id === updated.id ? updated : c);
+          this.showToast('Draft saved!', 'success');
+          this.cdr.detectChanges();
+        },
+        error: err => this.showToast(err.message || 'Could not save draft', 'warn'),
+      });
+      return;
+    }
+    this.campaignApi.createCampaign(payload).subscribe({
+      next: created => {
+        this.campaigns = [created, ...this.campaigns];
+        this.editingCampaignId = created.id;
+        this.showToast('Draft saved!', 'success');
+        this.cdr.detectChanges();
+      },
+      error: err => this.showToast(err.message || 'Could not save draft', 'warn'),
+    });
+  }
   sendTestToPhone() { this.showToast('Test email sent to your phone!', 'success'); }
 
-  saveNewsletter() { this.showToast('Newsletter schedule saved!', 'success'); }
+  saveNewsletter(schedule?: NewsletterScheduleLocal) {
+    const data = schedule ?? this.newsletter;
+    this.campaignApi.saveNewsletter(data).subscribe({
+      next: saved => {
+        this.newsletter = saved;
+        this.showToast('Newsletter schedule saved!', 'success');
+        this.cdr.detectChanges();
+      },
+      error: err => this.showToast(err.message || 'Could not save newsletter', 'warn'),
+    });
+  }
 
   // Campaign type helpers
   get selectedCampaignType(): CampaignTypeOption | null {
@@ -2629,15 +2674,18 @@ export class CampaignsComponent implements OnInit {
   }
 
   addCalendarEvent() {
-    const ev: CalendarEvent = {
-      id: Date.now().toString(),
+    this.campaignApi.createCalendarEvent({
       name: 'New Campaign',
       type: 'Book Launch',
-      date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       status: 'planned',
-    };
-    this.calendarEvents = [...this.calendarEvents, ev];
-    this.showToast('Campaign added to calendar', 'success');
+    }).subscribe({
+      next: ev => {
+        this.calendarEvents = [...this.calendarEvents, ev];
+        this.showToast('Campaign added to calendar', 'success');
+        this.cdr.detectChanges();
+      },
+      error: err => this.showToast(err.message || 'Could not add event', 'warn'),
+    });
   }
 
   createFromBaseline(bc: { type: string; description: string }) {
@@ -2666,23 +2714,31 @@ export class CampaignsComponent implements OnInit {
     this.newsletter.replyQuestion = this.replyQuestionExamples[index];
   }
 
+  createAbTest(payload: { subjectA: string; subjectB: string; testSize: number; winnerMetric: string; waitHours: number }) {
+    this.campaignApi.createAbTest(payload).subscribe({
+      next: test => {
+        this.abTests = [test, ...this.abTests];
+        this.showToast('A/B test saved!', 'success');
+        this.cdr.detectChanges();
+      },
+      error: err => this.showToast(err.message || 'Could not save A/B test', 'warn'),
+    });
+  }
+
+  /** Used by legacy hidden template block only */
   createABTest() { this.showABForm = true; this.abDraft = { subjectA: '', subjectB: '', testSize: 20, winnerMetric: 'opens', waitHours: 8 }; }
 
+  /** Used by legacy hidden template block only */
   saveABTest() {
     if (!this.abDraft.subjectA || !this.abDraft.subjectB) { this.showToast('Enter both subject lines', 'warn'); return; }
-    const test: ABTest = {
-      id: Date.now().toString(),
-      name: `A/B Test ${this.abTests.length + 1}`,
+    this.createAbTest({
       subjectA: this.abDraft.subjectA,
       subjectB: this.abDraft.subjectB,
       testSize: this.abDraft.testSize,
       winnerMetric: this.abDraft.winnerMetric,
       waitHours: this.abDraft.waitHours,
-      status: 'draft',
-    };
-    this.abTests = [test, ...this.abTests];
+    });
     this.showABForm = false;
-    this.showToast('A/B test saved!', 'success');
   }
 
   preflightChecks(): PreflightCheck[] {
@@ -2815,12 +2871,43 @@ export class CampaignsComponent implements OnInit {
   }
 
   sendCampaign() {
-    this.sendSuccess = true;
-    this.showToast(this.sendMode === 'now' ? 'Campaign sent successfully!' : 'Campaign scheduled!', 'success');
+    const schedule = this.sendMode === 'schedule';
+    const payload = this.buildCampaignPayload(schedule ? 'scheduled' : 'sent');
+
+    const onResult = (result: Campaign) => {
+      const existing = this.campaigns.findIndex(c => c.id === result.id);
+      if (existing >= 0) {
+        this.campaigns = this.campaigns.map(c => c.id === result.id ? result : c);
+      } else {
+        this.campaigns = [result, ...this.campaigns];
+      }
+      this.sendSuccess = true;
+      this.showToast(schedule ? 'Campaign scheduled!' : 'Campaign sent successfully!', 'success');
+      this.cdr.detectChanges();
+    };
+
+    if (this.editingCampaignId) {
+      this.campaignApi.updateCampaign(this.editingCampaignId, payload).subscribe({
+        next: () => {
+          this.campaignApi.sendCampaign(this.editingCampaignId!, schedule).subscribe({
+            next: onResult,
+            error: err => this.showToast(err.message || 'Could not send campaign', 'warn'),
+          });
+        },
+        error: err => this.showToast(err.message || 'Could not update campaign', 'warn'),
+      });
+      return;
+    }
+
+    this.campaignApi.createAndSend(payload, schedule).subscribe({
+      next: onResult,
+      error: err => this.showToast(err.message || 'Could not send campaign', 'warn'),
+    });
   }
 
   resetAndGoToList() {
     this.draft = { name: '', fromName: 'Jane Austen', subject: '', previewText: '', sendTo: 'all', content: '', scheduledAt: '', timezoneOptimized: true, campaignType: '', directStoreLink: '', amazonLink: '', arcTag: '', amazonReviewLink: '', appleBooksLink: '', koboLink: '', bnLink: '' };
+    this.editingCampaignId = null;
     this.currentStep.set(0);
     this.sendSuccess = false;
     this.sendMode = 'now';

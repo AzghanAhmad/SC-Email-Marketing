@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter } from '@angular/core';
+import { Component, Input, Output, EventEmitter, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { EmailService } from './email.service';
 
@@ -7,7 +7,7 @@ export interface MailFolder {
   label: string;
   icon: string;
   route: string;
-  count?: number;
+  count?: string;
 }
 
 @Component({
@@ -17,8 +17,7 @@ export interface MailFolder {
   template: `
     <div class="email-sidebar">
       <!-- Compose Button -->
-      <button class="compose-btn" (click)="onCompose.emit()"
-              data-tooltip="Create and send a new email">
+      <button class="compose-btn" (click)="onCompose.emit()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
         </svg>
@@ -27,31 +26,14 @@ export interface MailFolder {
 
       <!-- Folders -->
       <div class="folder-list">
-        <button *ngFor="let folder of folders"
+        <button *ngFor="let folder of folders()"
                 class="folder-item"
                 [class.active]="activeFolder === folder.id"
                 (click)="onFolderSelect.emit(folder.id)">
           <span class="folder-icon" [innerHTML]="folder.icon"></span>
           <span class="folder-label">{{ folder.label }}</span>
-          <span class="folder-count" *ngIf="folder.count && folder.count > 0">{{ folder.count }}</span>
+          <span class="folder-count" *ngIf="folder.count">{{ folder.count }}</span>
         </button>
-      </div>
-
-      <!-- Labels -->
-      <div class="labels-section">
-        <div class="labels-header">Labels</div>
-        <div class="label-item" *ngFor="let label of labels">
-          <span class="label-dot" [style.background]="label.color"></span>
-          <span class="label-text">{{ label.name }}</span>
-        </div>
-      </div>
-
-      <!-- Storage -->
-      <div class="storage-info">
-        <div class="storage-bar-track">
-          <div class="storage-bar-fill" style="width: 34%"></div>
-        </div>
-        <span class="storage-text">3.4 GB of 10 GB used</span>
       </div>
     </div>
   `,
@@ -149,61 +131,6 @@ export interface MailFolder {
       min-width: 20px;
       text-align: center;
     }
-
-    .labels-section {
-      margin-bottom: 1.5rem;
-    }
-    .labels-header {
-      font-size: .65rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: .06em;
-      color: var(--text-muted);
-      padding: .25rem .75rem .5rem;
-    }
-    .label-item {
-      display: flex;
-      align-items: center;
-      gap: .5rem;
-      padding: .4rem .75rem;
-      font-size: .78rem;
-      color: var(--text-secondary);
-      cursor: pointer;
-      border-radius: 8px;
-      transition: background .15s;
-    }
-    .label-item:hover { background: var(--bg-subtle); }
-    .label-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
-    .label-text { white-space: nowrap; }
-
-    .storage-info {
-      margin-top: auto;
-      padding: .75rem;
-      border-radius: 10px;
-      background: var(--bg-subtle);
-    }
-    .storage-bar-track {
-      height: 4px;
-      background: var(--border);
-      border-radius: 100px;
-      overflow: hidden;
-      margin-bottom: .5rem;
-    }
-    .storage-bar-fill {
-      height: 100%;
-      background: var(--gradient-accent);
-      border-radius: 100px;
-      transition: width .5s;
-    }
-    .storage-text {
-      font-size: .7rem;
-      color: var(--text-muted);
-    }
   `]
 })
 export class EmailSidebarComponent {
@@ -211,10 +138,9 @@ export class EmailSidebarComponent {
   @Output() onFolderSelect = new EventEmitter<string>();
   @Output() onCompose = new EventEmitter<void>();
 
-  constructor(private emailService: EmailService) {}
-
-  folders: MailFolder[] = [
+  private baseFolders: Omit<MailFolder, 'count'>[] = [
     { id: 'inbox', label: 'Inbox', route: '/email/inbox', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>' },
+    { id: 'all', label: 'All Mail', route: '/email/all', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><polyline points="3 7 12 13 21 7"/></svg>' },
     { id: 'sent', label: 'Sent', route: '/email/sent', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>' },
     { id: 'drafts', label: 'Drafts', route: '/email/drafts', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' },
     { id: 'scheduled', label: 'Scheduled', route: '/email/scheduled', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' },
@@ -222,20 +148,15 @@ export class EmailSidebarComponent {
     { id: 'trash', label: 'Trash', route: '/email/trash', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>' },
   ];
 
-  labels = [
-    { name: 'Important', color: '#ef4444' },
-    { name: 'Work', color: '#3b82f6' },
-    { name: 'Personal', color: '#10b981' },
-    { name: 'Updates', color: '#f59e0b' },
-  ];
+  folders = computed(() => {
+    const counts = this.emailService.folderCounts();
+    return this.baseFolders.map(folder => ({
+      ...folder,
+      count: folder.id === 'all'
+        ? EmailService.formatFolderCount(counts.all)
+        : EmailService.formatFolderCount(counts[folder.id as keyof typeof counts] ?? 0),
+    }));
+  });
 
-  get inboxCount(): number {
-    return this.emailService.unreadCount();
-  }
-
-  ngOnInit() {
-    // Set inbox count dynamically
-    const inboxFolder = this.folders.find(f => f.id === 'inbox');
-    if (inboxFolder) inboxFolder.count = this.inboxCount;
-  }
+  constructor(private emailService: EmailService) {}
 }

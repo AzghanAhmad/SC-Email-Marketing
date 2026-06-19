@@ -242,9 +242,9 @@ export class SignupComponent {
     this.isSubmitting.set(true);
     this.authService.register(this.name, this.email, this.password).subscribe({
       next: () => {
-        this.successMessage.set('Account created! Redirecting...');
+        this.successMessage.set('Account created! Connect your inbox in Settings, then explore your flows.');
         this.isSubmitting.set(false);
-        setTimeout(() => this.router.navigate(['/email/inbox']), 1500);
+        setTimeout(() => this.router.navigate(['/settings'], { queryParams: { tab: 'inbox' } }), 1500);
       },
       error: (err) => { this.generalError.set(err.message); this.isSubmitting.set(false); }
     });

@@ -11,17 +11,21 @@ import { Email } from './email.service';
       <!-- Action Bar -->
       <div class="view-actions">
         <div class="action-left">
+          <button class="action-btn primary"
+                  *ngIf="email && isEditable(email)"
+                  (click)="onEdit.emit()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            <span>Edit</span>
+          </button>
           <button class="action-btn"
                   [disabled]="!email"
-                  (click)="email && onReply.emit()"
-                  data-tooltip="Reply to this email">
+                  (click)="email && onReply.emit()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
             <span>Reply</span>
           </button>
           <button class="action-btn"
                   [disabled]="!email"
-                  (click)="email && onForward.emit()"
-                  data-tooltip="Forward this email">
+                  (click)="email && onForward.emit()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 17 20 12 15 7"/><path d="M4 18v-2a4 4 0 0 1 4-4h12"/></svg>
             <span>Forward</span>
           </button>
@@ -29,14 +33,12 @@ import { Email } from './email.service';
         <div class="action-right">
           <button class="action-btn"
                   [disabled]="!email"
-                  (click)="email && onMarkUnread.emit(email.id)"
-                  data-tooltip="Mark this email as unread">
+                  (click)="email && onMarkUnread.emit(email.id)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
           </button>
           <button class="action-btn danger"
                   [disabled]="!email"
-                  (click)="email && onDelete.emit(email.id)"
-                  data-tooltip="Move this email to trash">
+                  (click)="email && onDelete.emit(email.id)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
           </button>
         </div>
@@ -242,10 +244,14 @@ import { Email } from './email.service';
       color: var(--text-muted);
     }
     .action-btn svg { width: 15px; height: 15px; }
-    .view-actions [data-tooltip]::after {
-      top: 130%;
-      bottom: auto;
-      z-index: 500;
+    .action-btn.primary {
+      background: rgba(59, 130, 246, 0.1);
+      color: #2563eb;
+      border-color: #bfdbfe;
+    }
+    .action-btn.primary:hover {
+      background: rgba(59, 130, 246, 0.18);
+      color: #1d4ed8;
     }
     .action-btn.danger:hover {
       border-color: #fca5a5;
@@ -424,8 +430,14 @@ export class EmailViewComponent {
   @Input() email: Email | null = null;
   @Output() onReply = new EventEmitter<void>();
   @Output() onForward = new EventEmitter<void>();
+  @Output() onEdit = new EventEmitter<void>();
   @Output() onDelete = new EventEmitter<string>();
   @Output() onMarkUnread = new EventEmitter<string>();
+
+  isEditable(email: Email): boolean {
+    const folder = email.folder?.toLowerCase();
+    return folder === 'drafts' || folder === 'scheduled';
+  }
 
   getInitials(name: string): string {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);

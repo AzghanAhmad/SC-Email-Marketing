@@ -1,6 +1,7 @@
-﻿import { Component, OnInit, signal } from '@angular/core';
+﻿import { Component, OnInit, signal, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { MockDataService, Flow, FlowTemplate } from '../../core/services/mock-data.service';
+import { Flow, FlowTemplate } from '../../core/services/mock-data.service';
+import { FlowApiService } from '../../core/services/flow-api.service';
 import { FlowsHeaderComponent, FlowsTab } from './flows-header.component';
 import { FlowsGridComponent } from './flows-grid.component';
 import { FlowBuildingBlocksComponent } from './flow-building-blocks.component';
@@ -97,15 +98,34 @@ import { FlowConnectedBusinessComponent } from './flow-connected-business.compon
 export class FlowsComponent implements OnInit {
   flows: Flow[] = [];
   templates: FlowTemplate[] = [];
+  loading = signal(true);
+  loadError = signal('');
   selectedFlow = signal<Flow | null>(null);
   activeTab = signal<FlowsTab>('my-flows');
   walkthroughOpen = signal(false);
 
-  constructor(private mockData: MockDataService) {}
+  constructor(private flowApi: FlowApiService, private cdr: ChangeDetectorRef) {}
 
   ngOnInit() {
-    this.flows = this.mockData.getFlows();
-    this.templates = this.mockData.getFlowTemplates();
+    this.flowApi.getMyFlows().subscribe({
+      next: flows => {
+        this.flows = flows;
+        this.loading.set(false);
+        this.cdr.detectChanges();
+      },
+      error: err => {
+        this.loadError.set(err.message);
+        this.loading.set(false);
+        this.cdr.detectChanges();
+      }
+    });
+    this.flowApi.getTemplates().subscribe({
+      next: templates => {
+        this.templates = templates;
+        this.cdr.detectChanges();
+      },
+      error: () => { /* templates may still show empty */ }
+    });
   }
 
   openLibrary() {
@@ -113,20 +133,17 @@ export class FlowsComponent implements OnInit {
   }
 
   installTemplate(tpl: FlowTemplate) {
-    // Convert template to a live flow and add to My Flows
-    const newFlow: Flow = {
-      id: 'new-' + Date.now(),
-      name: tpl.name,
-      description: tpl.description,
-      status: 'draft',
-      triggers: 0,
-      steps: tpl.steps,
-      family: tpl.family,
-      goalExit: tpl.goalExit,
-      priority: tpl.priority,
-    };
-    this.flows = [newFlow, ...this.flows];
-    this.selectedFlow.set(newFlow);
-    this.activeTab.set('my-flows');
+    this.flowApi.installTemplate(tpl.id).subscribe({
+      next: newFlow => {
+        this.flows = [newFlow, ...this.flows];
+        this.selectedFlow.set(newFlow);
+        this.activeTab.set('my-flows');
+        this.cdr.detectChanges();
+      },
+      error: err => {
+        this.loadError.set(err.message);
+        this.cdr.detectChanges();
+      }
+    });
   }
 }

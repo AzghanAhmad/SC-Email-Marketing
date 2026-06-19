@@ -1,8 +1,7 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
-import { MockDataService } from '../../core/services/mock-data.service';
-import { DomSanitizer } from '@angular/platform-browser';
+import { DashboardApiService, DashboardData } from '../../core/services/dashboard-api.service';
 
 @Component({
   selector: 'app-dashboard',
@@ -16,7 +15,7 @@ import { DomSanitizer } from '@angular/platform-browser';
           <h1 class="welcome-title">Overview</h1>
           <p class="welcome-sub">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-            Customize this message with your name in Settings. <a routerLink="/settings" class="welcome-link">Update Profile</a>
+            Welcome back, {{ welcomeName }}. <a routerLink="/settings" class="welcome-link">Update Profile</a>
           </p>
         </div>
       </div>
@@ -36,15 +35,18 @@ import { DomSanitizer } from '@angular/platform-browser';
               Time period
             </button>
           </div>
-          <span class="conv-date-range">Mar 9, 2026 — Apr 8, 2026 compared to previous period</span>
+          <span class="conv-date-range">{{ periodStart }} — {{ periodEnd }} compared to previous period</span>
         </div>
       </div>
 
       <!-- Stats Cards -->
-      <div class="stats-grid">
-        <div class="stat-card anim-up d1" *ngFor="let stat of stats; let i = index">
-          <div class="stat-icon" [style.background]="stat.iconBg">
-            <span [innerHTML]="stat.safeIcon"></span>
+      <div class="stats-grid" *ngIf="!loading()">
+        <div class="stat-card anim-up d1" *ngFor="let stat of stats">
+          <div class="stat-icon" [style.color]="stat.color">
+            <svg *ngIf="stat.icon === 'subscribers'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <svg *ngIf="stat.icon === 'emails'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            <svg *ngIf="stat.icon === 'open-rate'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg *ngIf="stat.icon === 'revenue'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
           </div>
           <div class="stat-body">
             <span class="stat-value">{{ stat.value }}</span>
@@ -62,33 +64,40 @@ import { DomSanitizer } from '@angular/platform-browser';
           </div>
         </div>
       </div>
+      <div class="loading-state" *ngIf="loading()">Loading dashboard...</div>
 
-      <!-- Business Performance Summary -->
+      <ng-container *ngIf="!loading()">
       <div class="glass-card perf-summary anim-up d2">
         <div class="perf-header">
           <div>
             <h3 class="perf-title">Business Performance Summary</h3>
-            <p class="perf-period">Mar 9, 2026 — Apr 8, 2026</p>
+            <p class="perf-period">{{ performance.periodLabel }}</p>
           </div>
           <a routerLink="/marketing-analytics" class="btn-secondary btn-sm" data-tooltip="View full analytics dashboard">View Dashboard</a>
         </div>
         <div class="perf-kpi-row">
           <div class="perf-kpi">
-            <span class="pk-val">$4,280</span>
+            <span class="pk-val">{{ formatCurrency(performance.totalRevenue) }}</span>
             <span class="pk-label">Total Revenue</span>
-            <span class="pk-change">— 0% vs. previous period</span>
+            <span class="pk-change">— {{ performance.totalRevenueChange }}% vs. previous period</span>
           </div>
           <div class="perf-kpi">
-            <span class="pk-val">$1,840</span>
-            <span class="pk-label">Attributed Revenue (42.9% of total)</span>
-            <span class="pk-change">— +22.7% vs. previous period</span>
+            <span class="pk-val">{{ formatCurrency(performance.attributedRevenue) }}</span>
+            <span class="pk-label">Attributed Revenue</span>
+            <span class="pk-change">— {{ performance.attributedRevenueChange > 0 ? '+' : '' }}{{ performance.attributedRevenueChange }}% vs. previous period</span>
           </div>
         </div>
         <div class="attr-row">
           <h4 class="attr-title">Attributed Revenue</h4>
           <div class="attr-grid">
             <div class="attr-item" *ngFor="let a of attributionData">
-              <div class="attr-svg-icon" [innerHTML]="a.safeSvg"></div>
+              <div class="attr-svg-icon">
+                <svg *ngIf="a.icon === 'user'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                <svg *ngIf="a.icon === 'campaign'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                <svg *ngIf="a.icon === 'flow'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                <svg *ngIf="a.icon === 'email'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                <svg *ngIf="a.icon === 'cart'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+              </div>
               <span class="attr-label">{{ a.label }}</span>
               <span class="attr-val">{{ a.value }}</span>
               <span class="attr-pct">{{ a.pct }}</span>
@@ -168,9 +177,9 @@ import { DomSanitizer } from '@angular/platform-browser';
             </div>
           </div>
           <div class="growth-footer">
-            <span class="growth-current">{{ growthData[growthData.length-1].count | number }}</span>
+            <span class="growth-current">{{ growthData.length ? (growthData[growthData.length - 1].count | number) : '0' }}</span>
             <span class="growth-label">total subscribers</span>
-            <span class="growth-change up">+12.4% vs last period</span>
+            <span class="growth-change up">+{{ subscriberGrowthPct }}% vs last period</span>
           </div>
         </div>
       </div>
@@ -246,6 +255,7 @@ import { DomSanitizer } from '@angular/platform-browser';
           </div>
         </div>
       </div>
+      </ng-container>
     </div>
   `,
   styles: [`
@@ -274,8 +284,12 @@ import { DomSanitizer } from '@angular/platform-browser';
       box-shadow:0 1px 3px rgba(0,0,0,0.06);
     }
     .stat-card:hover { transform:translateY(-3px); box-shadow:0 8px 24px rgba(0,0,0,0.1); }
-    .stat-icon { width:46px; height:46px; border-radius:14px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-    .stat-icon :global(svg) { width:22px; height:22px; }
+    .stat-icon {
+      width:22px; height:22px; display:flex; align-items:center; justify-content:center;
+      flex-shrink:0; opacity:.9;
+    }
+    .stat-icon svg { width:22px; height:22px; }
+    .loading-state { padding:2rem; text-align:center; color:#64748b; font-size:.9rem; }
     .stat-body { flex:1; display:flex; flex-direction:column; }
     .stat-value { font-size:1.625rem; font-weight:800; color:#0f172a; letter-spacing:-.03em; line-height:1.1; }
     .stat-label { font-size:.75rem; font-weight:600; color:#64748b; text-transform:uppercase; letter-spacing:.06em; margin-top:.2rem; }
@@ -298,7 +312,7 @@ import { DomSanitizer } from '@angular/platform-browser';
     .attr-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:1rem; }
     .attr-item { display:flex; flex-direction:column; align-items:center; gap:.25rem; padding:.875rem; background:#f8fafc; border-radius:12px; border:1px solid #f1f5f9; }
     .attr-svg-icon { width:28px; height:28px; display:flex; align-items:center; justify-content:center; color:#64748b; }
-    .attr-svg-icon :global(svg) { width:18px; height:18px; }
+    .attr-svg-icon svg { width:18px; height:18px; }
     .attr-label { font-size:.72rem; font-weight:600; color:#64748b; text-align:center; }
     .attr-val { font-size:1.0625rem; font-weight:800; color:#0f172a; }
     .attr-pct { font-size:.7rem; color:#64748b; }
@@ -371,12 +385,17 @@ import { DomSanitizer } from '@angular/platform-browser';
   `]
 })
 export class DashboardComponent implements OnInit {
-  private sanitizer = inject(DomSanitizer);
+  loading = signal(true);
+  welcomeName = 'there';
+  periodStart = '';
+  periodEnd = '';
+  subscriberGrowthPct = 0;
 
-  stats: any[] = [];
-  campaignData: any[] = [];
-  growthData: any[] = [];
-  activity: any[] = [];
+  stats: { label: string; value: string; growth: number; icon: string; color: string; tooltip: string }[] = [];
+  performance = { totalRevenue: 0, totalRevenueChange: 0, attributedRevenue: 0, attributedRevenueChange: 0, periodLabel: '' };
+  campaignData: { label: string; sent: number; opened: number }[] = [];
+  growthData: { label: string; count: number }[] = [];
+  activity: { id: string; type: string; message: string; time: string; icon: string }[] = [];
   maxSent = 1;
   growthLinePoints = '';
   growthAreaPoints = '';
@@ -386,43 +405,48 @@ export class DashboardComponent implements OnInit {
   svgW = 400;
   svgH = 160;
 
-  attributionData: any[] = [];
+  attributionData: { label: string; value: string; pct: string; icon: string }[] = [];
 
-  constructor(private mockData: MockDataService) {
-    const rawAttribution = [
-      { label: 'Per Recipient', value: '$0.17', pct: '', svgIcon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>' },
-      { label: 'Campaigns', value: '$2,870', pct: '67.1%', svgIcon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>' },
-      { label: 'Flows', value: '$1,020', pct: '23.8%', svgIcon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>' },
-      { label: 'Email', value: '$3,890', pct: '90.9%', svgIcon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>' },
-      { label: 'Direct Sales', value: '$390', pct: '9.1%', svgIcon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>' },
-    ];
-    this.attributionData = rawAttribution.map(a => ({
-      ...a,
-      safeSvg: this.sanitizer.bypassSecurityTrustHtml(a.svgIcon)
-    }));
-  }
+  constructor(private dashboardApi: DashboardApiService) {}
 
   ngOnInit() {
-    const s = this.mockData.getDashboardStats();
-    this.stats = [
-      { label:'Total Subscribers', value: s.totalSubscribers.toLocaleString(), growth: s.subscriberGrowth, iconBg:'rgba(59,130,246,0.1)', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>', tooltip:'Total active subscribers on your list' },
-      { label:'Emails Sent', value: s.emailsSent.toLocaleString(), growth: s.emailsGrowth, iconBg:'rgba(99,102,241,0.1)', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>', tooltip:'Total emails sent this month' },
-      { label:'Open Rate', value: s.openRate + '%', growth: s.openRateGrowth, iconBg:'rgba(16,185,129,0.1)', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>', tooltip:'Percentage of emails opened by recipients' },
-      { label:'Revenue', value: '$' + s.revenue.toLocaleString(), growth: s.revenueGrowth, iconBg:'rgba(245,158,11,0.1)', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>', tooltip:'Estimated revenue attributed to email campaigns' },
-    ].map(stat => ({
-      ...stat,
-      safeIcon: this.sanitizer.bypassSecurityTrustHtml(stat.icon)
-    }));
+    this.dashboardApi.getDashboard().subscribe({
+      next: (data) => this.applyDashboard(data),
+      error: () => this.loading.set(false)
+    });
+  }
 
-    this.campaignData = this.mockData.getCampaignChartData();
-    this.maxSent = Math.max(...this.campaignData.map(d => d.sent));
-    this.growthData = this.mockData.getSubscriberGrowthData();
-    this.activity = this.mockData.getRecentActivity();
+  private applyDashboard(data: DashboardData) {
+    const s = data.stats;
+    this.welcomeName = data.welcomeName;
+    this.periodStart = data.periodStart;
+    this.periodEnd = data.periodEnd;
+    this.subscriberGrowthPct = s.subscriberGrowth;
+    this.performance = data.performance;
+
+    this.stats = [
+      { label: 'Total Subscribers', value: s.totalSubscribers.toLocaleString(), growth: s.subscriberGrowth, icon: 'subscribers', color: '#3b82f6', tooltip: 'Total active subscribers on your list' },
+      { label: 'Emails Sent', value: s.emailsSent.toLocaleString(), growth: s.emailsGrowth, icon: 'emails', color: '#6366f1', tooltip: 'Total emails sent this period' },
+      { label: 'Open Rate', value: s.openRate + '%', growth: s.openRateGrowth, icon: 'open-rate', color: '#059669', tooltip: 'Percentage of emails opened by recipients' },
+      { label: 'Revenue', value: '$' + s.revenue.toLocaleString(), growth: s.revenueGrowth, icon: 'revenue', color: '#d97706', tooltip: 'Estimated revenue attributed to email campaigns' },
+    ];
+
+    this.attributionData = data.attribution;
+    this.campaignData = data.campaignChart;
+    this.maxSent = Math.max(...this.campaignData.map(d => d.sent), 1);
+    this.growthData = data.growthChart;
+    this.activity = data.recentActivity;
     this.buildGrowthChart();
+    this.loading.set(false);
+  }
+
+  formatCurrency(value: number): string {
+    return '$' + value.toLocaleString(undefined, { maximumFractionDigits: 0 });
   }
 
   buildGrowthChart() {
     const data = this.growthData;
+    if (!data.length) return;
     const max = Math.max(...data.map(d => d.count));
     const min = Math.min(...data.map(d => d.count));
     const padded_min = Math.floor(min / 1000) * 1000;
@@ -445,7 +469,7 @@ export class DashboardComponent implements OnInit {
     }
 
     const pts = data.map((d, i) => ({
-      x: PAD_L + (i / (data.length - 1)) * chartW,
+      x: PAD_L + (data.length === 1 ? chartW / 2 : (i / (data.length - 1)) * chartW),
       y: PAD_T + (1 - (d.count - padded_min) / range) * chartH
     }));
     this.growthDots = pts;

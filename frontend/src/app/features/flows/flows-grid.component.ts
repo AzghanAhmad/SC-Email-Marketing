@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, OnChanges } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnChanges, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Flow } from '../../core/services/mock-data.service';
 import { FlowCardComponent } from './flow-card.component';
@@ -129,7 +129,7 @@ type FamilyFilter = 'all' | 'onboarding' | 'transaction' | 'launch' | 'retention
     .btn-ghost-sm:hover { border-color: #93c5fd; color: #3b82f6; background: #eff6ff; }
   `]
 })
-export class FlowsGridComponent implements OnChanges {
+export class FlowsGridComponent implements OnChanges, OnInit {
   @Input() flows: Flow[] = [];
   @Output() onOpenFlow = new EventEmitter<Flow>();
   @Output() onBrowseLibrary = new EventEmitter<void>();
@@ -144,6 +144,8 @@ export class FlowsGridComponent implements OnChanges {
     { id: 'launch', label: 'Launch' },
     { id: 'retention', label: 'Retention' },
   ];
+
+  ngOnInit() { this.applyFilter(); }
 
   ngOnChanges() { this.applyFilter(); }
 

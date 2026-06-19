@@ -1,4 +1,4 @@
-import { Component, Output, EventEmitter } from '@angular/core';
+import { Component, Output, EventEmitter, Input, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
@@ -170,14 +170,21 @@ interface ABTest {
     @media(max-width:700px) { .ab-variants { grid-template-columns:1fr; } .ab-vs { display:none; } .form-row-2 { grid-template-columns:1fr; } }
   `]
 })
-export class CampaignAbTestComponent {
+export class CampaignAbTestComponent implements OnChanges {
+  @Input() abTests: ABTest[] = [];
   @Output() onToast = new EventEmitter<{message: string; type: 'success'|'warn'}>();
+  @Output() onCreateAbTest = new EventEmitter<{
+    subjectA: string; subjectB: string; testSize: number; winnerMetric: string; waitHours: number;
+  }>();
+
+  ngOnChanges(changes: SimpleChanges) {
+    if (changes['abTests'] && changes['abTests'].currentValue) {
+      this.abTests = [...changes['abTests'].currentValue];
+    }
+  }
 
   showABForm = false;
   abDraft = { subjectA: '', subjectB: '', testSize: 20, winnerMetric: 'opens' as 'opens'|'clicks', waitHours: 8 };
-  abTests: ABTest[] = [
-    { id: '1', name: 'March Newsletter', subjectA: 'The research that changed my book', subjectB: 'March Newsletter — writing update + picks', testSize: 20, winnerMetric: 'opens', waitHours: 8, status: 'complete', openRateA: 58.4, openRateB: 49.1, winner: 'A' }
-  ];
 
   readonly howItWorks = [
     { num: '1', title: 'Write two subject lines', desc: 'Try a curiosity-driven version vs. a direct one, or test whether first-name personalization improves opens' },
@@ -194,8 +201,13 @@ export class CampaignAbTestComponent {
     if (!this.abDraft.subjectA || !this.abDraft.subjectB) {
       this.onToast.emit({ message: 'Enter both subject lines', type: 'warn' }); return;
     }
-    this.abTests = [{ id: Date.now().toString(), name: `A/B Test ${this.abTests.length + 1}`, ...this.abDraft, status: 'draft' }, ...this.abTests];
+    this.onCreateAbTest.emit({
+      subjectA: this.abDraft.subjectA,
+      subjectB: this.abDraft.subjectB,
+      testSize: this.abDraft.testSize,
+      winnerMetric: this.abDraft.winnerMetric,
+      waitHours: this.abDraft.waitHours,
+    });
     this.showABForm = false;
-    this.onToast.emit({ message: 'A/B test saved!', type: 'success' });
   }
 }

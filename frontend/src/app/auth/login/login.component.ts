@@ -1,7 +1,7 @@
 import { Component, signal, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterModule } from '@angular/router';
+import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 
 @Component({
@@ -234,7 +234,11 @@ export class LoginComponent {
   generalError = signal('');
   errors = signal<{ email?: string; password?: string }>({});
 
-  constructor(private authService: AuthService, private router: Router) {}
+  constructor(
+    private authService: AuthService,
+    private router: Router,
+    private route: ActivatedRoute
+  ) {}
 
   @HostListener('window:scroll')
   onScroll() { this.navScrolled = window.scrollY > 40; }
@@ -253,7 +257,13 @@ export class LoginComponent {
     this.isSubmitting.set(true);
     this.generalError.set('');
     this.authService.login(this.email, this.password).subscribe({
-      next: () => this.router.navigate(['/email/inbox']),
+      next: () => {
+        const returnUrl = this.route.snapshot.queryParamMap.get('returnUrl');
+        const target = returnUrl && returnUrl.startsWith('/') && !returnUrl.startsWith('//')
+          ? returnUrl
+          : '/email/inbox';
+        this.router.navigateByUrl(target);
+      },
       error: (err) => { this.generalError.set(err.message); this.isSubmitting.set(false); }
     });
   }

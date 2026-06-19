@@ -1,6 +1,7 @@
 import { Component, Output, EventEmitter, Input, OnChanges, OnInit, SimpleChanges, ViewChild, ElementRef, ChangeDetectorRef, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ComposePayload, EmailAttachment } from './email.service';
 
 @Component({
   selector: 'app-compose-modal',
@@ -8,13 +9,17 @@ import { FormsModule } from '@angular/forms';
   imports: [CommonModule, FormsModule],
   template: `
     <!-- Backdrop -->
-    <div class="compose-backdrop" (click)="onClose.emit()"></div>
+    <div class="compose-backdrop" (click)="close()"></div>
 
     <!-- Modal -->
     <div class="compose-modal">
+      <div class="sending-status" *ngIf="isBusy" role="status" aria-live="polite">
+        <span class="sending-spinner" aria-hidden="true"></span>
+        {{ busyMessage }}
+      </div>
       <div class="compose-header">
         <h2 class="compose-title">{{ composeTitle || 'New Message' }}</h2>
-        <button class="compose-close" (click)="onClose.emit()">
+        <button class="compose-close" [disabled]="isBusy" (click)="close()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
           </svg>
@@ -56,12 +61,19 @@ import { FormsModule } from '@angular/forms';
         <!-- Message -->
         <div class="compose-field compose-message-field">
           <label class="compose-label">Message</label>
-          <textarea #messageInput class="compose-textarea" placeholder="Write your message..."
-                    [(ngModel)]="body"></textarea>
+          <div #messageEditor
+               class="compose-editor user-editor"
+               contenteditable="true"
+               role="textbox"
+               aria-multiline="true"
+               data-placeholder="Write your message..."
+               (input)="onEditorInput()"
+               (blur)="syncBodyFromEditor()"></div>
+          <div *ngIf="quotedHtml" class="quoted-original" [innerHTML]="quotedHtml"></div>
         </div>
 
         <!-- Pre-Send Score Check -->
-        <div class="score-check" *ngIf="body.length > 20">
+        <div class="score-check" *ngIf="getPlainBody().length > 20">
           <div class="score-header" (click)="showScorePanel = !showScorePanel">
             <div class="score-left">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
@@ -98,22 +110,33 @@ import { FormsModule } from '@angular/forms';
 
         <!-- Formatting Toolbar -->
         <div class="compose-toolbar">
-          <button class="toolbar-btn" title="Bold" (click)="applyFormat('bold')">
+          <button type="button" class="toolbar-btn" (mousedown)="$event.preventDefault()" (click)="applyFormat('bold')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14">
               <path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/><path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/>
             </svg>
           </button>
-          <button class="toolbar-btn" title="Italic" (click)="applyFormat('italic')">
+          <button type="button" class="toolbar-btn" (mousedown)="$event.preventDefault()" (click)="applyFormat('italic')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
               <line x1="19" y1="4" x2="10" y2="4"/><line x1="14" y1="20" x2="5" y2="20"/><line x1="15" y1="4" x2="9" y2="20"/>
             </svg>
           </button>
-          <button class="toolbar-btn" title="Link" (click)="insertLink()">
+          <button type="button" class="toolbar-btn" (mousedown)="$event.preventDefault()" (click)="insertLink()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
               <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
             </svg>
           </button>
-          <button class="toolbar-btn" title="Attach file" (click)="fileInput.click()">
+          <button type="button" class="toolbar-btn" (mousedown)="$event.preventDefault()" (click)="applyFormat('underline')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+              <path d="M6 3v7a6 6 0 0 0 12 0V3"/><line x1="4" y1="21" x2="20" y2="21"/>
+            </svg>
+          </button>
+          <button type="button" class="toolbar-btn" (mousedown)="$event.preventDefault()" (click)="applyFormat('insertUnorderedList')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+              <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+              <circle cx="4" cy="6" r="1" fill="currentColor"/><circle cx="4" cy="12" r="1" fill="currentColor"/><circle cx="4" cy="18" r="1" fill="currentColor"/>
+            </svg>
+          </button>
+          <button type="button" class="toolbar-btn" (click)="fileInput.click()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
               <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
             </svg>
@@ -123,35 +146,43 @@ import { FormsModule } from '@angular/forms';
 
         <div class="attachments-list" *ngIf="attachments.length > 0">
           <div class="attachment-chip" *ngFor="let att of attachments; let i = index">
-            <span class="att-name">{{ att }}</span>
-            <button class="remove-att" (click)="removeAttachment(i)" title="Remove attachment">×</button>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+            </svg>
+            <span class="att-name">{{ att.name }}</span>
+            <span class="att-size">{{ att.size }}</span>
+            <button type="button" class="remove-att" (click)="removeAttachment(i)">×</button>
           </div>
         </div>
       </div>
 
+      <div class="send-error" *ngIf="sendError">{{ sendError }}</div>
+
       <div class="compose-footer">
         <div class="footer-left">
-          <button class="btn-primary" (click)="send()" data-tooltip="Send this email now">
+          <button class="btn-primary" [disabled]="isBusy" (click)="send()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
               <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
             </svg>
-            Send
+            {{ isBusy && actionType === 'send' ? 'Sending…' : 'Send' }}
           </button>
-          <button class="btn-secondary btn-sm" (click)="saveDraft()">
+          <button class="btn-secondary btn-sm" [disabled]="isBusy" (click)="saveDraft()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
               <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
               <polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
             </svg>
-            Save Draft
+            {{ editingMessageId ? 'Save changes' : 'Save Draft' }}
           </button>
         </div>
-        <button class="btn-ghost btn-sm schedule-btn" (click)="schedule()"
-                data-tooltip="Schedule this email to send later (mock)">
+        <div class="footer-right">
+          <input type="datetime-local" class="schedule-input" [(ngModel)]="scheduledAtLocal" [min]="minScheduleAt" [disabled]="isBusy">
+          <button class="btn-ghost btn-sm schedule-btn" [disabled]="isBusy" (click)="schedule()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
             <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
           </svg>
           Schedule
-        </button>
+          </button>
+        </div>
       </div>
     </div>
   `,
@@ -249,9 +280,11 @@ import { FormsModule } from '@angular/forms';
     .compose-input::placeholder { color: var(--text-muted); }
 
     .compose-message-field { flex: 1; }
-    .compose-textarea {
+    .compose-editor {
       flex: 1;
       min-height: 180px;
+      max-height: 320px;
+      overflow-y: auto;
       padding: .875rem 1rem;
       background: var(--bg);
       border: 1.5px solid var(--border);
@@ -261,15 +294,48 @@ import { FormsModule } from '@angular/forms';
       color: var(--text-primary);
       outline: none;
       transition: all .2s;
-      resize: vertical;
       line-height: 1.6;
     }
-    .compose-textarea:focus {
+    .compose-editor:focus {
       border-color: #3b82f6;
       box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
       background: var(--surface);
     }
-    .compose-textarea::placeholder { color: var(--text-muted); }
+    .compose-editor:empty::before {
+      content: attr(data-placeholder);
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+    .compose-editor :global(ul),
+    .compose-editor :global(ol) {
+      padding-left: 1.25rem;
+      margin: .5rem 0;
+    }
+    .compose-editor :global(a) { color: #2563eb; }
+    .quoted-original {
+      margin-top: .75rem;
+      padding: .875rem 1rem;
+      border-radius: var(--radius-sm);
+      border-left: 3px solid #cbd5e1;
+      background: #f8fafc;
+      color: #64748b;
+      font-size: .8125rem;
+      line-height: 1.65;
+      max-height: 220px;
+      overflow-y: auto;
+    }
+    .quoted-original :global(.quote-line) {
+      margin: 0 0 .35rem;
+    }
+    .quoted-original :global(.quote-body) {
+      margin: .5rem 0 0;
+      padding-left: .75rem;
+      border-left: 2px solid #e2e8f0;
+      color: #475569;
+    }
+    .quoted-original :global(.quote-body p) {
+      margin: 0 0 .5rem;
+    }
 
     .label-row {
       display: flex;
@@ -441,10 +507,14 @@ import { FormsModule } from '@angular/forms';
       max-width: 100%;
     }
     .att-name {
-      max-width: 180px;
+      max-width: 140px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+    .att-size {
+      font-size: .65rem;
+      opacity: .75;
     }
     .remove-att {
       border: none;
@@ -472,6 +542,60 @@ import { FormsModule } from '@angular/forms';
     .schedule-btn {
       gap: .375rem !important;
     }
+    .footer-right {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+    }
+    .schedule-input {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: .35rem .55rem;
+      font-size: .75rem;
+      font-family: inherit;
+      color: var(--text-secondary);
+      background: var(--surface);
+    }
+    .send-error {
+      margin: 0 1.5rem .75rem;
+      padding: .55rem .75rem;
+      border-radius: 8px;
+      background: #fef2f2;
+      color: #b91c1c;
+      font-size: .78rem;
+    }
+    .sending-status {
+      display: flex;
+      align-items: center;
+      gap: .625rem;
+      margin: 0 1.5rem;
+      padding: .65rem .85rem;
+      border-radius: 8px;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      color: #1d4ed8;
+      font-size: .8125rem;
+      font-weight: 500;
+    }
+    .sending-spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid #93c5fd;
+      border-top-color: #1d4ed8;
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .btn-primary:disabled,
+    .btn-secondary:disabled,
+    .btn-ghost:disabled,
+    .compose-close:disabled {
+      opacity: .6;
+      cursor: not-allowed;
+    }
 
     @keyframes modalFadeUp {
       from {
@@ -495,6 +619,12 @@ export class ComposeModalComponent implements OnChanges, OnInit, AfterViewInit {
   @Input() initialTo = '';
   @Input() initialSubject = '';
   @Input() initialBody = '';
+  @Input() initialQuotedHtml = '';
+  @Input() initialAttachments: EmailAttachment[] = [];
+  @Input() editingMessageId: string | null = null;
+  @Input() initialScheduledAt = '';
+  @Input() actionBusy = false;
+  @Input() openSession = 0;
   private _composeTitle = 'New Message';
 
   @Input()
@@ -506,17 +636,39 @@ export class ComposeModalComponent implements OnChanges, OnInit, AfterViewInit {
     this.cdr.detectChanges();
   }
   @Output() onClose = new EventEmitter<void>();
-  @Output() onSend = new EventEmitter<{ to: string; subject: string; body: string }>();
-  @Output() onSaveDraft = new EventEmitter<{ to: string; subject: string; body: string }>();
-  @Output() onSchedule = new EventEmitter<{ to: string; subject: string; body: string }>();
-  @ViewChild('messageInput') messageInput!: ElementRef<HTMLTextAreaElement>;
+  @Output() onSend = new EventEmitter<ComposePayload>();
+  @Output() onSaveDraft = new EventEmitter<ComposePayload>();
+  @Output() onSchedule = new EventEmitter<ComposePayload>();
+  @ViewChild('messageEditor') messageEditor!: ElementRef<HTMLDivElement>;
 
   to = '';
   subject = '';
   previewText = '';
   body = '';
-  attachments: string[] = [];
+  quotedHtml = '';
+  scheduledAtLocal = '';
+  sendError = '';
+  attachments: EmailAttachment[] = [];
+  attachmentsLoading = 0;
+  actionType: 'send' | 'draft' | 'schedule' | null = null;
+  busyMessage = '';
   showScorePanel = false;
+  private readonly maxAttachmentBytes = 10 * 1024 * 1024;
+
+  get isBusy(): boolean {
+    return this.actionBusy || this.actionType !== null;
+  }
+
+  close() {
+    if (this.isBusy) return;
+    this.onClose.emit();
+  }
+
+  get minScheduleAt(): string {
+    const d = new Date();
+    d.setMinutes(d.getMinutes() + 5);
+    return this.toLocalInputValue(d);
+  }
 
   scoreCategories = [
     { name: 'Content', desc: 'Spam trigger words & formatting', score: 92 },
@@ -531,11 +683,12 @@ export class ComposeModalComponent implements OnChanges, OnInit, AfterViewInit {
 
   get scoreTips(): string[] {
     const tips: string[] = [];
+    const plainBody = this.getPlainBody();
     if (this.subject.length > 60) tips.push('Subject line exceeds 60 characters — may be truncated on mobile devices.');
-    if (this.subject.length === 0 && this.body.length > 0) tips.push('Add a subject line before sending.');
+    if (this.subject.length === 0 && plainBody.length > 0) tips.push('Add a subject line before sending.');
     if (!this.previewText) tips.push('Adding preview text improves open rates — it appears next to your subject in the inbox.');
-    if (/!{2,}/.test(this.subject) || /!{2,}/.test(this.body)) tips.push('Multiple exclamation marks may trigger spam filters.');
-    if (/FREE|GUARANTEED|ACT NOW|LIMITED TIME/i.test(this.body)) tips.push('Some phrases in your message may trigger spam filters.');
+    if (/!{2,}/.test(this.subject) || /!{2,}/.test(plainBody)) tips.push('Multiple exclamation marks may trigger spam filters.');
+    if (/FREE|GUARANTEED|ACT NOW|LIMITED TIME/i.test(plainBody)) tips.push('Some phrases in your message may trigger spam filters.');
     return tips;
   }
 
@@ -545,55 +698,158 @@ export class ComposeModalComponent implements OnChanges, OnInit, AfterViewInit {
   }
 
   ngAfterViewInit(): void {
+    this.setEditorHtml(this.quotedHtml ? '' : this.initialBody);
+    if (!this.initialScheduledAt) {
+      this.defaultScheduleTime();
+    }
     this.cdr.detectChanges();
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['initialTo'] || changes['initialSubject'] || changes['initialBody']) {
+    if (changes['actionBusy'] && !this.actionBusy) {
+      this.actionType = null;
+      this.busyMessage = '';
+    }
+    if (changes['initialTo'] || changes['initialSubject'] || changes['initialBody']
+        || changes['initialQuotedHtml'] || changes['initialAttachments'] || changes['editingMessageId']
+        || changes['initialScheduledAt'] || changes['openSession']) {
       this.syncFromInputs();
+      setTimeout(() => this.setEditorHtml(this.quotedHtml ? '' : this.initialBody));
       this.cdr.detectChanges();
     }
   }
 
+  onEditorInput() {
+    this.syncBodyFromEditor();
+    this.recalculateScore();
+  }
+
   send() {
-    if (!this.to.trim() || !this.subject.trim()) return;
-    this.onSend.emit({ to: this.to, subject: this.subject, body: this.body });
+    if (this.isBusy) return;
+    this.sendError = '';
+    this.syncBodyFromEditor();
+    if (!this.to.trim() || !this.subject.trim()) {
+      this.sendError = 'Recipient and subject are required.';
+      return;
+    }
+    if (!this.getPlainBody().trim()) {
+      this.sendError = 'Message body is required.';
+      return;
+    }
+    if (!this.attachmentsReady(true)) return;
+    this.actionType = 'send';
+    this.busyMessage = 'Sending email, please wait…';
+    this.onSend.emit(this.buildPayload());
   }
 
   saveDraft() {
-    this.onSaveDraft.emit({ to: this.to, subject: this.subject, body: this.body });
+    if (this.isBusy) return;
+    this.sendError = '';
+    this.syncBodyFromEditor();
+    if (!this.attachmentsReady(false)) return;
+    this.actionType = 'draft';
+    this.busyMessage = 'Saving draft, please wait…';
+    this.onSaveDraft.emit(this.buildPayload());
   }
 
   schedule() {
-    if (!this.to.trim() || !this.subject.trim()) return;
-    this.onSchedule.emit({ to: this.to, subject: this.subject, body: this.body });
+    if (this.isBusy) return;
+    this.sendError = '';
+    this.syncBodyFromEditor();
+    if (!this.to.trim() || !this.subject.trim()) {
+      this.sendError = 'Recipient and subject are required.';
+      return;
+    }
+    if (!this.getPlainBody().trim()) {
+      this.sendError = 'Message body is required.';
+      return;
+    }
+    if (!this.attachmentsReady(false)) return;
+    this.actionType = 'schedule';
+    this.busyMessage = 'Scheduling email, please wait…';
+    this.onSchedule.emit(this.buildPayload());
   }
 
-  applyFormat(type: 'bold' | 'italic') {
-    const textarea = this.messageInput?.nativeElement;
-    if (!textarea) return;
-    const start = textarea.selectionStart ?? this.body.length;
-    const end = textarea.selectionEnd ?? this.body.length;
-    const selected = this.body.slice(start, end) || 'text';
-    const wrapped = type === 'bold' ? `**${selected}**` : `*${selected}*`;
-    this.body = this.body.slice(0, start) + wrapped + this.body.slice(end);
+  private attachmentsReady(requireFileData: boolean): boolean {
+    if (this.attachmentsLoading > 0) {
+      this.sendError = 'Please wait — attachments are still loading.';
+      return false;
+    }
+    if (requireFileData) {
+      const missing = this.attachments.filter(a => !a.contentBase64);
+      if (missing.length > 0) {
+        this.sendError = 'Please wait for attachments to finish loading, or re-attach your files.';
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private buildPayload(): ComposePayload {
+    const scheduledAt = this.scheduledAtLocal
+      ? new Date(this.scheduledAtLocal)
+      : new Date(Date.now() + 60 * 60 * 1000);
+    return {
+      to: this.to.trim(),
+      subject: this.subject.trim(),
+      body: this.buildFullBody(),
+      attachments: [...this.attachments],
+      scheduledAt,
+      messageId: this.editingMessageId ?? undefined,
+    };
+  }
+
+  applyFormat(command: 'bold' | 'italic' | 'underline' | 'insertUnorderedList') {
+    const editor = this.messageEditor?.nativeElement;
+    if (!editor) return;
+    editor.focus();
+    document.execCommand(command, false);
+    this.syncBodyFromEditor();
+    this.recalculateScore();
   }
 
   insertLink() {
-    const textarea = this.messageInput?.nativeElement;
-    if (!textarea) return;
-    const start = textarea.selectionStart ?? this.body.length;
-    const end = textarea.selectionEnd ?? this.body.length;
-    const selected = this.body.slice(start, end) || 'link text';
-    const value = `[${selected}](https://example.com)`;
-    this.body = this.body.slice(0, start) + value + this.body.slice(end);
+    const editor = this.messageEditor?.nativeElement;
+    if (!editor) return;
+    const url = window.prompt('Enter link URL', 'https://');
+    if (!url?.trim()) return;
+    editor.focus();
+    document.execCommand('createLink', false, url.trim());
+    this.syncBodyFromEditor();
+    this.recalculateScore();
   }
 
   onAttachFiles(event: Event) {
     const input = event.target as HTMLInputElement;
     const files = Array.from(input.files || []);
-    this.attachments.push(...files.map(file => file.name));
     input.value = '';
+    for (const file of files) {
+      if (file.size > this.maxAttachmentBytes) {
+        this.sendError = `"${file.name}" is too large. Max size is 10 MB per file.`;
+        continue;
+      }
+      this.attachmentsLoading++;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        const base64 = result.includes(',') ? result.split(',')[1] : result;
+        this.attachments.push({
+          name: file.name,
+          size: this.formatFileSize(file.size),
+          type: this.fileTypeFromName(file.name),
+          contentBase64: base64,
+        });
+        this.attachmentsLoading--;
+        this.sendError = '';
+        this.cdr.detectChanges();
+      };
+      reader.onerror = () => {
+        this.attachmentsLoading--;
+        this.sendError = `Could not read "${file.name}".`;
+        this.cdr.detectChanges();
+      };
+      reader.readAsDataURL(file);
+    }
   }
 
   removeAttachment(index: number) {
@@ -603,20 +859,92 @@ export class ComposeModalComponent implements OnChanges, OnInit, AfterViewInit {
   private syncFromInputs() {
     this.to = this.initialTo || '';
     this.subject = this.initialSubject || '';
-    this.body = this.initialBody || '';
+    this.body = '';
+    this.quotedHtml = this.initialQuotedHtml || '';
+    this.attachments = [...(this.initialAttachments || [])];
+    if (this.initialScheduledAt) {
+      this.scheduledAtLocal = this.initialScheduledAt;
+    }
     this.previewText = '';
     this.attachments = [];
     this.showScorePanel = false;
+    this.sendError = '';
+    this.defaultScheduleTime();
     this.recalculateScore();
   }
 
+  private defaultScheduleTime() {
+    const d = new Date();
+    d.setHours(d.getHours() + 1);
+    d.setMinutes(0, 0, 0);
+    this.scheduledAtLocal = this.toLocalInputValue(d);
+  }
+
+  syncBodyFromEditor() {
+    this.body = this.buildFullBody();
+  }
+
+  getPlainBody(): string {
+    const editor = this.messageEditor?.nativeElement;
+    return (editor?.textContent || editor?.innerText || '').trim();
+  }
+
+  private buildFullBody(): string {
+    const editor = this.messageEditor?.nativeElement;
+    const userHtml = editor?.innerHTML.trim() ?? '';
+    if (!this.quotedHtml) return userHtml;
+    if (!userHtml) return this.quotedHtml;
+    return `${userHtml}<br><br>${this.quotedHtml}`;
+  }
+
+  private setEditorHtml(value: string) {
+    const editor = this.messageEditor?.nativeElement;
+    if (!editor) return;
+    if (value && /<[a-z][\s\S]*>/i.test(value)) {
+      editor.innerHTML = value;
+    } else {
+      editor.innerHTML = value ? this.toEditorHtml(value) : '';
+    }
+    this.body = this.buildFullBody();
+  }
+
+  private formatFileSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  private fileTypeFromName(name: string): string {
+    const ext = name.split('.').pop()?.toLowerCase() ?? 'file';
+    if (['pdf'].includes(ext)) return 'pdf';
+    if (['doc', 'docx'].includes(ext)) return 'docx';
+    if (['xls', 'xlsx'].includes(ext)) return 'xlsx';
+    if (['zip', 'rar', '7z'].includes(ext)) return 'zip';
+    if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'fig'].includes(ext)) return ext;
+    return ext;
+  }
+
+  private toEditorHtml(text: string): string {
+    if (!text) return '';
+    if (/<[a-z][\s\S]*>/i.test(text)) return text;
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/\n/g, '<br>');
+  }
+
+  private toLocalInputValue(date: Date): string {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  }
+
   private recalculateScore() {
-    // Simulate dynamic score based on content
-    const hasBody = this.body.length > 20;
+    const plainBody = this.getPlainBody();
+    const hasBody = plainBody.length > 20;
     const hasSubject = this.subject.length > 0;
-    const shortSubject = this.subject.length <= 60;
-    const noSpamWords = !/FREE|GUARANTEED|ACT NOW|LIMITED TIME|CLICK HERE/i.test(this.body + ' ' + this.subject);
-    const noExcessPunctuation = !/!{3,}|\${2,}|[A-Z]{10,}/.test(this.body + ' ' + this.subject);
+    const noSpamWords = !/FREE|GUARANTEED|ACT NOW|LIMITED TIME|CLICK HERE/i.test(plainBody + ' ' + this.subject);
+    const noExcessPunctuation = !/!{3,}|\${2,}|[A-Z]{10,}/.test(plainBody + ' ' + this.subject);
 
     this.scoreCategories = [
       { name: 'Content', desc: 'Spam trigger words & formatting', score: noSpamWords && noExcessPunctuation ? 95 : (noSpamWords ? 78 : 55) },

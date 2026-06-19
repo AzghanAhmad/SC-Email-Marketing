@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, OnChanges } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnChanges, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FlowTemplate } from '../../core/services/mock-data.service';
 
@@ -258,6 +258,8 @@ export class FlowLibraryComponent implements OnChanges {
     { id: 'launch', label: 'Launch' },
     { id: 'retention', label: 'Retention' },
   ];
+
+  ngOnInit() { this.applyFilter(); }
 
   ngOnChanges() { this.applyFilter(); }
 
