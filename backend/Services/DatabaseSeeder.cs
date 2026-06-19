@@ -11,7 +11,7 @@ public class DatabaseSeeder(AppDbContext db, IWebHostEnvironment env, ILogger<Da
 
     public async Task SeedAsync()
     {
-        await db.Database.MigrateAsync();
+        await MigrationHelper.MigrateAsync(db, logger);
         await SeedFlowTemplatesAsync();
     }
 
