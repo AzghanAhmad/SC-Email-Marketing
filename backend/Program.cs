@@ -8,6 +8,12 @@ using ScribeCount.Email.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+var port = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrWhiteSpace(port))
+{
+    builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
+}
+
 builder.WebHost.ConfigureKestrel(options =>
 {
     options.Limits.MaxRequestBodySize = 50 * 1024 * 1024;
@@ -49,8 +55,10 @@ builder.Services.AddAuthorization();
 
 builder.Services.AddCors(options =>
 {
+    var origins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>()
+        ?? ["http://localhost:4200"];
     options.AddPolicy("Frontend", policy =>
-        policy.WithOrigins("http://localhost:4200")
+        policy.WithOrigins(origins)
             .AllowAnyHeader()
             .AllowAnyMethod());
 });

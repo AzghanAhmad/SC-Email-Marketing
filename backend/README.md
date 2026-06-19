@@ -43,32 +43,52 @@ If your XAMPP MySQL root user has a password, update `ConnectionStrings:DefaultC
 
 ## Deploy on Railway
 
-When `ASPNETCORE_ENVIRONMENT=Production`, the API uses the Railway MySQL database from `appsettings.Production.json`:
+Railpack was detecting **Python** because the repo root had a misnamed `requirements.txt` (project scope doc). That file is now `docs/SCOPE_OF_WORK.txt`. Deploy the **backend** folder only.
+
+### Railway service settings
+
+| Setting | Value |
+|---------|--------|
+| **Root Directory** | `backend` |
+| **Builder** | Railpack (default) |
+| `ASPNETCORE_ENVIRONMENT` | `Production` |
+
+`backend/railpack.json` and `backend/railway.toml` tell Railpack to build and run the .NET API:
+
+```bash
+dotnet ScribeCount.Email.dll
+```
+
+### Database (Production)
+
+When `ASPNETCORE_ENVIRONMENT=Production`, the API uses Railway MySQL from `appsettings.Production.json`:
 
 ```
 Server=thomas.proxy.rlwy.net;Port=17287;Database=railway;User=root;Password=***;SslMode=Required;
 ```
 
-Railway sets `ASPNETCORE_ENVIRONMENT=Production` automatically on deploy. You can also override the connection string with a Railway variable:
+Override with a Railway variable if needed:
 
 | Variable | Example |
 |----------|---------|
-| `ConnectionStrings__DefaultConnection` | Full MySQL connection string (highest priority when set) |
-| `MYSQL_URL` | `mysql://root:password@host:port/railway` (auto-injected when MySQL is linked) |
+| `ConnectionStrings__DefaultConnection` | Full MySQL connection string |
+| `MYSQL_URL` | Auto-injected when MySQL service is linked |
 
-**Railway setup**
+### Frontend CORS (after you deploy the Angular app)
 
-1. Create a **MySQL** service on Railway (database name is usually `railway`).
-2. Deploy the **backend** service from this repo (`backend/` as root directory).
-3. Set environment variable `ASPNETCORE_ENVIRONMENT` = `Production` (if not already set).
-4. Optionally link the MySQL service to the API service so `MYSQL_URL` is injected.
-5. On first deploy, migrations run automatically on startup.
+Add your frontend URL on the API service:
 
-CLI equivalent of the production database:
+```
+Cors__Origins__0=https://your-frontend.up.railway.app
+```
+
+### CLI equivalent of the production database
 
 ```bash
 mysql -h thomas.proxy.rlwy.net -u root -p --port 17287 --protocol=TCP railway
 ```
+
+On first deploy, EF migrations run automatically on startup.
 
 ## 2. Export flow templates (after frontend changes)
 
