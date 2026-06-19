@@ -41,6 +41,35 @@ Server=localhost;Port=3306;Database=scribecount_email;User=root;Password=;
 
 If your XAMPP MySQL root user has a password, update `ConnectionStrings:DefaultConnection` in `appsettings.Development.json`.
 
+## Deploy on Railway
+
+When `ASPNETCORE_ENVIRONMENT=Production`, the API uses the Railway MySQL database from `appsettings.Production.json`:
+
+```
+Server=thomas.proxy.rlwy.net;Port=17287;Database=railway;User=root;Password=***;SslMode=Required;
+```
+
+Railway sets `ASPNETCORE_ENVIRONMENT=Production` automatically on deploy. You can also override the connection string with a Railway variable:
+
+| Variable | Example |
+|----------|---------|
+| `ConnectionStrings__DefaultConnection` | Full MySQL connection string (highest priority when set) |
+| `MYSQL_URL` | `mysql://root:password@host:port/railway` (auto-injected when MySQL is linked) |
+
+**Railway setup**
+
+1. Create a **MySQL** service on Railway (database name is usually `railway`).
+2. Deploy the **backend** service from this repo (`backend/` as root directory).
+3. Set environment variable `ASPNETCORE_ENVIRONMENT` = `Production` (if not already set).
+4. Optionally link the MySQL service to the API service so `MYSQL_URL` is injected.
+5. On first deploy, migrations run automatically on startup.
+
+CLI equivalent of the production database:
+
+```bash
+mysql -h thomas.proxy.rlwy.net -u root -p --port 17287 --protocol=TCP railway
+```
+
 ## 2. Export flow templates (after frontend changes)
 
 ```bash

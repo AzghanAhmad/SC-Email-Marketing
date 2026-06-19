@@ -141,3 +141,4 @@ E:\Projects\Project 3 (C)\project\backend\bin\Debug\net10.0\scripts\ImapProbe\ob
 E:\Projects\Project 3 (C)\project\backend\bin\Debug\net10.0\scripts\ImapProbe\obj\project.assets.json
 E:\Projects\Project 3 (C)\project\backend\bin\Debug\net10.0\scripts\RunSync\obj\project.assets.json
 E:\Projects\Project 3 (C)\project\backend\bin\Debug\net10.0\scripts\RunSync\obj\RunSync.csproj.nuget.dgspec.json
+E:\Projects\Project 3 (C)\project\backend\bin\Debug\net10.0\appsettings.Production.json

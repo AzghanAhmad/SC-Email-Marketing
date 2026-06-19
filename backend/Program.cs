@@ -19,8 +19,7 @@ builder.Services.AddControllers()
 builder.Services.AddOpenApi();
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
-    var conn = builder.Configuration.GetConnectionString("DefaultConnection")
-        ?? "Server=localhost;Port=3306;Database=scribecount_email;User=root;Password=;";
+    var conn = DatabaseConfiguration.ResolveConnectionString(builder.Configuration);
     var serverVersion = new MySqlServerVersion(new Version(8, 0, 36));
     options.UseMySql(conn, serverVersion);
 });
@@ -68,7 +67,7 @@ using (var scope = app.Services.CreateScope())
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "Database setup failed. Start MySQL in XAMPP and ensure ConnectionStrings:DefaultConnection is correct. See backend/README.md");
+        logger.LogError(ex, "Database setup failed. Check ConnectionStrings:DefaultConnection (local XAMPP or Railway). See backend/README.md");
         throw;
     }
 }
