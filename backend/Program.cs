@@ -88,16 +88,36 @@ if (app.Environment.IsDevelopment())
 app.UseCors("Frontend");
 app.UseAuthentication();
 app.UseAuthorization();
-app.MapControllers();
 
-app.MapGet("/", () => Results.Ok(new
+var wwwrootPath = Path.Combine(app.Environment.ContentRootPath, "wwwroot");
+var indexHtml = Path.Combine(wwwrootPath, "index.html");
+var indexCsr = Path.Combine(wwwrootPath, "index.csr.html");
+var hasFrontend = File.Exists(indexHtml) || File.Exists(indexCsr);
+var spaEntry = File.Exists(indexHtml) ? "index.html" : "index.csr.html";
+
+if (hasFrontend)
 {
-    service = "ScribeCount Email API",
-    status = "running",
-    docs = "/api/v1",
-    health = "/health"
-}));
+    app.UseDefaultFiles();
+    app.UseStaticFiles();
+}
 
+app.MapControllers();
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
+
+if (hasFrontend)
+{
+    app.MapFallbackToFile(spaEntry);
+}
+else
+{
+    app.MapGet("/", () => Results.Ok(new
+    {
+        service = "ScribeCount Email API",
+        status = "running",
+        docs = "/api/v1",
+        health = "/health",
+        hint = "Build frontend into wwwroot for the web UI (npm run build:static in frontend/)."
+    }));
+}
 
 app.Run();

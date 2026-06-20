@@ -1,0 +1,11 @@
+**/bin
+**/obj
+**/node_modules
+**/.angular
+frontend/dist
+.publish-test
+.git
+.vscode
+tools
+backend/scripts
+*.md

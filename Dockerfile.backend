@@ -1,13 +1,22 @@
-# ScribeCount Email API — deploy from monorepo root on Railway
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+# ScribeCount Email — API + Angular frontend (single Railway service)
+FROM node:22-bookworm AS frontend-build
+WORKDIR /frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ .
+RUN npm run build:static && cp dist/frontend/browser/index.csr.html dist/frontend/browser/index.html
+
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS backend-build
 WORKDIR /src
 COPY backend/ .
+RUN rm -rf wwwroot/*
+COPY --from=frontend-build /frontend/dist/frontend/browser/ ./wwwroot/
 RUN dotnet restore ScribeCount.Email.csproj
 RUN dotnet publish ScribeCount.Email.csproj -c Release -o /app/publish
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app
-COPY --from=build /app/publish .
+COPY --from=backend-build /app/publish .
 ENV ASPNETCORE_ENVIRONMENT=Production
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "ScribeCount.Email.dll"]

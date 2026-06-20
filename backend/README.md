@@ -43,27 +43,21 @@ If your XAMPP MySQL root user has a password, update `ConnectionStrings:DefaultC
 
 ## Deploy on Railway
 
-### Option A (recommended): Root Directory = `backend`
+### Option B: Deploy from repo root (monorepo) — **recommended**
 
-In the **API service** → **Settings** → **Root Directory**, set:
+Leave Root Directory empty. `railway.toml` + `Dockerfile.backend` build **both** the Angular frontend and .NET API in one container:
 
-```
-backend
-```
+- Frontend → served at `/` (login, dashboard, inbox, etc.)
+- API → `/api/v1/...`
+- Health → `/health`
 
-Railpack will use `backend/railpack.json` and detect the `.csproj` automatically.
+Push to GitHub and redeploy. First build takes longer (~5–10 min) because it runs `npm ci` + `ng build`.
 
-### Option B: Deploy from repo root (monorepo)
+Production frontend uses same-origin API: `/api/v1` (no separate CORS needed).
 
-If Root Directory is left empty (`/`), the repo root includes:
+### Option A: API only (Root Directory = `backend`)
 
-| File | Purpose |
-|------|---------|
-| `railway.toml` | Builds with `Dockerfile.backend` |
-| `Dockerfile.backend` | Multi-stage .NET 10 Docker build |
-| `railpack.json` | Fallback Railpack config (`cd backend && dotnet publish`) |
-
-Push these files and redeploy — no Root Directory change needed.
+If Root Directory is `backend`, only the API is deployed (JSON at `/`, no web UI).
 
 ### Environment variables (API service)
 
