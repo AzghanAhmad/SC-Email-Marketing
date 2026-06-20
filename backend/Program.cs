@@ -90,4 +90,14 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
+app.MapGet("/", () => Results.Ok(new
+{
+    service = "ScribeCount Email API",
+    status = "running",
+    docs = "/api/v1",
+    health = "/health"
+}));
+
+app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
+
 app.Run();
