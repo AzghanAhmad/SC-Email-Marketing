@@ -47,17 +47,6 @@ import { ComposePayload, EmailAttachment } from './email.service';
                  [(ngModel)]="subject">
         </div>
 
-        <!-- Preview Text -->
-        <div class="compose-field">
-          <div class="label-row">
-            <label class="compose-label">Preview Text</label>
-            <span class="label-hint" data-tooltip="The short line shown after the subject in the inbox. Write it after your subject so they work together.">Optional</span>
-          </div>
-          <input type="text" class="compose-input" placeholder="Appears after subject in inbox..."
-                 [(ngModel)]="previewText" maxlength="150">
-          <span class="field-help">This text appears next to your subject line in the inbox. Keep it under 90 characters.</span>
-        </div>
-
         <!-- Message -->
         <div class="compose-field compose-message-field">
           <label class="compose-label">Message</label>
@@ -643,7 +632,6 @@ export class ComposeModalComponent implements OnChanges, OnInit, AfterViewInit {
 
   to = '';
   subject = '';
-  previewText = '';
   body = '';
   quotedHtml = '';
   scheduledAtLocal = '';
@@ -686,7 +674,6 @@ export class ComposeModalComponent implements OnChanges, OnInit, AfterViewInit {
     const plainBody = this.getPlainBody();
     if (this.subject.length > 60) tips.push('Subject line exceeds 60 characters — may be truncated on mobile devices.');
     if (this.subject.length === 0 && plainBody.length > 0) tips.push('Add a subject line before sending.');
-    if (!this.previewText) tips.push('Adding preview text improves open rates — it appears next to your subject in the inbox.');
     if (/!{2,}/.test(this.subject) || /!{2,}/.test(plainBody)) tips.push('Multiple exclamation marks may trigger spam filters.');
     if (/FREE|GUARANTEED|ACT NOW|LIMITED TIME/i.test(plainBody)) tips.push('Some phrases in your message may trigger spam filters.');
     return tips;
@@ -865,7 +852,6 @@ export class ComposeModalComponent implements OnChanges, OnInit, AfterViewInit {
     if (this.initialScheduledAt) {
       this.scheduledAtLocal = this.initialScheduledAt;
     }
-    this.previewText = '';
     this.attachments = [];
     this.showScorePanel = false;
     this.sendError = '';

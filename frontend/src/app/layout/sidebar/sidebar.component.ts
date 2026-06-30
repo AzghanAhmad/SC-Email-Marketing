@@ -1,9 +1,11 @@
-import { Component } from '@angular/core';
+import { Component, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterModule } from '@angular/router';
+import { RouterModule, Router, NavigationEnd } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
-import { Router } from '@angular/router';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
+import { LayoutService } from '../../core/services/layout.service';
+import { Subscription } from 'rxjs';
+import { filter } from 'rxjs/operators';
 
 interface NavItem {
   label: string;
@@ -23,7 +25,7 @@ interface NavGroup {
   standalone: true,
   imports: [CommonModule, RouterModule],
   template: `
-    <aside class="sidebar">
+    <aside class="sidebar" [class.sidebar-open]="layout.sidebarOpen()">
       <!-- Logo -->
       <div class="sidebar-logo">
         <div class="logo-mark">
@@ -33,14 +35,18 @@ interface NavGroup {
           <span class="logo-text">ScribeCount</span>
           <span class="logo-subtitle">EMAIL</span>
         </div>
+        <!-- Close button (mobile only) -->
+        <button class="sidebar-close-btn" (click)="layout.close()" aria-label="Close menu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
       </div>
 
       <!-- Nav -->
       <nav class="sidebar-nav">
-        <!-- Inbox (Default Landing Page) -->
-        <a [routerLink]="inboxItem.route"
-           routerLinkActive="active"
-           class="nav-item">
+        <!-- Inbox -->
+        <a [routerLink]="inboxItem.route" routerLinkActive="active" class="nav-item" (click)="onNavClick()">
           <span class="nav-icon" [innerHTML]="inboxItem.icon"></span>
           <span class="nav-label">{{ inboxItem.label }}</span>
         </a>
@@ -49,16 +55,13 @@ interface NavGroup {
         <div class="nav-divider"></div>
         <div class="nav-section-label">Marketing</div>
 
-        <!-- Marketing Campaigns & Flows -->
         <a *ngFor="let item of marketingItems"
-           [routerLink]="item.route"
-           routerLinkActive="active"
-           class="nav-item">
+           [routerLink]="item.route" routerLinkActive="active" class="nav-item"
+           (click)="onNavClick()">
           <span class="nav-icon" [innerHTML]="item.icon"></span>
           <span class="nav-label">{{ item.label }}</span>
         </a>
 
-        <!-- Expandable Marketing Sub-Groups -->
         <div class="nav-group" *ngFor="let group of marketingGroups">
           <button class="nav-group-header" (click)="group.expanded = !group.expanded"
                   [class.expanded]="group.expanded">
@@ -71,9 +74,8 @@ interface NavGroup {
           </button>
           <div class="nav-group-children" [class.open]="group.expanded">
             <a *ngFor="let child of group.children"
-               [routerLink]="child.route"
-               routerLinkActive="active"
-               class="nav-child-item">
+               [routerLink]="child.route" routerLinkActive="active" class="nav-child-item"
+               (click)="onNavClick()">
               <span class="child-icon" [innerHTML]="child.icon"></span>
               <span class="child-label">{{ child.label }}</span>
             </a>
@@ -84,7 +86,6 @@ interface NavGroup {
         <div class="nav-divider"></div>
         <div class="nav-section-label">Analytics</div>
 
-        <!-- Expandable Analytics Group -->
         <div class="nav-group">
           <button class="nav-group-header" (click)="analyticsGroup.expanded = !analyticsGroup.expanded"
                   [class.expanded]="analyticsGroup.expanded">
@@ -97,27 +98,25 @@ interface NavGroup {
           </button>
           <div class="nav-group-children" [class.open]="analyticsGroup.expanded">
             <a *ngFor="let child of analyticsGroup.children"
-               [routerLink]="child.route"
-               routerLinkActive="active"
-               class="nav-child-item">
+               [routerLink]="child.route" routerLinkActive="active" class="nav-child-item"
+               (click)="onNavClick()">
               <span class="child-icon" [innerHTML]="child.icon"></span>
               <span class="child-label">{{ child.label }}</span>
             </a>
           </div>
         </div>
 
-        <!-- Standalone Items -->
+        <!-- Standalone -->
         <div class="nav-divider"></div>
         <a *ngFor="let item of standaloneItems"
-           [routerLink]="item.route"
-           routerLinkActive="active"
-           class="nav-item">
+           [routerLink]="item.route" routerLinkActive="active" class="nav-item"
+           (click)="onNavClick()">
           <span class="nav-icon" [innerHTML]="item.icon"></span>
           <span class="nav-label">{{ item.label }}</span>
         </a>
       </nav>
 
-      <!-- User -->
+      <!-- Footer -->
       <div class="sidebar-footer">
         <div class="user-info">
           <div class="user-avatar">{{ initials() }}</div>
@@ -140,85 +139,75 @@ interface NavGroup {
   styles: [`
     .sidebar {
       width:252px; height:100vh; position:fixed; left:0; top:0; z-index:50;
-      background:#0f1c2e;
-      border-right:1px solid rgba(255,255,255,0.06);
-      display:flex; flex-direction:column;
-      overflow:hidden;
+      background:#0f1c2e; border-right:1px solid rgba(255,255,255,0.06);
+      display:flex; flex-direction:column; overflow:hidden;
+      transition:transform .28s cubic-bezier(.4,0,.2,1);
     }
     .sidebar-logo {
       display:flex; align-items:center; gap:.75rem;
       padding:1.25rem 1.125rem 1.125rem;
-      border-bottom:1px solid rgba(255,255,255,0.06);
-      min-height:68px;
+      border-bottom:1px solid rgba(255,255,255,0.06); min-height:68px;
     }
-    .logo-mark { width:38px; height:38px; flex-shrink:0; background:#ffffff; border-radius:10px; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+    .logo-mark { width:38px; height:38px; flex-shrink:0; background:#fff; border-radius:10px; display:flex; align-items:center; justify-content:center; overflow:hidden; }
     .logo-mark img { width:100%; height:100%; object-fit:contain; border-radius:10px; }
-    .logo-text-group { display:flex; flex-direction:column; gap:0; }
+    .logo-text-group { display:flex; flex-direction:column; gap:0; flex:1; min-width:0; }
     .logo-text { font-size:1.05rem; font-weight:800; color:white; letter-spacing:-.02em; white-space:nowrap; line-height:1.2; }
     .logo-subtitle { font-size:.6rem; font-weight:700; color:#38bdf8; letter-spacing:.12em; text-transform:uppercase; line-height:1; }
+    .sidebar-close-btn {
+      display:none; width:32px; height:32px; border-radius:8px; flex-shrink:0;
+      background:rgba(255,255,255,0.08); border:none; cursor:pointer;
+      color:rgba(255,255,255,0.6); align-items:center; justify-content:center;
+      transition:background .15s,color .15s;
+    }
+    .sidebar-close-btn:hover { background:rgba(255,255,255,0.16); color:white; }
     .sidebar-nav {
-      flex:1; padding:.625rem .75rem;
-      display:flex; flex-direction:column; gap:.0625rem;
+      flex:1; padding:.625rem .75rem; display:flex; flex-direction:column; gap:.0625rem;
       overflow-y:auto; overflow-x:hidden;
     }
     .sidebar-nav::-webkit-scrollbar { width:3px; }
     .sidebar-nav::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.08); border-radius:100px; }
     .nav-item {
-      display:flex; align-items:center; gap:.875rem;
-      padding:.7rem 1rem; border-radius:10px;
-      color:rgba(255,255,255,0.55); text-decoration:none;
-      font-size:.875rem; font-weight:500;
-      transition:background .15s, color .15s;
-      white-space:nowrap; position:relative;
+      display:flex; align-items:center; gap:.875rem; padding:.7rem 1rem; border-radius:10px;
+      color:rgba(255,255,255,0.55); text-decoration:none; font-size:.875rem; font-weight:500;
+      transition:background .15s,color .15s; white-space:nowrap; position:relative;
     }
     .nav-item:hover { background:rgba(255,255,255,0.07); color:rgba(255,255,255,0.88); }
-    .nav-item.active { background:rgba(255,255,255,0.1); color:#ffffff; font-weight:600; }
+    .nav-item.active { background:rgba(255,255,255,0.1); color:#fff; font-weight:600; }
     .nav-item.active::before {
-      content:''; position:absolute; left:0; top:20%; bottom:20%;
-      width:3px; border-radius:0 3px 3px 0;
-      background:linear-gradient(180deg, #2dd4bf, #06b6d4);
+      content:''; position:absolute; left:0; top:20%; bottom:20%; width:3px;
+      border-radius:0 3px 3px 0; background:linear-gradient(180deg,#2dd4bf,#06b6d4);
     }
     .nav-icon { width:22px; height:22px; display:flex; align-items:center; justify-content:center; flex-shrink:0; opacity:.75; }
+    .nav-item.active .nav-icon, .nav-item:hover .nav-icon { opacity:.9; }
     .nav-item.active .nav-icon { opacity:1; }
-    .nav-item:hover .nav-icon { opacity:.9; }
     .nav-icon svg { width:20px !important; height:20px !important; stroke-width:1.75 !important; }
     .nav-label { white-space:nowrap; line-height:1; }
     .nav-group { display:flex; flex-direction:column; }
     .nav-group-header {
-      display:flex; align-items:center; gap:.875rem;
-      padding:.7rem 1rem; border-radius:10px;
+      display:flex; align-items:center; gap:.875rem; padding:.7rem 1rem; border-radius:10px;
       color:rgba(255,255,255,0.55); font-size:.875rem; font-weight:500;
-      transition:background .15s, color .15s;
-      background:transparent; border:none; cursor:pointer;
-      font-family:inherit; width:100%; text-align:left;
-      white-space:nowrap; position:relative;
+      transition:background .15s,color .15s; background:transparent; border:none; cursor:pointer;
+      font-family:inherit; width:100%; text-align:left; white-space:nowrap; position:relative;
     }
     .nav-group-header:hover { background:rgba(255,255,255,0.07); color:rgba(255,255,255,0.88); }
     .nav-group-header.expanded { color:rgba(255,255,255,0.88); }
     .nav-group-header .nav-icon { opacity:.75; }
-    .nav-group-header:hover .nav-icon, .nav-group-header.expanded .nav-icon { opacity:1; }
-    .chevron {
-      width:15px; height:15px; margin-left:auto; flex-shrink:0;
-      transition:transform .25s cubic-bezier(.4,0,.2,1);
-      opacity:.35; stroke-width:2.5;
-    }
+    .nav-group-header:hover .nav-icon,.nav-group-header.expanded .nav-icon { opacity:1; }
+    .chevron { width:15px; height:15px; margin-left:auto; flex-shrink:0; transition:transform .25s cubic-bezier(.4,0,.2,1); opacity:.35; stroke-width:2.5; }
     .chevron.rotated { transform:rotate(90deg); opacity:.6; }
     .nav-group-children { max-height:0; overflow:hidden; transition:max-height .3s cubic-bezier(.4,0,.2,1); }
     .nav-group-children.open { max-height:400px; }
     .nav-child-item {
-      display:flex; align-items:center; gap:.625rem;
-      padding:.55rem 1rem .55rem 2.75rem; border-radius:8px;
-      color:rgba(255,255,255,0.42); text-decoration:none;
-      font-size:.8125rem; font-weight:500;
-      transition:background .15s, color .15s;
+      display:flex; align-items:center; gap:.625rem; padding:.55rem 1rem .55rem 2.75rem;
+      border-radius:8px; color:rgba(255,255,255,0.42); text-decoration:none;
+      font-size:.8125rem; font-weight:500; transition:background .15s,color .15s;
       white-space:nowrap; position:relative;
     }
     .nav-child-item:hover { background:rgba(255,255,255,0.06); color:rgba(255,255,255,0.82); }
     .nav-child-item.active { color:#2dd4bf; font-weight:600; background:rgba(45,212,191,0.08); }
     .nav-child-item.active::before {
-      content:''; position:absolute; left:0; top:20%; bottom:20%;
-      width:3px; border-radius:0 3px 3px 0;
-      background:linear-gradient(180deg, #2dd4bf, #06b6d4);
+      content:''; position:absolute; left:0; top:20%; bottom:20%; width:3px;
+      border-radius:0 3px 3px 0; background:linear-gradient(180deg,#2dd4bf,#06b6d4);
     }
     .child-icon { width:16px; height:16px; display:flex; align-items:center; justify-content:center; flex-shrink:0; opacity:.7; }
     .nav-child-item.active .child-icon { opacity:1; }
@@ -227,53 +216,46 @@ interface NavGroup {
     .nav-divider { height:1px; background:rgba(255,255,255,0.06); margin:.5rem .25rem; }
     .nav-section-label {
       font-size:.625rem; font-weight:700; text-transform:uppercase;
-      letter-spacing:.1em; color:rgba(255,255,255,0.22);
-      padding:.375rem 1rem .3rem;
+      letter-spacing:.1em; color:rgba(255,255,255,0.22); padding:.375rem 1rem .3rem;
     }
-    .sidebar-footer {
-      padding:.75rem; border-top:1px solid rgba(255,255,255,0.06);
-      display:flex; flex-direction:column; gap:.375rem;
-    }
-    .user-info {
-      display:flex; align-items:center; gap:.75rem;
-      padding:.5rem .375rem; border-radius:10px;
-      transition:background .15s; cursor:default;
-    }
+    .sidebar-footer { padding:.75rem; border-top:1px solid rgba(255,255,255,0.06); display:flex; flex-direction:column; gap:.375rem; }
+    .user-info { display:flex; align-items:center; gap:.75rem; padding:.5rem .375rem; border-radius:10px; transition:background .15s; cursor:default; }
     .user-info:hover { background:rgba(255,255,255,0.05); }
-    .user-avatar {
-      width:32px; height:32px; border-radius:9px; flex-shrink:0;
-      background:linear-gradient(135deg,#2dd4bf,#818cf8);
-      display:flex; align-items:center; justify-content:center;
-      font-size:.72rem; font-weight:700; color:white;
-    }
+    .user-avatar { width:32px; height:32px; border-radius:9px; flex-shrink:0; background:linear-gradient(135deg,#2dd4bf,#818cf8); display:flex; align-items:center; justify-content:center; font-size:.72rem; font-weight:700; color:white; }
     .user-details { display:flex; flex-direction:column; overflow:hidden; flex:1; }
     .user-name { font-size:.8rem; font-weight:600; color:rgba(255,255,255,0.88); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .user-email { font-size:.68rem; color:rgba(255,255,255,0.35); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .logout-btn {
-      display:flex; align-items:center; gap:.875rem;
-      padding:.65rem 1rem; border-radius:10px;
-      background:transparent; border:none; cursor:pointer;
-      color:rgba(255,255,255,0.38); font-size:.875rem; font-weight:500; font-family:inherit;
-      transition:background .15s, color .15s; white-space:nowrap;
-    }
+    .logout-btn { display:flex; align-items:center; gap:.875rem; padding:.65rem 1rem; border-radius:10px; background:transparent; border:none; cursor:pointer; color:rgba(255,255,255,0.38); font-size:.875rem; font-weight:500; font-family:inherit; transition:background .15s,color .15s; white-space:nowrap; }
     .logout-btn:hover { background:rgba(239,68,68,0.1); color:#f87171; }
     .logout-btn svg { width:18px; height:18px; flex-shrink:0; opacity:.7; stroke-width:1.75; }
     .logout-btn:hover svg { opacity:1; }
+
+    /* ── Mobile: Sidebar as slide-in drawer ── */
+    @media (max-width: 768px) {
+      .sidebar { transform:translateX(-100%); box-shadow:none; }
+      .sidebar.sidebar-open { transform:translateX(0); box-shadow:4px 0 32px rgba(0,0,0,0.5); }
+      .sidebar-close-btn { display:flex; }
+    }
   `]
 })
-export class SidebarComponent {
+export class SidebarComponent implements OnDestroy {
   inboxItem!: NavItem;
   marketingItems: NavItem[] = [];
   marketingGroups: NavGroup[] = [];
   analyticsGroup!: NavGroup;
   standaloneItems: NavItem[] = [];
+  private routerSub: Subscription;
 
-  constructor(public auth: AuthService, private router: Router, private sanitizer: DomSanitizer) {
+  constructor(
+    public auth: AuthService,
+    private router: Router,
+    private sanitizer: DomSanitizer,
+    public layout: LayoutService
+  ) {
     const s = (svg: string): SafeHtml => this.sanitizer.bypassSecurityTrustHtml(svg);
 
     this.inboxItem = {
-      label: 'Inbox',
-      route: '/email/inbox',
+      label: 'Inbox', route: '/email/inbox',
       icon: s('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>')
     };
 
@@ -329,8 +311,21 @@ export class SidebarComponent {
 
     this.standaloneItems = [
       { label: 'Integrations', route: '/integrations', icon: s('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>') },
-      { label: 'Settings', route: '/settings', icon: s('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1-2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>') }
+      { label: 'Settings', route: '/settings', icon: s('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>') }
     ];
+
+    // Auto-close sidebar on navigation (mobile)
+    this.routerSub = this.router.events.pipe(
+      filter(e => e instanceof NavigationEnd)
+    ).subscribe(() => this.layout.close());
+  }
+
+  ngOnDestroy(): void {
+    this.routerSub?.unsubscribe();
+  }
+
+  onNavClick(): void {
+    this.layout.close();
   }
 
   initials(): string {

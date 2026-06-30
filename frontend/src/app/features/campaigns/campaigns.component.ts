@@ -1,8 +1,10 @@
-import { Component, OnInit, signal, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, signal, ChangeDetectorRef, ViewChild, inject, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Campaign } from '../../core/services/mock-data.service';
-import { CampaignApiService, AbTest, NewsletterSchedule, CalendarEvent } from '../../core/services/campaign-api.service';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
+import { ActivatedRoute, Router } from '@angular/router';
+import { Campaign, CampaignApiService, AbTest, NewsletterSchedule, CalendarEvent, AudienceSegment, ReachEstimate } from '../../core/services/campaign-api.service';
+import { AuthService } from '../../core/services/auth.service';
 import { CampaignListComponent } from './campaign-list.component';
 import { CampaignCalendarComponent } from './campaign-calendar.component';
 import { CampaignNewsletterComponent } from './campaign-newsletter.component';
@@ -15,6 +17,11 @@ import { SurveyGuidanceComponent } from './survey-guidance.component';
 import { EventAnnouncementGuidanceComponent } from './event-announcement-guidance.component';
 import { ReaderCommunityGuidanceComponent } from './reader-community-guidance.component';
 import { BacklistSpotlightGuidanceComponent } from './backlist-spotlight-guidance.component';
+import { collectGuidanceExtras, loadGuidanceExtras } from './campaign-guidance-extras';
+import { CampaignSenderModalComponent } from './campaign-sender-modal.component';
+import { CampaignDesignModalComponent, AppliedTemplate } from './campaign-design-modal.component';
+import { CampaignRecipientsPanelComponent, CampaignRecipients } from './campaign-recipients-panel.component';
+import { applyPreviewMergeTags } from './campaign-preview.utils';
 
 type CampaignTab = 'list' | 'create' | 'newsletter' | 'ab-test' | 'calendar';
 
@@ -34,11 +41,6 @@ interface SuppressionRule {
   enabled: boolean;
 }
 
-interface CalendarEventLocal extends CalendarEvent {}
-
-interface NewsletterScheduleLocal extends NewsletterSchedule {}
-
-interface ABTestLocal extends AbTest {}
 
 interface PreflightCheck {
   id: string;
@@ -54,7 +56,7 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
 @Component({
   selector: 'app-campaigns',
   standalone: true,
-  imports: [CommonModule, FormsModule, CampaignListComponent, CampaignCalendarComponent, CampaignNewsletterComponent, CampaignAbTestComponent, NewsletterSwapGuidanceComponent, FlashSaleGuidanceComponent, PriceDropGuidanceComponent, BoxSetGuidanceComponent, SurveyGuidanceComponent, EventAnnouncementGuidanceComponent, ReaderCommunityGuidanceComponent, BacklistSpotlightGuidanceComponent],
+  imports: [CommonModule, FormsModule, CampaignListComponent, CampaignCalendarComponent, CampaignNewsletterComponent, CampaignAbTestComponent, NewsletterSwapGuidanceComponent, FlashSaleGuidanceComponent, PriceDropGuidanceComponent, BoxSetGuidanceComponent, SurveyGuidanceComponent, EventAnnouncementGuidanceComponent, ReaderCommunityGuidanceComponent, BacklistSpotlightGuidanceComponent, CampaignSenderModalComponent, CampaignDesignModalComponent, CampaignRecipientsPanelComponent],
   template: `
     <div class="page-wrapper">
       <div class="page-header">
@@ -68,7 +70,9 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
         </button>
       </div>
 
-      <div class="tabs">
+      <div class="loading-banner" *ngIf="loading">Loading campaigns from server…</div>
+
+      <div class="tabs" *ngIf="!loading">
         <button class="tab" [class.active]="activeTab() === 'list'" (click)="activeTab.set('list')">
           All Campaigns <span class="tab-count">{{ campaigns.length }}</span>
         </button>
@@ -87,7 +91,7 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
       </div>
 
       <!-- ===== CAMPAIGN CALENDAR TAB ===== -->
-      <div *ngIf="activeTab() === 'calendar'">
+      <div *ngIf="!loading && activeTab() === 'calendar'">
         <app-campaign-calendar
           [campaignTypes]="campaignTypes"
           [calendarEvents]="calendarEvents"
@@ -95,7 +99,9 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
           [baselineCampaigns]="baselineCampaigns"
           (onCreateFromBaseline)="createFromBaseline($event)"
           (onStartCreateWithType)="startCreateWithType($event)"
-          (onAddEvent)="addCalendarEvent()"
+          (onAddEvent)="openAddCalendarEvent($event)"
+          (onDeleteEvent)="deleteCalendarEvent($event)"
+          (onEditEvent)="editCalendarEvent($event)"
           (onGoToCreate)="activeTab.set('create')">
         </app-campaign-calendar>
       </div>
@@ -215,7 +221,7 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
             </div>
             <div class="lt-row" *ngFor="let ct of campaignTypes">
               <div class="lt-type">
-                <div class="lt-icon" [style.background]="ct.color + '18'" [style.color]="ct.color" [innerHTML]="ct.icon"></div>
+                <div class="nav-icon lt-icon" [innerHTML]="ct.icon"></div>
                 <span class="lt-type-name">{{ ct.label }}</span>
               </div>
               <span class="lt-purpose">{{ ct.purpose }}</span>
@@ -244,10 +250,10 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
       <!-- end hidden calendar original -->
 
       <!-- ===== NEWSLETTER TAB ===== -->
-      <div *ngIf="activeTab() === 'newsletter'">
+      <div *ngIf="!loading && activeTab() === 'newsletter'">
         <app-campaign-newsletter
           [newsletter]="newsletter"
-          (onWriteNextIssue)="activeTab.set('create')"
+          (onWriteNextIssue)="writeNextNewsletterIssue()"
           (onSave)="saveNewsletter($event)">
         </app-campaign-newsletter>
       </div>
@@ -341,14 +347,6 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
               <span class="field-help">Tip: specific subject lines ("The research that changed my book") outperform generic ones ("May newsletter") — they tell readers what's inside.</span>
             </div>
 
-            <div class="form-group">
-              <label class="form-label">
-                Preview Text
-                <span class="label-hint">(acts as a second subject line in the inbox)</span>
-              </label>
-              <input type="text" class="form-input" [(ngModel)]="newsletter.previewText" placeholder="A short teaser that extends your subject line..." maxlength="150" />
-            </div>
-
             <!-- Reply invitation -->
             <div class="reply-invite-section">
               <div class="ri-header">
@@ -376,37 +374,37 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
               <div class="ncg-grid">
                 <div class="ncg-item">
                   <div class="ncg-icon story">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
                   </div>
                   <div><span class="ncg-name">Lead with a story</span><span class="ncg-hint">Something specific from your writing week — not a pitch</span></div>
                 </div>
                 <div class="ncg-item">
                   <div class="ncg-icon reading">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
                   </div>
                   <div><span class="ncg-name">What you're reading</span><span class="ncg-hint">A genuine recommendation with a sentence on why you loved it</span></div>
                 </div>
                 <div class="ncg-item">
                   <div class="ncg-icon wip">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
                   </div>
                   <div><span class="ncg-name">Work in progress</span><span class="ncg-hint">Where you are emotionally in the story, not just a word count</span></div>
                 </div>
                 <div class="ncg-item">
                   <div class="ncg-icon research">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                   </div>
                   <div><span class="ncg-name">Research finds</span><span class="ncg-hint">Fascinating things you discovered — especially for historical or speculative fiction</span></div>
                 </div>
                 <div class="ncg-item">
                   <div class="ncg-icon bts">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
                   </div>
                   <div><span class="ncg-name">Behind the scenes</span><span class="ncg-hint">Cover design, editorial changes, the dedication you almost didn't write</span></div>
                 </div>
                 <div class="ncg-item">
                   <div class="ncg-icon soft-promo">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
                   </div>
                   <div><span class="ncg-name">Soft mention</span><span class="ncg-hint">After delivering value, a natural note about your current or upcoming title</span></div>
                 </div>
@@ -423,7 +421,7 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
               </button>
               <button class="btn-ghost" (click)="activeTab.set('create')">
                 Write Next Issue
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="9 18 15 12 9 6"/></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><polyline points="9 18 15 12 9 6"/></svg>
               </button>
             </div>
           </div>
@@ -443,11 +441,12 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
       <!-- end hidden newsletter original -->
 
       <!-- ===== A/B TESTING TAB ===== -->
-      <div *ngIf="activeTab() === 'ab-test'">
+      <div *ngIf="!loading && activeTab() === 'ab-test'">
         <app-campaign-ab-test
           [abTests]="abTests"
           (onToast)="showToast($event.message, $event.type)"
-          (onCreateAbTest)="createAbTest($event)">
+          (onCreateAbTest)="createAbTest($event)"
+          (onDeleteAbTest)="deleteAbTest($event)">
         </app-campaign-ab-test>
       </div>
       <!-- ===== A/B ORIGINAL (hidden) ===== -->
@@ -586,7 +585,7 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
       </div>
 
       <!-- ===== CAMPAIGN LIST ===== -->
-      <div *ngIf="activeTab() === 'list'">
+      <div *ngIf="!loading && activeTab() === 'list'">
         <app-campaign-list
           [campaigns]="campaigns"
           (onEdit)="editCampaign($event)"
@@ -704,15 +703,15 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
                 <td>
                   <div class="row-actions">
                     <button class="row-btn report-btn" data-tooltip="View campaign report" (click)="viewReport(c)">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
                       Report
                     </button>
                     <button class="row-btn edit-btn" data-tooltip="Edit this campaign" (click)="editCampaign(c)">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                       Edit
                     </button>
                     <button class="row-btn delete-btn" data-tooltip="Delete this campaign" (click)="deleteCampaign(c.id)">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
                       Delete
                     </button>
                   </div>
@@ -725,7 +724,7 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
       <!-- end hidden list original -->
 
       <!-- ===== CREATE CAMPAIGN WIZARD ===== -->
-      <div *ngIf="activeTab() === 'create'">
+      <div *ngIf="!loading && activeTab() === 'create'">
 
         <!-- Step Progress -->
         <div class="stepper-wrap glass-card">
@@ -754,6 +753,33 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
           <div class="glass-card step-card">
             <h2 class="step-title">Write Your Email</h2>
             <p class="step-sub">Set up the basics of your campaign</p>
+
+            <!-- Brevo-style setup cards -->
+            <div class="brevo-setup-grid">
+              <div class="setup-card">
+                <div class="setup-card-head">
+                  <span class="setup-card-label">Sender</span>
+                  <button type="button" class="btn-ghost btn-sm" (click)="showSenderModal.set(true)">Manage</button>
+                </div>
+                <div class="setup-card-body">
+                  <div class="setup-line"><strong>{{ draft.fromName || 'Not set' }}</strong></div>
+                  <div class="setup-line muted">{{ draft.fromEmail || 'Add sender email' }}</div>
+                </div>
+              </div>
+              <div class="setup-card">
+                <div class="setup-card-head">
+                  <span class="setup-card-label">Design</span>
+                  <button type="button" class="btn-ghost btn-sm" (click)="showDesignModal.set(true)">Start designing</button>
+                </div>
+                <div class="setup-card-body">
+                  <div class="setup-line" *ngIf="draft.templateName"><strong>{{ draft.templateName }}</strong></div>
+                  <div class="setup-line muted" *ngIf="!draft.templateName && !draft.content">No design yet — pick a template</div>
+                  <div class="setup-line muted" *ngIf="!draft.templateName && draft.content">Custom content</div>
+                  <div class="setup-mini-preview" *ngIf="draft.content && isHtmlContent(draft.content)" [innerHTML]="safeDraftContent"></div>
+                </div>
+              </div>
+            </div>
+
             <div class="write-form">
 
               <!-- Campaign Type Selector -->
@@ -777,7 +803,7 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
               <!-- Single purpose reminder -->
               <div class="single-purpose-tip" *ngIf="draft.campaignType">
                 <div class="spt-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                 </div>
                 <div class="spt-body">
                   <span class="spt-title">One clear purpose</span>
@@ -787,6 +813,7 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
 
               <!-- ===== NEWSLETTER SWAP GUIDANCE ===== -->
               <app-newsletter-swap-guidance
+                #nlSwapGuidance
                 *ngIf="draft.campaignType === 'nl-swap'"
                 (onSubjectSuggestion)="draft.subject = $event">
               </app-newsletter-swap-guidance>
@@ -794,6 +821,7 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
 
               <!-- ===== FLASH SALE GUIDANCE ===== -->
               <app-flash-sale-guidance
+                #flashSaleGuidance
                 *ngIf="draft.campaignType === 'flash-sale'"
                 (onSubjectSuggestion)="draft.subject = $event">
               </app-flash-sale-guidance>
@@ -801,6 +829,7 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
 
               <!-- ===== PRICE DROP GUIDANCE ===== -->
               <app-price-drop-guidance
+                #priceDropGuidance
                 *ngIf="draft.campaignType === 'price-drop' || draft.campaignType === 'price-drop-2'"
                 (onSubjectSuggestion)="draft.subject = $event">
               </app-price-drop-guidance>
@@ -808,6 +837,7 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
 
               <!-- ===== BOX SET GUIDANCE ===== -->
               <app-box-set-guidance
+                #boxSetGuidance
                 *ngIf="draft.campaignType === 'box-set'"
                 (onSubjectSuggestion)="draft.subject = $event">
               </app-box-set-guidance>
@@ -815,6 +845,7 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
 
               <!-- ===== SURVEY GUIDANCE ===== -->
               <app-survey-guidance
+                #surveyGuidance
                 *ngIf="draft.campaignType === 'survey'"
                 (onSubjectSuggestion)="draft.subject = $event">
               </app-survey-guidance>
@@ -822,6 +853,7 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
 
               <!-- ===== EVENT ANNOUNCEMENT GUIDANCE ===== -->
               <app-event-announcement-guidance
+                #eventGuidance
                 *ngIf="draft.campaignType === 'event'"
                 (onSubjectSuggestion)="draft.subject = $event">
               </app-event-announcement-guidance>
@@ -829,6 +861,7 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
 
               <!-- ===== READER COMMUNITY GUIDANCE ===== -->
               <app-reader-community-guidance
+                #communityGuidance
                 *ngIf="draft.campaignType === 'reader-community'"
                 (onSubjectSuggestion)="draft.subject = $event">
               </app-reader-community-guidance>
@@ -836,6 +869,7 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
 
               <!-- ===== BACKLIST SPOTLIGHT GUIDANCE ===== -->
               <app-backlist-spotlight-guidance
+                #backlistGuidance
                 *ngIf="draft.campaignType === 'backlist'"
                 (onSubjectSuggestion)="draft.subject = $event">
               </app-backlist-spotlight-guidance>
@@ -1295,7 +1329,7 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
                     </div>
                   </div>
                   <div class="nrn-suppress-note">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
                     <span><strong>Suppress readers who already purchased the new title</strong> — including pre-order buyers who received a fulfillment email. Sending a notification for a book they already own is at best redundant and at worst confusing. Applied automatically via suppression rules.</span>
                   </div>
                 </div>
@@ -1397,15 +1431,14 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
               </div>
               <!-- ===== END NEW RELEASE NOTIFICATION GUIDANCE ===== -->
 
-              <div class="form-row-2">
-                <div class="form-group">
-                  <label class="form-label">Campaign Name <span class="required">*</span></label>
-                  <input type="text" class="form-input" [(ngModel)]="draft.name" name="name" placeholder="e.g. April Newsletter" />
-                </div>
-                <div class="form-group">
-                  <label class="form-label">From Name <span class="required">*</span></label>
-                  <input type="text" class="form-input" [(ngModel)]="draft.fromName" name="fromName" placeholder="Jane Austen" />
-                </div>
+              <div class="form-group">
+                <label class="form-label">Campaign Name <span class="required">*</span></label>
+                <input type="text" class="form-input" [(ngModel)]="draft.name" name="name" placeholder="e.g. April Newsletter" />
+              </div>
+              <div class="form-group" *ngIf="draftUsesBookTitle">
+                <label class="form-label">Book Title</label>
+                <input type="text" class="form-input" [(ngModel)]="draft.bookTitle" name="bookTitle" placeholder="e.g. The Midnight Harbor" />
+                <p class="char-tip ok" style="margin-top:.35rem" ngNonBindable>Used for {{book_title}} in your email template.</p>
               </div>
               <div class="form-group">
                 <label class="form-label">Subject Line <span class="required">*</span></label>
@@ -1417,30 +1450,19 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
                 </div>
               </div>
               <div class="form-group">
-                <label class="form-label">
-                  Preview Text
-                  <span class="label-hint">(preheader — shown after subject in inbox)</span>
-                  <span class="info-icon" data-tooltip="The preview text appears after the subject line in most email clients. It acts as a second subject line and can significantly improve open rates.">?</span>
-                </label>
-                <input type="text" class="form-input" [(ngModel)]="draft.previewText" name="previewText" placeholder="A short teaser that appears after the subject line..." maxlength="150" />
-                <div class="char-hint">
-                  <span class="char-count" [class.ok]="draft.previewText.length > 0">{{ draft.previewText.length }}/150</span>
-                  <span class="char-tip ok" *ngIf="draft.previewText.length > 0">Preview text set</span>
-                  <span class="char-tip" *ngIf="draft.previewText.length === 0">Recommended — improves open rates</span>
-                </div>
-              </div>
-              <div class="form-group">
-                <label class="form-label">Send To</label>
-                <select class="form-input" [(ngModel)]="draft.sendTo" name="sendTo">
-                  <option value="all">All Subscribers (8,421)</option>
-                  <option value="vip">VIP Readers (342)</option>
-                  <option value="launch">Launch List (876)</option>
-                  <option value="newsletter">Newsletter Only (2,341)</option>
-                </select>
-              </div>
-              <div class="form-group">
                 <label class="form-label">Email Content <span class="required">*</span></label>
-                <textarea class="form-input content-area" [(ngModel)]="draft.content" name="content" placeholder="Hi [first_name],&#10;&#10;Write your email here..."></textarea>
+                <div *ngIf="isHtmlContent(draft.content)" class="content-visual-wrap">
+                  <div class="content-render-box" [innerHTML]="safeDraftContent"></div>
+                  <button type="button" class="btn-ghost btn-sm content-source-toggle" (click)="showHtmlSource = !showHtmlSource">
+                    {{ showHtmlSource ? 'Hide HTML source' : 'Edit HTML source' }}
+                  </button>
+                </div>
+                <textarea *ngIf="!isHtmlContent(draft.content) || showHtmlSource"
+                  class="form-input content-area"
+                  [class.content-area-html]="isHtmlContent(draft.content)"
+                  [(ngModel)]="draft.content"
+                  name="content"
+                  placeholder="Hi [first_name],&#10;&#10;Write your email here..."></textarea>
               </div>
             </div>
           </div>
@@ -1456,15 +1478,15 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
             <div class="preview-actions">
               <div class="toggle-group">
                 <button class="toggle-btn" [class.active]="previewMode() === 'both'" (click)="previewMode.set('both')">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/></svg>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/></svg>
                   Both
                 </button>
                 <button class="toggle-btn" [class.active]="previewMode() === 'desktop'" (click)="previewMode.set('desktop')">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
                   Desktop
                 </button>
                 <button class="toggle-btn" [class.active]="previewMode() === 'mobile'" (click)="previewMode.set('mobile')">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
                   Mobile
                 </button>
               </div>
@@ -1479,7 +1501,7 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
             <!-- Desktop -->
             <div class="preview-panel desktop-panel">
               <div class="panel-label">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
                 Desktop
               </div>
               <div class="email-frame desktop-frame">
@@ -1488,14 +1510,14 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
                   <div class="chrome-bar">Mail — Inbox</div>
                 </div>
                 <div class="email-meta-bar">
-                  <div class="meta-row"><span class="meta-key">From:</span><span class="meta-val">{{ draft.fromName || 'Your Name' }}</span></div>
+                  <div class="meta-row"><span class="meta-key">From:</span><span class="meta-val">{{ senderDisplay }}</span></div>
                   <div class="meta-row"><span class="meta-key">Subject:</span><span class="meta-val fw">{{ draft.subject || '(no subject)' }}</span></div>
-                  <div class="meta-row" *ngIf="draft.previewText"><span class="meta-key">Preview:</span><span class="meta-val muted-text">{{ draft.previewText }}</span></div>
                 </div>
                 <div class="email-body-preview">
                   <div class="email-body-inner">
                     <p *ngIf="!draft.content" class="preview-placeholder">Your email content will appear here as you type...</p>
-                    <p *ngIf="draft.content" class="preview-content">{{ draft.content }}</p>
+                    <div *ngIf="draft.content && isHtmlContent(draft.content)" class="preview-content-html" [innerHTML]="safeDraftContent"></div>
+                    <p *ngIf="draft.content && !isHtmlContent(draft.content)" class="preview-content">{{ draft.content }}</p>
                   </div>
                 </div>
               </div>
@@ -1504,25 +1526,48 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
             <!-- Mobile -->
             <div class="preview-panel mobile-panel">
               <div class="panel-label">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
                 Mobile <span class="panel-dim">390px</span>
               </div>
               <div class="phone-outer">
                 <div class="phone-frame">
-                  <div class="phone-notch"></div>
+                  <div class="phone-side-btn phone-side-btn-vol"></div>
+                  <div class="phone-side-btn phone-side-btn-power"></div>
                   <div class="phone-screen">
-                    <div class="phone-status-bar"><span>9:41</span><span class="status-icons">&#9679;&#9679;&#9679;</span></div>
+                    <div class="iphone-top-bar">
+                      <div class="iphone-dynamic-island"></div>
+                      <div class="iphone-status-bar">
+                        <span class="iphone-time">9:41</span>
+                        <div class="iphone-status-icons">
+                          <svg class="iphone-icon" viewBox="0 0 18 12" aria-hidden="true">
+                            <rect x="0" y="8" width="3" height="4" rx=".5" fill="currentColor"/>
+                            <rect x="5" y="5" width="3" height="7" rx=".5" fill="currentColor"/>
+                            <rect x="10" y="2" width="3" height="10" rx=".5" fill="currentColor"/>
+                            <rect x="15" y="0" width="3" height="12" rx=".5" fill="currentColor"/>
+                          </svg>
+                          <svg class="iphone-icon" viewBox="0 0 16 12" aria-hidden="true">
+                            <path d="M8 2.5C10.2 2.5 12.1 3.4 13.5 4.9L15 3.4C13.2 1.5 10.8.5 8 .5 5.2.5 2.8 1.5 1 3.4L2.5 4.9C3.9 3.4 5.8 2.5 8 2.5Z" fill="currentColor"/>
+                            <path d="M8 6.5C9.4 6.5 10.6 7 11.5 7.9L13 6.4C11.7 5.1 9.9 4.3 8 4.3 6.1 4.3 4.3 5.1 3 6.4L4.5 7.9C5.4 7 6.6 6.5 8 6.5Z" fill="currentColor"/>
+                            <circle cx="8" cy="10.5" r="1.5" fill="currentColor"/>
+                          </svg>
+                          <div class="iphone-battery" aria-hidden="true">
+                            <div class="iphone-battery-body"><div class="iphone-battery-fill"></div></div>
+                            <div class="iphone-battery-cap"></div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                     <div class="phone-email-meta">
                       <div class="phone-from">{{ draft.fromName || 'Your Name' }}</div>
                       <div class="phone-subject">{{ draft.subject || '(no subject)' }}</div>
-                      <div class="phone-preheader" *ngIf="draft.previewText">{{ draft.previewText }}</div>
                     </div>
                     <div class="phone-email-body">
                       <p *ngIf="!draft.content" class="preview-placeholder">Your email content will appear here...</p>
-                      <p *ngIf="draft.content" class="preview-content mobile-content">{{ draft.content }}</p>
+                      <div *ngIf="draft.content && isHtmlContent(draft.content)" class="preview-content-html mobile-content" [innerHTML]="safeDraftContent"></div>
+                      <p *ngIf="draft.content && !isHtmlContent(draft.content)" class="preview-content mobile-content">{{ draft.content }}</p>
                     </div>
+                    <div class="phone-home-indicator"></div>
                   </div>
-                  <div class="phone-home-bar"></div>
                 </div>
               </div>
             </div>
@@ -1532,37 +1577,10 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
         <!-- STEP 2: AUDIENCE -->
         <div *ngIf="currentStep() === 2" class="step-content">
           <div class="glass-card step-card">
-            <h2 class="step-title">Choose Your Audience</h2>
-            <p class="step-sub">Select which segment receives this campaign</p>
-            <div class="audience-grid">
-              <label class="audience-card" *ngFor="let seg of audienceSegments" [class.selected]="draft.sendTo === seg.id">
-                <input type="radio" name="audience" [value]="seg.id" [(ngModel)]="draft.sendTo" style="display:none" />
-                <div class="audience-card-inner">
-                  <div class="audience-check">
-                    <svg *ngIf="draft.sendTo === seg.id" viewBox="0 0 20 20" fill="#3b82f6" width="18" height="18"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd"/></svg>
-                    <div class="check-empty" *ngIf="draft.sendTo !== seg.id"></div>
-                  </div>
-                  <div class="audience-info">
-                    <div class="audience-name">{{ seg.name }}</div>
-                    <div class="audience-desc">{{ seg.description }}</div>
-                  </div>
-                  <div class="audience-count">{{ seg.count | number }}</div>
-                </div>
-              </label>
-            </div>
-            <div class="reach-summary" *ngIf="selectedSegment">
-              <svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" width="18" height="18"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-              Estimated reach: <strong>{{ selectedSegment.count | number }} subscribers</strong>
-            </div>
-
-            <!-- Series reader segment tip (book launch only) -->
-            <div class="series-segment-tip" *ngIf="draft.campaignType === 'book-launch'">
-              <svg viewBox="0 0 20 20" fill="#6366f1" width="14" height="14"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clip-rule="evenodd"/></svg>
-              <div>
-                <span class="sst-title">Series book? Consider a segmented version</span>
-                <span class="sst-desc">Readers who already read earlier books in your series are your most motivated buyers. A version that acknowledges what they've read — "If you've been waiting to find out what happens after the ending of Book Two, the wait is over" — converts meaningfully better than a generic announcement for this group. Segments are built automatically from your store's purchase history.</span>
-              </div>
-            </div>
+            <app-campaign-recipients-panel
+              [recipients]="recipients"
+              (recipientsChange)="onRecipientsChange($event)">
+            </app-campaign-recipients-panel>
 
             <!-- Suppression Rules -->
             <div class="suppression-section">
@@ -1575,7 +1593,7 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
               <div class="supp-rules-list">
                 <div class="supp-rule" *ngFor="let rule of suppressionRules">
                   <label class="toggle-wrap">
-                    <input type="checkbox" [(ngModel)]="rule.enabled" />
+                    <input type="checkbox" [(ngModel)]="rule.enabled" (ngModelChange)="refreshReachEstimate()" />
                     <span class="toggle-slider"></span>
                   </label>
                   <div class="supp-rule-info">
@@ -1656,11 +1674,11 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
               <h3 class="step-title">Campaign Summary</h3>
               <div class="summary-list">
                 <div class="summary-row"><span class="summary-key">Name</span><span class="summary-val">{{ draft.name || '—' }}</span></div>
-                <div class="summary-row"><span class="summary-key">From</span><span class="summary-val">{{ draft.fromName || '—' }}</span></div>
+                <div class="summary-row"><span class="summary-key">From</span><span class="summary-val">{{ senderDisplay }}</span></div>
+                <div class="summary-row" *ngIf="draft.templateName"><span class="summary-key">Template</span><span class="summary-val">{{ draft.templateName }}</span></div>
                 <div class="summary-row"><span class="summary-key">Subject</span><span class="summary-val">{{ draft.subject || '—' }}</span></div>
-                <div class="summary-row"><span class="summary-key">Preview text</span><span class="summary-val">{{ draft.previewText || '(none set)' }}</span></div>
-                <div class="summary-row"><span class="summary-key">Audience</span><span class="summary-val">{{ selectedSegment?.name || 'All Subscribers' }}</span></div>
-                <div class="summary-row"><span class="summary-key">Est. reach</span><span class="summary-val">{{ (selectedSegment?.count || 8421) | number }} subscribers</span></div>
+                <div class="summary-row"><span class="summary-key">Recipients</span><span class="summary-val">{{ recipientSummary }}</span></div>
+                <div class="summary-row"><span class="summary-key">Est. reach</span><span class="summary-val">{{ estimatedSendCount | number }} subscribers</span></div>
               </div>
 
               <!-- Plain-language pre-send summary -->
@@ -1742,9 +1760,9 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
                 </div>
               </div>
               <div class="send-final-actions">
-                <button class="btn-primary send-now-btn" (click)="sendCampaign()">
+                <button class="btn-primary send-now-btn" (click)="sendCampaign()" [disabled]="sendingCampaign">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                  {{ sendMode === 'now' ? 'Send Campaign Now' : 'Schedule Campaign' }}
+                  {{ sendingCampaign ? 'Sending…' : (sendMode === 'now' ? 'Send Campaign Now' : 'Schedule Campaign') }}
                 </button>
               </div>
             </div>
@@ -1753,11 +1771,25 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
                 <svg viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" width="48" height="48"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
               </div>
               <h2 class="success-title">{{ sendMode === 'now' ? 'Campaign Sent!' : 'Campaign Scheduled!' }}</h2>
-              <p class="success-msg">{{ sendMode === 'now' ? 'Your campaign is on its way to ' + ((selectedSegment?.count || 8421) | number) + ' subscribers.' : 'Your campaign is scheduled.' }}</p>
+              <p class="success-msg">{{ sendMode === 'now' ? 'Your campaign is on its way to ' + (estimatedSendCount | number) + ' subscribers.' : 'Your campaign is scheduled.' }}</p>
               <button class="btn-primary" (click)="resetAndGoToList()">Back to Campaigns</button>
             </div>
           </div>
         </div>
+
+        <app-campaign-sender-modal
+          [open]="showSenderModal()"
+          [sender]="{ fromName: draft.fromName, fromEmail: draft.fromEmail }"
+          [subject]="draft.subject"
+          (cancel)="showSenderModal.set(false)"
+          (saved)="onSenderSaved($event)">
+        </app-campaign-sender-modal>
+
+        <app-campaign-design-modal
+          [open]="showDesignModal()"
+          (cancel)="showDesignModal.set(false)"
+          (applied)="onDesignApplied($event)">
+        </app-campaign-design-modal>
 
         <!-- Step Navigation -->
         <div class="step-nav" *ngIf="!sendSuccess">
@@ -1780,6 +1812,7 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
   styles: [`
     /* Tabs */
     .tabs { display:flex; gap:.25rem; margin-bottom:1.5rem; background:#f1f5f9; border-radius:12px; padding:.25rem; width:fit-content; }
+    .loading-banner { padding: .875rem 1rem; margin-bottom: 1rem; background: rgba(59,130,246,.08); border: 1px solid rgba(59,130,246,.15); border-radius: 10px; color: #2563eb; font-size: .875rem; font-weight: 600; }
     .tab { padding:.55rem 1.1rem; border-radius:9px; border:none; background:transparent; color:#64748b; font-size:.875rem; font-weight:500; font-family:inherit; cursor:pointer; transition:all .2s; display:flex; align-items:center; gap:.5rem; }
     .tab:hover { color:#0f172a; }
     .tab.active { background:#ffffff; color:#0f172a; font-weight:600; box-shadow:0 1px 3px rgba(0,0,0,0.08); }
@@ -1855,6 +1888,15 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
 
     /* Step content */
     .step-content { margin-bottom:1.5rem; }
+    .brevo-setup-grid { display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1.5rem; }
+    .setup-card { border:1.5px solid #e2e8f0; border-radius:12px; padding:1rem 1.125rem; background:#fafbfc; }
+    .setup-card-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:.75rem; }
+    .setup-card-label { font-size:.75rem; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:.04em; }
+    .setup-line { font-size:.875rem; color:#0f172a; }
+    .setup-line.muted { font-size:.8125rem; color:#94a3b8; margin-top:.15rem; }
+    .setup-mini-preview { margin-top:.75rem; max-height:100px; overflow:hidden; border-radius:8px; border:1px solid #e2e8f0; background:#fff; }
+    .setup-mini-preview ::ng-deep .email-wrap { transform:scale(0.45); transform-origin:top left; width:222%; }
+    @media(max-width:700px) { .brevo-setup-grid { grid-template-columns:1fr; } }
     .step-card { padding:2rem; }
     .step-title { font-size:1.25rem; font-weight:700; color:#0f172a; margin:0 0 .35rem; }
     .step-sub { font-size:.875rem; color:#94a3b8; margin:0 0 1.75rem; }
@@ -1869,6 +1911,12 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
     .form-input { padding:.625rem .875rem; background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:10px; color:#0f172a; font-size:.875rem; font-family:inherit; outline:none; transition:border-color .15s; }
     .form-input:focus { border-color:#3b82f6; background:#fff; }
     .content-area { min-height:180px; resize:vertical; }
+    .content-area-html { margin-top:.75rem; font-family:ui-monospace,Consolas,monospace; font-size:.75rem; }
+    .content-visual-wrap { display:flex; flex-direction:column; gap:.75rem; }
+    .content-render-box { border:1.5px solid #e2e8f0; border-radius:12px; overflow:hidden; background:#fff; max-height:420px; overflow-y:auto; }
+    .content-source-toggle { align-self:flex-start; }
+    .preview-content-html { color:#334155; font-size:.875rem; line-height:1.6; }
+    .preview-content-html.mobile-content { font-size:.8125rem; }
     .char-hint { display:flex; align-items:center; gap:.5rem; margin-top:.3rem; }
     .char-count { font-size:.75rem; color:#94a3b8; }
     .char-count.warn { color:#d97706; }
@@ -1918,19 +1966,60 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
     .preview-content { color:#334155; font-size:.875rem; line-height:1.7; white-space:pre-wrap; margin:0; }
     .mobile-content { font-size:.9375rem; line-height:1.6; }
 
-    /* Phone frame */
-    .phone-outer { display:flex; justify-content:center; }
-    .phone-frame { width:390px; max-width:100%; background:#1c1c2e; border-radius:44px; padding:10px; box-shadow:0 24px 64px rgba(0,0,0,0.25), inset 0 0 0 1px rgba(255,255,255,0.08); }
-    .phone-notch { width:110px; height:26px; background:#1c1c2e; border-radius:0 0 16px 16px; margin:0 auto 6px; }
-    .phone-screen { background:#fff; border-radius:36px; overflow:hidden; min-height:520px; display:flex; flex-direction:column; }
-    .phone-status-bar { display:flex; justify-content:space-between; align-items:center; padding:.375rem .875rem; background:#f8fafc; font-size:.7rem; font-weight:600; color:#374151; }
-    .status-icons { letter-spacing:2px; font-size:.6rem; }
-    .phone-email-meta { padding:.75rem .875rem; border-bottom:1px solid #f1f5f9; }
+    /* Phone frame — iPhone mockup */
+    .phone-outer { display:flex; justify-content:center; padding:.5rem 0; }
+    .phone-frame {
+      position:relative; width:390px; max-width:100%;
+      background:linear-gradient(145deg,#2b2b2f 0%,#1a1a1e 50%,#0f0f12 100%);
+      border-radius:52px; padding:12px;
+      box-shadow:0 32px 80px rgba(15,23,42,0.28), 0 0 0 1px rgba(255,255,255,0.06) inset, 0 0 0 2px rgba(0,0,0,0.35);
+    }
+    .phone-side-btn { position:absolute; background:#3a3a40; border-radius:2px; }
+    .phone-side-btn-vol { left:-3px; top:108px; width:3px; height:56px; box-shadow:0 72px 0 #3a3a40; }
+    .phone-side-btn-power { right:-3px; top:140px; width:3px; height:72px; }
+    .phone-screen {
+      background:#fff; border-radius:40px; overflow:hidden;
+      height:640px; max-height:640px; display:flex; flex-direction:column;
+      box-shadow:0 0 0 1px rgba(0,0,0,0.04) inset;
+    }
+    .iphone-top-bar { position:relative; background:#fff; padding-top:10px; flex-shrink:0; }
+    .iphone-dynamic-island {
+      position:absolute; top:10px; left:50%; transform:translateX(-50%);
+      width:120px; height:34px; background:#0f0f12; border-radius:20px;
+      box-shadow:0 0 0 1px rgba(255,255,255,0.04) inset;
+      z-index:2;
+    }
+    .iphone-status-bar {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:14px 22px 8px; min-height:44px;
+      font-size:.8125rem; font-weight:600; color:#0f172a; letter-spacing:-.01em;
+    }
+    .iphone-time { font-variant-numeric:tabular-nums; min-width:54px; }
+    .iphone-status-icons { display:flex; align-items:center; gap:6px; min-width:54px; justify-content:flex-end; }
+    .iphone-icon { width:17px; height:12px; color:#0f172a; flex-shrink:0; }
+    .iphone-battery { display:flex; align-items:center; gap:1px; }
+    .iphone-battery-body {
+      width:22px; height:11px; border:1.5px solid #0f172a; border-radius:3px;
+      padding:1.5px; box-sizing:border-box;
+    }
+    .iphone-battery-fill { width:75%; height:100%; background:#0f172a; border-radius:1px; }
+    .iphone-battery-cap { width:2px; height:5px; background:#0f172a; border-radius:0 1px 1px 0; }
+    .phone-email-meta { padding:.75rem 1rem; border-bottom:1px solid #f1f5f9; flex-shrink:0; }
     .phone-from { font-size:.8125rem; font-weight:700; color:#0f172a; margin-bottom:.2rem; }
     .phone-subject { font-size:.8125rem; font-weight:600; color:#374151; margin-bottom:.2rem; }
     .phone-preheader { font-size:.75rem; color:#94a3b8; }
-    .phone-email-body { padding:.875rem; flex:1; overflow-y:auto; }
-    .phone-home-bar { width:120px; height:4px; background:rgba(255,255,255,0.2); border-radius:100px; margin:8px auto 4px; }
+    .phone-email-body {
+      padding:.875rem 1rem; flex:1; min-height:0;
+      overflow-y:auto; overflow-x:hidden;
+      -webkit-overflow-scrolling:touch;
+      overscroll-behavior:contain;
+    }
+    .phone-email-body::-webkit-scrollbar { width:4px; }
+    .phone-email-body::-webkit-scrollbar-thumb { background:rgba(15,23,42,0.15); border-radius:100px; }
+    .phone-home-indicator {
+      width:134px; height:5px; background:#0f172a; border-radius:100px;
+      margin:10px auto 12px; opacity:.18; flex-shrink:0;
+    }
 
     /* Audience step */
     .audience-grid { display:flex; flex-direction:column; gap:.75rem; margin-bottom:1.25rem; }
@@ -2074,13 +2163,8 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
     .ncg-title { font-size:.8125rem; font-weight:700; color:#374151; margin:0 0 .875rem; text-transform:uppercase; letter-spacing:.05em; }
     .ncg-grid { display:grid; grid-template-columns:1fr 1fr; gap:.625rem; }
     .ncg-item { display:flex; align-items:flex-start; gap:.625rem; }
-    .ncg-icon { width:28px; height:28px; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-    .ncg-icon.story { background:rgba(99,102,241,0.1); color:#6366f1; }
-    .ncg-icon.reading { background:rgba(59,130,246,0.1); color:#3b82f6; }
-    .ncg-icon.wip { background:rgba(245,158,11,0.1); color:#d97706; }
-    .ncg-icon.research { background:rgba(16,185,129,0.1); color:#059669; }
-    .ncg-icon.bts { background:rgba(168,85,247,0.1); color:#9333ea; }
-    .ncg-icon.soft-promo { background:rgba(239,68,68,0.1); color:#dc2626; }
+    .ncg-icon, .nav-icon { display:flex; align-items:center; justify-content:center; flex-shrink:0; color:#64748b; }
+    .ncg-icon svg, .nav-icon svg { width:20px; height:20px; display:block; }
     .ncg-name { display:block; font-size:.8125rem; font-weight:600; color:#0f172a; }
     .ncg-hint { display:block; font-size:.75rem; color:#94a3b8; line-height:1.4; }
 
@@ -2158,7 +2242,8 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
     .lt-row:last-child { border-bottom:none; }
     .lt-header { font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#94a3b8; padding-bottom:.625rem; }
     .lt-type { display:flex; align-items:center; gap:.625rem; }
-    .lt-icon { width:28px; height:28px; border-radius:7px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .lt-icon { flex-shrink:0; color:#64748b; }
+    .nav-icon svg { width:20px; height:20px; display:block; }
     .lt-type-name { font-size:.875rem; font-weight:600; color:#0f172a; }
     .lt-purpose { font-size:.8125rem; color:#64748b; }
     .lt-audience { font-size:.75rem; color:#94a3b8; }
@@ -2174,7 +2259,8 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
     .ct-btn { display:flex; flex-direction:column; align-items:center; gap:.375rem; padding:.625rem .5rem; border:1.5px solid #e2e8f0; border-radius:10px; background:#f8fafc; cursor:pointer; transition:all .15s; font-family:inherit; }
     .ct-btn:hover { border-color:#93c5fd; background:#f0f7ff; }
     .ct-btn.ct-selected { border-color:#3b82f6; background:rgba(59,130,246,0.06); }
-    .ct-btn-icon { width:24px; height:24px; display:flex; align-items:center; justify-content:center; color:#64748b; }
+    .ct-btn-icon { width:20px; height:20px; display:flex; align-items:center; justify-content:center; color:#64748b; flex-shrink:0; }
+    .ct-btn-icon svg { width:20px; height:20px; display:block; }
     .ct-btn.ct-selected .ct-btn-icon { color:#3b82f6; }
     .ct-btn-label { font-size:.7rem; font-weight:600; color:#374151; text-align:center; line-height:1.3; }
     .ct-btn.ct-selected .ct-btn-label { color:#1d4ed8; }
@@ -2373,6 +2459,9 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
   `]
 })
 export class CampaignsComponent implements OnInit {
+  private sanitizer = inject(DomSanitizer);
+  private activeUserId: string | null = null;
+
   readonly steps = STEPS;
   activeTab = signal<CampaignTab>('list');
   currentStep = signal<number>(0);
@@ -2380,29 +2469,52 @@ export class CampaignsComponent implements OnInit {
   campaigns: Campaign[] = [];
   editingCampaignId: string | null = null;
   loading = false;
+  showHtmlSource = false;
+  showSenderModal = signal(false);
+  showDesignModal = signal(false);
+  recipients: CampaignRecipients = { listIds: [], segmentIds: [], contactIds: [], excludeUnengaged: false };
   searchQuery = '';
   statusFilter = '';
   reportCampaign: Campaign | null = null;
   get rc(): Campaign { return this.reportCampaign!; }
-  draft = { name: '', fromName: 'Jane Austen', subject: '', previewText: '', sendTo: 'all', content: '', scheduledAt: '', timezoneOptimized: true, campaignType: '', directStoreLink: '', amazonLink: '', arcTag: '', amazonReviewLink: '', appleBooksLink: '', koboLink: '', bnLink: '' };
+
+  @ViewChild('nlSwapGuidance') nlSwapGuidance?: NewsletterSwapGuidanceComponent;
+  @ViewChild('flashSaleGuidance') flashSaleGuidance?: FlashSaleGuidanceComponent;
+  @ViewChild('priceDropGuidance') priceDropGuidance?: PriceDropGuidanceComponent;
+  @ViewChild('boxSetGuidance') boxSetGuidance?: BoxSetGuidanceComponent;
+  @ViewChild('surveyGuidance') surveyGuidance?: SurveyGuidanceComponent;
+  @ViewChild('eventGuidance') eventGuidance?: EventAnnouncementGuidanceComponent;
+  @ViewChild('communityGuidance') communityGuidance?: ReaderCommunityGuidanceComponent;
+  @ViewChild('backlistGuidance') backlistGuidance?: BacklistSpotlightGuidanceComponent;
+
+  draft = {
+    name: '', fromName: 'Author', fromEmail: '', subject: '', previewText: '', sendTo: 'all', content: '',
+    bookTitle: '',
+    templateName: '', templateId: '',
+    scheduledAt: '', timezoneOptimized: true, campaignType: '',
+    directStoreLink: '', amazonLink: '', arcTag: '', amazonReviewLink: '',
+    appleBooksLink: '', koboLink: '', bnLink: '',
+  };
+  audienceSegments: AudienceSegment[] = [];
+  reachEstimate: ReachEstimate = { segmentCount: 0, excludedCount: 0, estimatedSendCount: 0 };
 
   // Campaign types (all 15 from the article)
   readonly campaignTypes: CampaignTypeOption[] = [
-    { id: 'book-launch',    label: 'Book Launch',          purpose: 'Announce release day availability, drive immediate sales',          audience: 'Full list or warm segments',      color: '#3b82f6', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>' },
-    { id: 'new-release',    label: 'New Release',          purpose: 'Alert engaged readers a new title is available',                    audience: 'Backlist readers & superfans',    color: '#6366f1', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>' },
-    { id: 'arc-invite',     label: 'ARC Invitation',       purpose: 'Recruit advance readers for review copies',                        audience: 'Highly engaged segment',          color: '#8b5cf6', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>' },
-    { id: 'arc-followup',   label: 'ARC Follow-Up',        purpose: 'Remind ARC readers to post their reviews',                         audience: 'ARC team only',                   color: '#a78bfa', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>' },
-    { id: 'newsletter',     label: 'Newsletter',           purpose: 'Relationship-building, ongoing engagement',                        audience: 'Full list or by preference',      color: '#059669', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>' },
-    { id: 'nl-swap',        label: 'Newsletter Swap',      purpose: 'Cross-promote a fellow author\'s work',                            audience: 'Full list or genre segment',      color: '#0891b2', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>' },
-    { id: 'flash-sale',     label: 'Flash Sale',           purpose: 'Create urgency around a short-window deal',                        audience: 'Full list or non-buyers',         color: '#dc2626', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>' },
-    { id: 'price-drop',     label: 'Price Drop',           purpose: 'Remove price barrier for fence-sitters',                           audience: 'Non-buyers of that title',        color: '#d97706', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>' },
-    { id: 'box-set',        label: 'Box Set / Bundle',     purpose: 'Increase order value, move catalog readers deeper',                 audience: 'Partial-series buyers',           color: '#7c3aed', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>' },
-    { id: 'giveaway',       label: 'Giveaway',             purpose: 'Drive list growth, reward current subscribers',                    audience: 'Full list',                       color: '#f59e0b', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>' },
-    { id: 'survey',         label: 'Survey',               purpose: 'Gather reader intelligence',                                       audience: 'Engaged segment',                 color: '#0ea5e9', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>' },
-    { id: 'event',          label: 'Event Announcement',   purpose: 'Promote signings, virtual events, live sessions',                  audience: 'Local segment or full list',      color: '#10b981', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>' },
-    { id: 'reader-community', label: 'Reader Community',   purpose: 'Move subscribers into an active reader group',                     audience: 'Engaged segment',                 color: '#ec4899', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>' },
-    { id: 'backlist',       label: 'Backlist Spotlight',   purpose: 'Re-surface older titles to new or lapsed readers',                 audience: 'New subscribers or lapsed',       color: '#64748b', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>' },
-    { id: 'price-drop-2',   label: 'Price Drop Notif.',    purpose: 'Remove price barrier for fence-sitters on a specific title',       audience: 'Non-buyers of that title',        color: '#f97316', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>' },
+    { id: 'book-launch',    label: 'Book Launch',          purpose: 'Announce release day availability, drive immediate sales',          audience: 'Full list or warm segments',      color: '#3b82f6', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>' },
+    { id: 'new-release',    label: 'New Release',          purpose: 'Alert engaged readers a new title is available',                    audience: 'Backlist readers & superfans',    color: '#6366f1', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>' },
+    { id: 'arc-invite',     label: 'ARC Invitation',       purpose: 'Recruit advance readers for review copies',                        audience: 'Highly engaged segment',          color: '#8b5cf6', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>' },
+    { id: 'arc-followup',   label: 'ARC Follow-Up',        purpose: 'Remind ARC readers to post their reviews',                         audience: 'ARC team only',                   color: '#a78bfa', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>' },
+    { id: 'newsletter',     label: 'Newsletter',           purpose: 'Relationship-building, ongoing engagement',                        audience: 'Full list or by preference',      color: '#059669', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>' },
+    { id: 'nl-swap',        label: 'Newsletter Swap',      purpose: 'Cross-promote a fellow author\'s work',                            audience: 'Full list or genre segment',      color: '#0891b2', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>' },
+    { id: 'flash-sale',     label: 'Flash Sale',           purpose: 'Create urgency around a short-window deal',                        audience: 'Full list or non-buyers',         color: '#dc2626', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>' },
+    { id: 'price-drop',     label: 'Price Drop',           purpose: 'Remove price barrier for fence-sitters',                           audience: 'Non-buyers of that title',        color: '#d97706', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>' },
+    { id: 'box-set',        label: 'Box Set / Bundle',     purpose: 'Increase order value, move catalog readers deeper',                 audience: 'Partial-series buyers',           color: '#7c3aed', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>' },
+    { id: 'giveaway',       label: 'Giveaway',             purpose: 'Drive list growth, reward current subscribers',                    audience: 'Full list',                       color: '#f59e0b', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>' },
+    { id: 'survey',         label: 'Survey',               purpose: 'Gather reader intelligence',                                       audience: 'Engaged segment',                 color: '#0ea5e9', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>' },
+    { id: 'event',          label: 'Event Announcement',   purpose: 'Promote signings, virtual events, live sessions',                  audience: 'Local segment or full list',      color: '#10b981', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>' },
+    { id: 'reader-community', label: 'Reader Community',   purpose: 'Move subscribers into an active reader group',                     audience: 'Engaged segment',                 color: '#ec4899', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>' },
+    { id: 'backlist',       label: 'Backlist Spotlight',   purpose: 'Re-surface older titles to new or lapsed readers',                 audience: 'New subscribers or lapsed',       color: '#64748b', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>' },
+    { id: 'price-drop-2',   label: 'Price Drop Notif.',    purpose: 'Remove price barrier for fence-sitters on a specific title',       audience: 'Non-buyers of that title',        color: '#f97316', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>' },
   ];
 
   // Suppression rules
@@ -2416,7 +2528,7 @@ export class CampaignsComponent implements OnInit {
 
   // Campaign calendar
   calRelease = { title: '', date: '' };
-  calendarEvents: CalendarEventLocal[] = [];
+  calendarEvents: CalendarEvent[] = [];
 
   readonly baselineCampaigns = [
     { timing: '4–6 weeks before', type: 'ARC Invitation', description: 'Recruit advance readers for review copies', offset: -35 },
@@ -2435,11 +2547,12 @@ export class CampaignsComponent implements OnInit {
   ];
   sendMode: 'now' | 'schedule' = 'now';
   sendSuccess = false;
+  sendingCampaign = false;
   toastMessage = '';
   toastType: 'success' | 'warn' = 'success';
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
 
-  newsletter: NewsletterScheduleLocal = {
+  newsletter: NewsletterSchedule = {
     name: 'Monthly Reader Letter',
     frequency: 'monthly',
     dayOfWeek: 'Tuesday',
@@ -2456,14 +2569,7 @@ export class CampaignsComponent implements OnInit {
   // A/B Testing
   showABForm = false;
   abDraft = { subjectA: '', subjectB: '', testSize: 20, winnerMetric: 'opens' as 'opens' | 'clicks', waitHours: 8 };
-  abTests: ABTestLocal[] = [];
-
-  readonly audienceSegments = [
-    { id: 'all',        name: 'All Subscribers', count: 8421, description: 'Your entire subscriber list' },
-    { id: 'vip',        name: 'VIP Readers',     count: 342,  description: 'Subscribers with >70% open rate' },
-    { id: 'launch',     name: 'Launch List',     count: 876,  description: 'Opted in for book launches' },
-    { id: 'newsletter', name: 'Newsletter Only', count: 2341, description: 'General newsletter subscribers' },
-  ];
+  abTests: AbTest[] = [];
 
   readonly checkGroups = [
     { key: 'audience' as const, label: 'Audience & Suppression' },
@@ -2477,10 +2583,181 @@ export class CampaignsComponent implements OnInit {
     return this.preflightChecks().filter(c => c.category === cat);
   }
 
-  constructor(private campaignApi: CampaignApiService, private cdr: ChangeDetectorRef) {}
+  constructor(
+    private campaignApi: CampaignApiService,
+    private auth: AuthService,
+    private cdr: ChangeDetectorRef,
+    private route: ActivatedRoute,
+    private router: Router,
+  ) {
+    effect(() => {
+      const userId = this.auth.user()?.id ?? null;
+      if (this.activeUserId !== null && userId !== this.activeUserId) {
+        this.resetForAccountSwitch(userId);
+      }
+      this.activeUserId = userId;
+    });
+  }
 
   ngOnInit() {
+    const fromName = this.auth.user()?.name?.split(' ')[0];
+    if (fromName) this.draft.fromName = fromName;
+    if (this.auth.user()?.email) this.draft.fromEmail = this.auth.user()!.email;
     this.loadCampaignData();
+    this.loadAudienceSegments();
+    this.route.queryParams.subscribe(params => {
+      const editId = params['edit'];
+      if (editId) {
+        this.campaignApi.getCampaign(editId).subscribe({
+          next: c => {
+            this.editCampaign(c);
+            this.router.navigate([], { relativeTo: this.route, queryParams: { edit: null }, queryParamsHandling: 'merge', replaceUrl: true });
+          },
+        });
+        return;
+      }
+
+      if (params['create'] === '1') {
+        const listId = params['listId'] as string | undefined;
+        const segmentId = params['segmentId'] as string | undefined;
+        const audienceName = params['audienceName'] as string | undefined;
+        this.startCreateFromAudience(listId, segmentId, audienceName);
+        this.router.navigate([], {
+          relativeTo: this.route,
+          queryParams: { create: null, listId: null, segmentId: null, audienceName: null },
+          queryParamsHandling: 'merge',
+          replaceUrl: true,
+        });
+      }
+    });
+  }
+
+  private resetForAccountSwitch(userId: string | null) {
+    this.campaigns = [];
+    this.calendarEvents = [];
+    this.abTests = [];
+    this.editingCampaignId = null;
+    this.reportCampaign = null;
+    this.draft = this.emptyDraft();
+    this.recipients = { listIds: [], segmentIds: [], contactIds: [], excludeUnengaged: false };
+    this.reachEstimate = { segmentCount: 0, excludedCount: 0, estimatedSendCount: 0 };
+    this.audienceSegments = [];
+    this.sendSuccess = false;
+    this.sendingCampaign = false;
+    this.sendMode = 'now';
+    this.currentStep.set(0);
+    this.activeTab.set('list');
+    if (userId) {
+      this.loadCampaignData();
+      this.loadAudienceSegments();
+    }
+    this.cdr.detectChanges();
+  }
+
+  private hasExplicitAudience(): boolean {
+    if (
+      this.recipients.listIds.length > 0 ||
+      this.recipients.segmentIds.length > 0 ||
+      this.recipients.contactIds.length > 0
+    ) {
+      return true;
+    }
+    const seg = this.draft.sendTo;
+    return !!seg && seg !== 'all' && /^[0-9a-f-]{36}$/i.test(seg);
+  }
+
+  private emptyDraft() {
+    const fromName = this.auth?.user()?.name?.split(' ')[0] || 'Author';
+    const fromEmail = this.auth?.user()?.email || '';
+    return {
+      name: '', fromName, fromEmail, subject: '', previewText: '', sendTo: 'all', content: '',
+      bookTitle: '',
+      templateName: '', templateId: '',
+      scheduledAt: '', timezoneOptimized: true, campaignType: '',
+      directStoreLink: '', amazonLink: '', arcTag: '', amazonReviewLink: '',
+      appleBooksLink: '', koboLink: '', bnLink: '',
+    };
+  }
+
+  private loadAudienceSegments() {
+    this.campaignApi.getAudienceSegments().subscribe({
+      next: segments => {
+        this.audienceSegments = segments;
+        this.refreshReachEstimate();
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.audienceSegments = [
+          { id: 'all', name: 'All Subscribers', count: 0, description: 'Your entire subscriber list' },
+        ];
+        this.cdr.detectChanges();
+      },
+    });
+  }
+
+  refreshReachEstimate() {
+    const enabled = this.suppressionRules.filter(r => r.enabled).map(r => r.id);
+    const hasExplicitRecipients =
+      this.recipients.listIds.length > 0 ||
+      this.recipients.segmentIds.length > 0 ||
+      this.recipients.contactIds.length > 0;
+
+    this.campaignApi.estimateReach({
+      segment: hasExplicitRecipients ? undefined : this.draft.sendTo,
+      enabledSuppressionRules: enabled,
+      listIds: this.recipients.listIds.length ? this.recipients.listIds : undefined,
+      segmentIds: this.recipients.segmentIds.length ? this.recipients.segmentIds : undefined,
+      contactIds: this.recipients.contactIds.length ? this.recipients.contactIds : undefined,
+      excludeUnengaged: this.recipients.excludeUnengaged,
+      arcTag: this.draft.arcTag || undefined,
+    }).subscribe({
+      next: estimate => {
+        this.reachEstimate = estimate;
+        this.cdr.detectChanges();
+      },
+    });
+  }
+
+  private guidanceRefs() {
+    const asStrings = (obj: Record<string, unknown>) =>
+      Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, String(v ?? '')]));
+
+    return {
+      flashSale: this.flashSaleGuidance ? { saleDetails: asStrings(this.flashSaleGuidance.saleDetails) } : undefined,
+      priceDrop: this.priceDropGuidance ? { dropDetails: asStrings(this.priceDropGuidance.dropDetails) } : undefined,
+      boxSet: this.boxSetGuidance ? { bundleDetails: asStrings(this.boxSetGuidance.bundleDetails) } : undefined,
+      survey: this.surveyGuidance ? {
+        surveyDetails: asStrings(this.surveyGuidance.surveyDetails),
+        surveyQuestions: this.surveyGuidance.surveyQuestions,
+      } : undefined,
+      event: this.eventGuidance ? { eventDetails: asStrings(this.eventGuidance.eventDetails) } : undefined,
+      readerCommunity: this.communityGuidance ? { communityDetails: asStrings(this.communityGuidance.communityDetails) } : undefined,
+      backlist: this.backlistGuidance ? {
+        spotlightDetails: asStrings(this.backlistGuidance.spotlightDetails),
+        catalogTitles: this.backlistGuidance.catalogTitles,
+      } : undefined,
+      nlSwap: this.nlSwapGuidance ? { partner: asStrings(this.nlSwapGuidance.partner) } : undefined,
+    };
+  }
+
+  private restoreFromExtras(extras: Record<string, string>) {
+    if (extras['timezoneOptimized']) {
+      this.draft.timezoneOptimized = extras['timezoneOptimized'] === 'true';
+    }
+    if (extras['suppressionRules']) {
+      try {
+        const ids = JSON.parse(extras['suppressionRules']) as string[];
+        this.suppressionRules.forEach(r => { r.enabled = ids.includes(r.id); });
+      } catch { /* ignore */ }
+    }
+  }
+
+  private applyGuidanceExtras(extras: Record<string, string>, campaignType: string) {
+    loadGuidanceExtras(campaignType, extras, this.guidanceRefs());
+  }
+
+  private enabledSuppressionIds(): string[] {
+    return this.suppressionRules.filter(r => r.enabled).map(r => r.id);
   }
 
   private loadCampaignData() {
@@ -2502,17 +2779,133 @@ export class CampaignsComponent implements OnInit {
     });
   }
 
+  isHtmlContent(content: string): boolean {
+    return /<\s*(div|p|table|h[1-6]|a|span|ul|ol|li|html|body|center|tr|td|th|img|style)\b/i.test(content ?? '');
+  }
+
+  get safeDraftContent(): SafeHtml {
+    return this.sanitizer.bypassSecurityTrustHtml(applyPreviewMergeTags(this.draft.content || '', {
+      book_title: this.draft.bookTitle || undefined,
+      author_name: this.draft.fromName || undefined,
+    } as Record<string, string>));
+  }
+
+  get draftUsesBookTitle(): boolean {
+    return /\{\{\s*book_title\s*\}\}/i.test(this.draft.content || '')
+      || /\{\{\s*book_title\s*\}\}/i.test(this.draft.subject || '')
+      || ['book-launch', 'new-release', 'arc-invite', 'arc-followup', 'backlist'].includes(this.draft.campaignType);
+  }
+
+  get senderDisplay(): string {
+    const name = this.draft.fromName || 'Your Name';
+    const email = this.draft.fromEmail;
+    return email ? `${name} <${email}>` : name;
+  }
+
+  get senderInitials(): string {
+    const parts = (this.draft.fromName || 'S').trim().split(/\s+/);
+    return parts.length >= 2
+      ? (parts[0][0] + parts[1][0]).toUpperCase()
+      : (parts[0][0] || 'S').toUpperCase();
+  }
+
+  get recipientSummary(): string {
+    const parts: string[] = [];
+    if (this.recipients.listIds.length) parts.push(`${this.recipients.listIds.length} list(s)`);
+    if (this.recipients.segmentIds.length) parts.push(`${this.recipients.segmentIds.length} segment(s)`);
+    if (this.recipients.contactIds.length) parts.push(`${this.recipients.contactIds.length} contact(s)`);
+    if (parts.length) return parts.join(', ');
+    return 'Select a list, segment, or contact';
+  }
+
+  onSenderSaved(sender: { fromName: string; fromEmail: string }) {
+    this.draft.fromName = sender.fromName;
+    this.draft.fromEmail = sender.fromEmail;
+    this.showSenderModal.set(false);
+    this.cdr.detectChanges();
+  }
+
+  onDesignApplied(template: AppliedTemplate | null) {
+    this.showDesignModal.set(false);
+    if (!template) {
+      this.draft.templateName = '';
+      this.draft.templateId = '';
+      this.cdr.detectChanges();
+      return;
+    }
+    this.draft.templateId = template.id;
+    this.draft.templateName = template.name;
+    if (template.subjectLine) this.draft.subject = template.subjectLine;
+    if (template.htmlBody) this.draft.content = template.htmlBody;
+    if (template.suggestedCampaignType && !this.draft.campaignType) {
+      this.draft.campaignType = template.suggestedCampaignType;
+    }
+    if (!this.draft.name) this.draft.name = `${template.name} Campaign`;
+    this.showHtmlSource = false;
+    this.cdr.detectChanges();
+  }
+
+  onRecipientsChange(recipients: CampaignRecipients) {
+    this.recipients = recipients;
+    if (recipients.segmentIds.length > 0) {
+      this.draft.sendTo = recipients.segmentIds[0];
+    } else {
+      this.draft.sendTo = 'all';
+    }
+    this.refreshReachEstimate();
+    this.cdr.detectChanges();
+  }
+
+  private startCreateFromAudience(listId?: string, segmentId?: string, audienceName?: string) {
+    this.startCreate();
+    if (listId) {
+      this.recipients = { listIds: [listId], segmentIds: [], contactIds: [], excludeUnengaged: false };
+      this.draft.sendTo = 'all';
+    } else if (segmentId) {
+      this.recipients = { listIds: [], segmentIds: [segmentId], contactIds: [], excludeUnengaged: false };
+      this.draft.sendTo = segmentId;
+    }
+    if (audienceName) {
+      this.draft.name = `Email to ${audienceName}`;
+    }
+    this.currentStep.set(2);
+    this.refreshReachEstimate();
+    this.cdr.detectChanges();
+  }
+
+  private restoreRecipientExtras(extras: Record<string, string>) {
+    try {
+      this.recipients = {
+        listIds: extras['recipientListIds'] ? JSON.parse(extras['recipientListIds']) : [],
+        segmentIds: extras['recipientSegmentIds'] ? JSON.parse(extras['recipientSegmentIds']) : [],
+        contactIds: extras['recipientContactIds'] ? JSON.parse(extras['recipientContactIds']) : [],
+        excludeUnengaged: extras['excludeUnengaged'] === 'true',
+      };
+    } catch {
+      this.recipients = { listIds: [], segmentIds: [], contactIds: [], excludeUnengaged: false };
+    }
+    this.draft.templateId = extras['emailTemplateId'] || '';
+    this.draft.templateName = extras['templateName'] || '';
+    this.draft.fromEmail = extras['fromEmail'] || this.draft.fromEmail;
+  }
+
   private buildCampaignPayload(status = 'draft') {
+    const guidanceExtras = collectGuidanceExtras(this.draft.campaignType, this.guidanceRefs());
+    const scheduling = this.sendMode === 'schedule' && status !== 'draft';
+    const scheduledAt = scheduling && this.draft.scheduledAt
+      ? new Date(this.draft.scheduledAt).toISOString()
+      : null;
+
     return {
       name: this.draft.name,
       subject: this.draft.subject,
-      previewText: this.draft.previewText,
+      previewText: '',
       content: this.draft.content,
       campaignType: this.draft.campaignType,
       fromName: this.draft.fromName,
       sendToSegment: this.draft.sendTo,
       status,
-      scheduledAt: this.draft.scheduledAt || null,
+      scheduledAt,
       extras: {
         directStoreLink: this.draft.directStoreLink,
         amazonLink: this.draft.amazonLink,
@@ -2521,6 +2914,17 @@ export class CampaignsComponent implements OnInit {
         appleBooksLink: this.draft.appleBooksLink,
         koboLink: this.draft.koboLink,
         bnLink: this.draft.bnLink,
+        timezoneOptimized: String(this.draft.timezoneOptimized),
+        suppressionRules: JSON.stringify(this.enabledSuppressionIds()),
+        fromEmail: this.draft.fromEmail,
+        templateName: this.draft.templateName,
+        emailTemplateId: this.draft.templateId,
+        recipientListIds: JSON.stringify(this.recipients.listIds),
+        recipientSegmentIds: JSON.stringify(this.recipients.segmentIds),
+        recipientContactIds: JSON.stringify(this.recipients.contactIds),
+        excludeUnengaged: String(this.recipients.excludeUnengaged),
+        ...guidanceExtras,
+        ...(this.draft.bookTitle.trim() ? { book_title: this.draft.bookTitle.trim() } : {}),
       },
     };
   }
@@ -2537,7 +2941,17 @@ export class CampaignsComponent implements OnInit {
     return this.audienceSegments.find(s => s.id === this.draft.sendTo) ?? null;
   }
 
-  startCreate() { this.currentStep.set(0); this.sendSuccess = false; this.reportCampaign = null; this.activeTab.set('create'); }
+  startCreate() {
+    this.draft = this.emptyDraft();
+    this.recipients = { listIds: [], segmentIds: [], contactIds: [], excludeUnengaged: false };
+    this.editingCampaignId = null;
+    this.showHtmlSource = false;
+    this.currentStep.set(0);
+    this.sendSuccess = false;
+    this.reportCampaign = null;
+    this.activeTab.set('create');
+    this.refreshReachEstimate();
+  }
 
   viewReport(c: Campaign) {
     this.reportCampaign = this.reportCampaign?.id === c.id ? null : c;
@@ -2546,27 +2960,53 @@ export class CampaignsComponent implements OnInit {
   editCampaign(c: Campaign) {
     this.reportCampaign = null;
     this.editingCampaignId = c.id;
-    this.draft = {
-      name: c.name,
-      fromName: 'Jane Austen',
-      subject: c.subject,
-      previewText: '',
-      sendTo: 'all',
-      content: `Hi [first_name],\n\n(Edit the content of "${c.name}" here...)`,
-      scheduledAt: '',
-      timezoneOptimized: true,
-      campaignType: '',
-      directStoreLink: '',
-      amazonLink: '',
-      arcTag: '',
-      amazonReviewLink: '',
-      appleBooksLink: '',
-      koboLink: '',
-      bnLink: ''
-    };
-    this.currentStep.set(0);
-    this.sendSuccess = false;
-    this.activeTab.set('create');
+    this.showHtmlSource = false;
+    this.campaignApi.getCampaign(c.id).subscribe({
+      next: full => {
+        const extras = full.extras ?? {};
+        const fromName = full.fromName || this.auth.user()?.name?.split(' ')[0] || 'Author';
+        this.draft = {
+          name: full.name,
+          fromName,
+          fromEmail: extras['fromEmail'] || this.auth.user()?.email || '',
+          subject: full.subject,
+          previewText: full.previewText || '',
+          sendTo: full.sendToSegment || 'all',
+          content: full.content || '',
+          bookTitle: extras['book_title'] || extras['flashSale_title'] || extras['backlist_title'] || '',
+          templateName: extras['templateName'] || '',
+          templateId: extras['emailTemplateId'] || '',
+          scheduledAt: full.scheduledAt ? full.scheduledAt.toString().slice(0, 16) : '',
+          timezoneOptimized: extras['timezoneOptimized'] !== 'false',
+          campaignType: full.campaignType || '',
+          directStoreLink: extras['directStoreLink'] || '',
+          amazonLink: extras['amazonLink'] || '',
+          arcTag: extras['arcTag'] || '',
+          amazonReviewLink: extras['amazonReviewLink'] || '',
+          appleBooksLink: extras['appleBooksLink'] || '',
+          koboLink: extras['koboLink'] || '',
+          bnLink: extras['bnLink'] || '',
+        };
+        this.restoreFromExtras(extras);
+        this.restoreRecipientExtras(extras);
+        this.currentStep.set(0);
+        this.sendSuccess = false;
+        this.activeTab.set('create');
+        this.cdr.detectChanges();
+        setTimeout(() => {
+          this.applyGuidanceExtras(extras, full.campaignType || '');
+          this.refreshReachEstimate();
+          this.cdr.detectChanges();
+        });
+      },
+      error: () => {
+        this.draft = { ...this.emptyDraft(), name: c.name, subject: c.subject };
+        this.currentStep.set(0);
+        this.sendSuccess = false;
+        this.activeTab.set('create');
+        this.cdr.detectChanges();
+      },
+    });
   }
 
   deleteCampaign(id: string) {
@@ -2606,9 +3046,45 @@ export class CampaignsComponent implements OnInit {
       error: err => this.showToast(err.message || 'Could not save draft', 'warn'),
     });
   }
-  sendTestToPhone() { this.showToast('Test email sent to your phone!', 'success'); }
+  sendTestToPhone() {
+    if (!this.draft.subject.trim() || !this.draft.content.trim()) {
+      this.showToast('Add a subject and content before sending a test', 'warn');
+      return;
+    }
+    this.campaignApi.sendTestEmail({
+      campaignId: this.editingCampaignId ?? undefined,
+      subject: this.draft.subject,
+      previewText: '',
+      content: this.draft.content,
+      fromName: this.draft.fromName,
+    }).subscribe({
+      next: res => this.showToast(res.message, 'success'),
+      error: err => this.showToast(err.message || 'Could not send test email', 'warn'),
+    });
+  }
 
-  saveNewsletter(schedule?: NewsletterScheduleLocal) {
+  writeNextNewsletterIssue() {
+    this.draft = {
+      ...this.emptyDraft(),
+      name: this.newsletter.name || 'Newsletter Issue',
+      subject: this.newsletter.subject,
+      previewText: '',
+      content: this.newsletter.content,
+      campaignType: 'newsletter',
+      sendTo: 'newsletter',
+    };
+    if (this.newsletter.replyQuestion) {
+      this.draft.content = (this.draft.content ? this.draft.content + '\n\n' : '') +
+        `Reply to this email: ${this.newsletter.replyQuestion}`;
+    }
+    this.editingCampaignId = null;
+    this.currentStep.set(0);
+    this.sendSuccess = false;
+    this.activeTab.set('create');
+    this.refreshReachEstimate();
+  }
+
+  saveNewsletter(schedule?: NewsletterSchedule) {
     const data = schedule ?? this.newsletter;
     this.campaignApi.saveNewsletter(data).subscribe({
       next: saved => {
@@ -2636,15 +3112,15 @@ export class CampaignsComponent implements OnInit {
     this.suppressionRules[2].enabled = id === 'book-launch';
     // Auto-configure send-to for ARC follow-up
     if (id === 'arc-followup') {
-      this.draft.sendTo = 'vip'; // closest to ARC team segment
+      this.draft.sendTo = 'vip';
     }
+    this.refreshReachEstimate();
   }
 
   createPostLaunchThankYou() {
     this.draft.campaignType = 'arc-followup';
     this.draft.name = 'Post-Launch Thank-You — ARC Team';
     this.draft.subject = 'Thank you — the launch results are in';
-    this.draft.previewText = 'You made this happen. Here\'s what the response has been...';
     this.draft.sendTo = 'vip';
     this.currentStep.set(0);
     this.sendSuccess = false;
@@ -2657,12 +3133,11 @@ export class CampaignsComponent implements OnInit {
   }
 
   get suppressedCount(): number {
-    const base = this.selectedSegment?.count || 8421;
-    return this.suppressionRules.filter(r => r.enabled).length > 0 ? Math.round(base * 0.065) : 0;
+    return this.reachEstimate.excludedCount;
   }
 
   get estimatedSendCount(): number {
-    return (this.selectedSegment?.count || 8421) - this.suppressedCount;
+    return this.reachEstimate.estimatedSendCount;
   }
 
   // Campaign calendar helpers
@@ -2673,18 +3148,44 @@ export class CampaignsComponent implements OnInit {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
-  addCalendarEvent() {
-    this.campaignApi.createCalendarEvent({
-      name: 'New Campaign',
-      type: 'Book Launch',
-      status: 'planned',
-    }).subscribe({
+  openAddCalendarEvent(payload: { name: string; type: string; date: string; status: string }) {
+    this.campaignApi.createCalendarEvent(payload).subscribe({
       next: ev => {
         this.calendarEvents = [...this.calendarEvents, ev];
         this.showToast('Campaign added to calendar', 'success');
         this.cdr.detectChanges();
       },
       error: err => this.showToast(err.message || 'Could not add event', 'warn'),
+    });
+  }
+
+  deleteCalendarEvent(id: string) {
+    this.campaignApi.deleteCalendarEvent(id).subscribe({
+      next: () => {
+        this.calendarEvents = this.calendarEvents.filter(e => e.id !== id);
+        this.showToast('Calendar event removed', 'success');
+        this.cdr.detectChanges();
+      },
+      error: err => this.showToast(err.message || 'Could not delete event', 'warn'),
+    });
+  }
+
+  editCalendarEvent(ev: CalendarEvent) {
+    const typeId = this.campaignTypes.find(ct => ct.label === ev.type)?.id || '';
+    this.draft = { ...this.emptyDraft(), name: ev.name, campaignType: typeId };
+    this.editingCampaignId = null;
+    this.currentStep.set(0);
+    this.sendSuccess = false;
+    this.activeTab.set('create');
+    this.cdr.detectChanges();
+  }
+
+  addCalendarEvent() {
+    this.openAddCalendarEvent({
+      name: 'New Campaign',
+      type: 'Book Launch',
+      date: '',
+      status: 'planned',
     });
   }
 
@@ -2712,6 +3213,17 @@ export class CampaignsComponent implements OnInit {
 
   setReplyQuestion(index: number) {
     this.newsletter.replyQuestion = this.replyQuestionExamples[index];
+  }
+
+  deleteAbTest(id: string) {
+    this.campaignApi.deleteAbTest(id).subscribe({
+      next: () => {
+        this.abTests = this.abTests.filter(t => t.id !== id);
+        this.showToast('A/B test deleted', 'success');
+        this.cdr.detectChanges();
+      },
+      error: err => this.showToast(err.message || 'Could not delete A/B test', 'warn'),
+    });
   }
 
   createAbTest(payload: { subjectA: string; subjectB: string; testSize: number; winnerMetric: string; waitHours: number }) {
@@ -2766,13 +3278,16 @@ export class CampaignsComponent implements OnInit {
     const urls = content.match(urlPattern) || [];
 
     const checks: PreflightCheck[] = [];
-    const reach = this.selectedSegment?.count || 8421;
-    const excluded = Math.round(reach * 0.065);
+    const reach = this.reachEstimate.segmentCount || 0;
+    const excluded = this.reachEstimate.excludedCount;
+    const audienceSelected = this.hasExplicitAudience();
 
     // ── AUDIENCE & SUPPRESSION ──
     checks.push({ id: 'audience', label: 'Recipient Count', category: 'audience',
-      status: reach > 0 ? 'pass' : 'fail',
-      message: reach > 0
+      status: !audienceSelected ? 'fail' : reach > 0 ? 'pass' : 'fail',
+      message: !audienceSelected
+        ? 'Select at least one list, segment, or contact in the Audience step.'
+        : reach > 0
         ? `Sending to ${reach.toLocaleString()} subscribers. ${excluded.toLocaleString()} unsubscribed addresses excluded automatically.`
         : 'No recipients — review your audience segment.'
     });
@@ -2815,12 +3330,6 @@ export class CampaignsComponent implements OnInit {
         : hasExcessivePunct ? 'Excessive punctuation in subject line (!! or ?!) — moderate spam signal.'
         : subLen > 60 ? `Subject is ${subLen} chars — consider keeping under 60 for mobile.`
         : `Subject is ${subLen} characters — good length, no trigger phrases detected.`
-    });
-    checks.push({ id: 'previewText', label: 'Preview Text (Preheader)', category: 'content',
-      status: this.draft.previewText.trim().length > 0 ? 'pass' : 'warn',
-      message: this.draft.previewText.trim().length > 0
-        ? 'Preview text set — will appear after subject line in inbox.'
-        : 'No preview text — inbox will default to first line of body text. Adding preview text can improve open rates by 10–15%.'
     });
     let spamMsg = spamLevel === 'pass'
       ? 'Spam content score: Low. No significant trigger patterns detected.'
@@ -2871,18 +3380,49 @@ export class CampaignsComponent implements OnInit {
   }
 
   sendCampaign() {
+    if (this.sendingCampaign) return;
+
+    if (!this.draft.name?.trim() || !this.draft.subject?.trim()) {
+      this.showToast('Add a campaign name and subject before sending', 'warn');
+      return;
+    }
+
     const schedule = this.sendMode === 'schedule';
+    if (schedule && !this.draft.scheduledAt) {
+      this.showToast('Choose a date and time to schedule your campaign', 'warn');
+      return;
+    }
+
+    if (!this.hasExplicitAudience()) {
+      this.showToast('Select at least one list, segment, or contact in the Audience step', 'warn');
+      return;
+    }
+
+    if (this.estimatedSendCount <= 0) {
+      this.showToast('No recipients match your audience and suppression rules', 'warn');
+      return;
+    }
+
+    this.sendingCampaign = true;
     const payload = this.buildCampaignPayload(schedule ? 'scheduled' : 'sent');
 
     const onResult = (result: Campaign) => {
+      this.sendingCampaign = false;
       const existing = this.campaigns.findIndex(c => c.id === result.id);
       if (existing >= 0) {
         this.campaigns = this.campaigns.map(c => c.id === result.id ? result : c);
       } else {
         this.campaigns = [result, ...this.campaigns];
       }
+      this.editingCampaignId = result.id;
       this.sendSuccess = true;
       this.showToast(schedule ? 'Campaign scheduled!' : 'Campaign sent successfully!', 'success');
+      this.cdr.detectChanges();
+    };
+
+    const onError = (err: { message?: string }) => {
+      this.sendingCampaign = false;
+      this.showToast(err.message || 'Could not send campaign', 'warn');
       this.cdr.detectChanges();
     };
 
@@ -2891,25 +3431,26 @@ export class CampaignsComponent implements OnInit {
         next: () => {
           this.campaignApi.sendCampaign(this.editingCampaignId!, schedule).subscribe({
             next: onResult,
-            error: err => this.showToast(err.message || 'Could not send campaign', 'warn'),
+            error: onError,
           });
         },
-        error: err => this.showToast(err.message || 'Could not update campaign', 'warn'),
+        error: onError,
       });
       return;
     }
 
     this.campaignApi.createAndSend(payload, schedule).subscribe({
       next: onResult,
-      error: err => this.showToast(err.message || 'Could not send campaign', 'warn'),
+      error: onError,
     });
   }
 
   resetAndGoToList() {
-    this.draft = { name: '', fromName: 'Jane Austen', subject: '', previewText: '', sendTo: 'all', content: '', scheduledAt: '', timezoneOptimized: true, campaignType: '', directStoreLink: '', amazonLink: '', arcTag: '', amazonReviewLink: '', appleBooksLink: '', koboLink: '', bnLink: '' };
+    this.draft = this.emptyDraft();
     this.editingCampaignId = null;
     this.currentStep.set(0);
     this.sendSuccess = false;
+    this.sendingCampaign = false;
     this.sendMode = 'now';
     this.activeTab.set('list');
   }

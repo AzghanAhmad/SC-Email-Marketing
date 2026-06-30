@@ -7,12 +7,30 @@ using MimeKit;
 using ScribeCount.Email.Api.Data;
 using ScribeCount.Email.Api.DTOs;
 using ScribeCount.Email.Api.Entities;
+using ScribeCount.Email.Api.Middleware;
 
 namespace ScribeCount.Email.Api.Services;
 
 public class MailboxService(AppDbContext db, ILogger<MailboxService> logger)
 {
     private const int MaxStoredBodyLength = 100_000;
+
+    public static bool IsLinked(MailboxConnection? conn) =>
+        conn is not null && !string.IsNullOrWhiteSpace(conn.EmailAddress);
+
+    public async Task<MailboxConnection?> GetConnectionForUserAsync(Guid userId)
+    {
+        var conn = await db.MailboxConnections.FirstOrDefaultAsync(x => x.UserId == userId);
+        if (conn is null) return null;
+
+        if (!conn.IsConnected && IsLinked(conn))
+        {
+            conn.IsConnected = true;
+            await db.SaveChangesAsync();
+        }
+
+        return conn;
+    }
 
     public static string ProtectPassword(string password) =>
         Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(password));
@@ -119,8 +137,24 @@ public class MailboxService(AppDbContext db, ILogger<MailboxService> logger)
         return msg;
     }
 
+    public async Task DisconnectAsync(Guid userId)
+    {
+        var conn = await db.MailboxConnections.FirstOrDefaultAsync(x => x.UserId == userId);
+        if (conn is not null)
+            db.MailboxConnections.Remove(conn);
+
+        var messages = await db.MailboxMessages.Where(m => m.UserId == userId).ToListAsync();
+        if (messages.Count > 0)
+            db.MailboxMessages.RemoveRange(messages);
+
+        await db.SaveChangesAsync();
+    }
+
     public async Task<MailboxConnection> SaveConnectionAsync(Guid userId, SaveMailboxConnectionRequest request)
     {
+        if (!await db.Users.AnyAsync(x => x.Id == userId))
+            throw new InvalidOperationException(StaleSessionMiddleware.Message);
+
         var (username, password) = NormalizeCredentials(request);
         var existing = await db.MailboxConnections.FirstOrDefaultAsync(x => x.UserId == userId);
         if (existing is null)
@@ -148,33 +182,41 @@ public class MailboxService(AppDbContext db, ILogger<MailboxService> logger)
 
     public async Task<int> SyncInboxAsync(Guid userId, int maxMessages = 100)
     {
-        var conn = await db.MailboxConnections.FirstOrDefaultAsync(x => x.UserId == userId)
+        var conn = await GetConnectionForUserAsync(userId)
             ?? throw new InvalidOperationException("Mailbox not connected.");
 
-        if (!conn.IsConnected)
+        if (!IsLinked(conn))
             throw new InvalidOperationException("Mailbox is not connected.");
 
         var password = UnprotectPassword(conn.PasswordEncrypted);
         var synced = 0;
 
-        using var imap = new ImapClient { Timeout = 60000 };
-        await imap.ConnectAsync(
-            conn.ImapHost, conn.ImapPort,
-            conn.ImapUseSsl ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTlsWhenAvailable);
-        await imap.AuthenticateAsync(conn.Username, password);
+        try
+        {
+            using var imap = new ImapClient { Timeout = 60000 };
+            await imap.ConnectAsync(
+                conn.ImapHost, conn.ImapPort,
+                conn.ImapUseSsl ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTlsWhenAvailable);
+            await imap.AuthenticateAsync(conn.Username, password);
 
-        synced += await SyncFolderMessagesAsync(userId, imap.Inbox, "inbox", conn.EmailAddress, maxMessages);
+            synced += await SyncFolderMessagesAsync(userId, imap.Inbox, "inbox", conn.EmailAddress, maxMessages);
 
-        synced += await TrySyncSpecialFolderAsync(userId, imap, SpecialFolder.Sent, "sent", conn.EmailAddress, maxMessages);
-        synced += await TrySyncSpecialFolderAsync(userId, imap, SpecialFolder.Drafts, "drafts", conn.EmailAddress, maxMessages);
-        synced += await TrySyncSpecialFolderAsync(userId, imap, SpecialFolder.Junk, "spam", conn.EmailAddress, maxMessages);
-        synced += await TrySyncSpecialFolderAsync(userId, imap, SpecialFolder.Trash, "trash", conn.EmailAddress, maxMessages);
-        synced += await TrySyncNamedFolderAsync(userId, imap, "[Gmail]/Scheduled", "scheduled", conn.EmailAddress, maxMessages);
+            synced += await TrySyncSpecialFolderAsync(userId, imap, SpecialFolder.Sent, "sent", conn.EmailAddress, maxMessages);
+            synced += await TrySyncSpecialFolderAsync(userId, imap, SpecialFolder.Drafts, "drafts", conn.EmailAddress, maxMessages);
+            synced += await TrySyncSpecialFolderAsync(userId, imap, SpecialFolder.Junk, "spam", conn.EmailAddress, maxMessages);
+            synced += await TrySyncSpecialFolderAsync(userId, imap, SpecialFolder.Trash, "trash", conn.EmailAddress, maxMessages);
+            synced += await TrySyncNamedFolderAsync(userId, imap, "[Gmail]/Scheduled", "scheduled", conn.EmailAddress, maxMessages);
 
-        conn.LastSyncedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync();
-        await imap.DisconnectAsync(true);
-        return synced;
+            conn.LastSyncedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+            await imap.DisconnectAsync(true);
+            return synced;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "IMAP sync failed for user {UserId}", userId);
+            throw new InvalidOperationException(MapConnectionError(ex, conn.Provider));
+        }
     }
 
     private async Task<int> TrySyncSpecialFolderAsync(
@@ -290,8 +332,11 @@ public class MailboxService(AppDbContext db, ILogger<MailboxService> logger)
 
     public async Task SendEmailAsync(Guid userId, SendEmailRequest request)
     {
-        var conn = await db.MailboxConnections.FirstOrDefaultAsync(x => x.UserId == userId)
+        var conn = await GetConnectionForUserAsync(userId)
             ?? throw new InvalidOperationException("Mailbox not connected.");
+
+        if (!IsLinked(conn))
+            throw new InvalidOperationException("Mailbox is disconnected. Reconnect your inbox under Email → Settings.");
 
         var password = UnprotectPassword(conn.PasswordEncrypted);
         var message = new MimeMessage();
@@ -300,11 +345,19 @@ public class MailboxService(AppDbContext db, ILogger<MailboxService> logger)
         message.Subject = request.Subject;
         message.Body = BuildMimeBody(request.Body, request.Attachments);
 
-        using var smtp = new SmtpClient();
-        await smtp.ConnectAsync(conn.SmtpHost, conn.SmtpPort, conn.SmtpUseSsl ? SecureSocketOptions.StartTls : SecureSocketOptions.Auto);
-        await smtp.AuthenticateAsync(conn.Username, password);
-        await smtp.SendAsync(message);
-        await smtp.DisconnectAsync(true);
+        try
+        {
+            using var smtp = new SmtpClient();
+            await smtp.ConnectAsync(conn.SmtpHost, conn.SmtpPort, conn.SmtpUseSsl ? SecureSocketOptions.StartTls : SecureSocketOptions.Auto);
+            await smtp.AuthenticateAsync(conn.Username, password);
+            await smtp.SendAsync(message);
+            await smtp.DisconnectAsync(true);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "SMTP send failed for user {UserId}", userId);
+            throw new InvalidOperationException(MapConnectionError(ex, conn.Provider));
+        }
 
         var preview = request.Body.Length > 100 ? request.Body[..100] : request.Body;
         db.MailboxMessages.Add(new MailboxMessage

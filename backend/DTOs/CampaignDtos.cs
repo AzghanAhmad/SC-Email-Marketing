@@ -15,7 +15,11 @@ public record CampaignDto(
     int Sent,
     string Date,
     DateTime? ScheduledAt,
-    DateTime? SentAt
+    DateTime? SentAt,
+    Dictionary<string, string>? Extras,
+    int UniqueOpens = 0,
+    int UniqueClicks = 0,
+    decimal ConversionRate = 0
 );
 
 public record CreateCampaignRequest(
@@ -104,4 +108,66 @@ public record CampaignsBundleDto(
     List<CalendarEventDto> CalendarEvents,
     NewsletterScheduleDto Newsletter,
     List<AbTestDto> AbTests
+);
+
+public record AudienceSegmentDto(
+    string Id,
+    string Name,
+    int Count,
+    string Description
+);
+
+public record ReachEstimateDto(
+    int SegmentCount,
+    int ExcludedCount,
+    int EstimatedSendCount
+);
+
+public record ReachEstimateRequest(
+    string? Segment,
+    List<string>? EnabledSuppressionRules,
+    List<string>? ListIds = null,
+    List<string>? SegmentIds = null,
+    List<string>? ContactIds = null,
+    bool ExcludeUnengaged = false,
+    string? ArcTag = null);
+
+public record TestSendRequest(
+    string? CampaignId,
+    string? Subject,
+    string? PreviewText,
+    string? Content,
+    string? FromName
+);
+
+public record TestSendResponse(string Message, string SentTo);
+
+public record UpdateCalendarEventRequest(
+    string? Name,
+    string? Type,
+    string? Date,
+    string? Status
+);
+
+public record UnsubscribePreviewDto(
+    string Email,
+    string CampaignName,
+    string FromName,
+    bool AlreadyUnsubscribed
+);
+
+public record UnsubscribeConfirmRequest(string Token);
+
+public record UnsubscribeResultDto(
+    string Message,
+    string Email,
+    bool AlreadyUnsubscribed
+);
+
+public record CampaignViewDto(
+    string Subject,
+    string FromName,
+    string CampaignName,
+    string HtmlBody,
+    string PreviewText
 );

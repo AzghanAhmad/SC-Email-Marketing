@@ -1,5 +1,6 @@
-import { Component } from '@angular/core';
+import { Component, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { AnalyticsApiService } from '../../../core/services/analytics-api.service';
 
 @Component({
   selector: 'app-list-health',
@@ -82,6 +83,9 @@ import { CommonModule } from '@angular/common';
             </tr>
           </thead>
           <tbody>
+            <tr *ngIf="flaggedQueue.length === 0">
+              <td colspan="5" class="empty-row">No flagged subscribers.</td>
+            </tr>
             <tr *ngFor="let s of flaggedQueue">
               <td class="lh-email">{{ s.email }}</td>
               <td class="muted">{{ s.lastEngaged }}</td>
@@ -165,39 +169,23 @@ import { CommonModule } from '@angular/common';
       display: flex; align-items: flex-start; gap: .75rem;
     }
     .lh-note-card p { font-size: .875rem; color: #374151; margin: 0; line-height: 1.6; }
+    .empty-row { text-align:center; color:#94a3b8; padding:1.5rem !important; }
   `]
 })
-export class ListHealthComponent {
-  kpis = [
-    { label: 'Total subscribers', value: '4,719', desc: 'All addresses on account', color: '#0f172a' },
-    { label: 'Active engaged', value: '4,218', desc: 'Opened or clicked within threshold', color: '#6366f1' },
-    { label: 'Flagged inactive', value: '412', desc: 'Crossed threshold, not yet in sequence', color: '#d97706' },
-    { label: 'In re-engagement', value: '89', desc: 'Currently in active sequence', color: '#db2777' },
-    { label: 'Re-engaged (30d)', value: '47', desc: 'Returned to active this month', color: '#059669' },
-    { label: 'Removed (30d)', value: '231', desc: 'Cleanly removed after sequence', color: '#94a3b8' },
-  ];
+export class ListHealthComponent implements OnInit {
+  private analyticsApi = inject(AnalyticsApiService);
 
-  trend = [
-    { month: 'Dec', active: 72, inactive: 28 },
-    { month: 'Jan', active: 74, inactive: 26 },
-    { month: 'Feb', active: 76, inactive: 24 },
-    { month: 'Mar', active: 79, inactive: 21 },
-    { month: 'Apr', active: 82, inactive: 18 },
-    { month: 'May', active: 85, inactive: 15 },
-  ];
+  kpis: { label: string; value: string; desc: string; color: string }[] = [];
+  trend: { month: string; active: number; inactive: number }[] = [];
+  outcomes: { name: string; count: number; pct: number; color: string }[] = [];
+  flaggedQueue: { email: string; lastEngaged: string; daysInactive: number; status: string; statusClass: string; threshold: string }[] = [];
 
-  outcomes = [
-    { name: 'Re-engaged', count: 47, pct: 15, color: '#059669' },
-    { name: 'Preference adjusted', count: 12, pct: 4, color: '#3b82f6' },
-    { name: 'Cleanly removed', count: 231, pct: 71, color: '#94a3b8' },
-    { name: 'Still in sequence', count: 30, pct: 10, color: '#db2777' },
-  ];
-
-  flaggedQueue = [
-    { email: 'reader.morgan@email.com', lastEngaged: 'Jan 14, 2026', daysInactive: 94, status: 'Queued', statusClass: 'queued', threshold: '90-day (weekly)' },
-    { email: 'sarah.k@mailbox.net', lastEngaged: 'Dec 2, 2025', daysInactive: 127, status: 'In sequence', statusClass: 'in-sequence', threshold: '120-day (biweekly)' },
-    { email: 'james.t.reader@gmail.com', lastEngaged: 'Nov 8, 2025', daysInactive: 151, status: 'Queued', statusClass: 'queued', threshold: '120-day (biweekly)' },
-    { email: 'bookworm42@outlook.com', lastEngaged: 'Oct 1, 2025', daysInactive: 189, status: 'Queued', statusClass: 'queued', threshold: '180-day (monthly)' },
-    { email: 'avidfan@proton.me', lastEngaged: 'Feb 3, 2026', daysInactive: 74, status: 'Re-engaged', statusClass: 're-engaged', threshold: '90-day (weekly)' },
-  ];
+  ngOnInit() {
+    this.analyticsApi.getAnalytics(30).subscribe(b => {
+      this.kpis = b.listHealthKpis;
+      this.trend = b.listHealthTrend;
+      this.outcomes = b.listHealthOutcomes;
+      this.flaggedQueue = b.flaggedQueue;
+    });
+  }
 }

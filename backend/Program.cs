@@ -4,6 +4,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
 using ScribeCount.Email.Api.Data;
+using ScribeCount.Email.Api.Middleware;
+using ScribeCount.Email.Api.Serialization;
 using ScribeCount.Email.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -20,21 +22,41 @@ builder.WebHost.ConfigureKestrel(options =>
 });
 
 builder.Services.AddControllers()
-    .AddJsonOptions(o => o.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase);
+    .AddJsonOptions(o =>
+    {
+        o.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+        o.JsonSerializerOptions.Converters.Add(new UtcDateTimeJsonConverter());
+        o.JsonSerializerOptions.Converters.Add(new NullableUtcDateTimeJsonConverter());
+    });
 
 builder.Services.AddOpenApi();
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
-    var conn = DatabaseConfiguration.ResolveConnectionString(builder.Configuration);
+    var conn = DatabaseConfiguration.ResolveConnectionString(builder.Configuration, builder.Environment);
     var serverVersion = new MySqlServerVersion(new Version(8, 0, 36));
-    options.UseMySql(conn, serverVersion);
+    options.UseMySql(conn, serverVersion, mysqlOptions =>
+    {
+        mysqlOptions.EnableRetryOnFailure(
+            maxRetryCount: 5,
+            maxRetryDelay: TimeSpan.FromSeconds(10),
+            errorNumbersToAdd: null
+        );
+        mysqlOptions.CommandTimeout(60);
+        mysqlOptions.SchemaBehavior(Pomelo.EntityFrameworkCore.MySql.Infrastructure.MySqlSchemaBehavior.Ignore);
+    });
 });
 
 builder.Services.AddScoped<JwtTokenService>();
 builder.Services.AddScoped<DatabaseSeeder>();
 builder.Services.AddScoped<MailboxService>();
 builder.Services.AddScoped<DashboardService>();
+builder.Services.AddScoped<AnalyticsService>();
+builder.Services.AddScoped<AudienceService>();
+builder.Services.AddScoped<ContentService>();
+builder.Services.AddScoped<WebsiteService>();
+builder.Services.AddScoped<CampaignTrackingService>();
 builder.Services.AddScoped<CampaignService>();
+builder.Services.AddHostedService<CampaignSchedulerService>();
 
 var jwtKey = builder.Configuration["Jwt:Key"] ?? "ScribeCount-Dev-Secret-Key-Change-In-Production-32chars!";
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -87,6 +109,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors("Frontend");
 app.UseAuthentication();
+app.UseStaleSessionGuard();
 app.UseAuthorization();
 
 var wwwrootPath = Path.Combine(app.Environment.ContentRootPath, "wwwroot");

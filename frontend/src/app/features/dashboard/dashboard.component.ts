@@ -381,7 +381,25 @@ import { DashboardApiService, DashboardData } from '../../core/services/dashboar
 
     @media(max-width:1200px) { .stats-grid { grid-template-columns:repeat(2,1fr); } .attr-grid { grid-template-columns:repeat(3,1fr); } }
     @media(max-width:900px) { .charts-row,.bottom-row { grid-template-columns:1fr; } .perf-kpi-row { grid-template-columns:1fr; } }
-    @media(max-width:600px) { .stats-grid { grid-template-columns:1fr; } .attr-grid { grid-template-columns:repeat(2,1fr); } }
+    @media(max-width:768px) {
+      .welcome-title { font-size:1.35rem; }
+      .conv-header { flex-direction:column; align-items:flex-start; gap:.5rem; }
+      .conv-date-range { margin-left:0; font-size:.72rem; }
+      .perf-summary { padding:1.25rem; }
+      .perf-kpi-row { padding:1rem; }
+      .pk-val { font-size:1.5rem; }
+      .attr-grid { grid-template-columns:repeat(3,1fr); }
+    }
+    @media(max-width:600px) { .stats-grid { grid-template-columns:repeat(2,1fr); } .attr-grid { grid-template-columns:repeat(2,1fr); } }
+    @media(max-width:480px) {
+      .stats-grid { grid-template-columns:1fr; }
+      .stat-card { padding:1rem 1.125rem; }
+      .stat-value { font-size:1.375rem; }
+      .conv-date-range { display:none; }
+      .attr-grid { grid-template-columns:repeat(2,1fr); }
+      .bar-chart { height:100px; }
+      .perf-summary,.chart-card,.activity-card,.quick-card { padding:1rem; }
+    }
   `]
 })
 export class DashboardComponent implements OnInit {

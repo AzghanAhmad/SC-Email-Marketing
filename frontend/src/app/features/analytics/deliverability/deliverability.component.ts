@@ -1,6 +1,8 @@
-import { Component, signal, inject } from '@angular/core';
+import { Component, signal, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { DomSanitizer } from '@angular/platform-browser';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
+import { AnalyticsApiService } from '../../../core/services/analytics-api.service';
+import { NAV_ICONS } from '../../../core/constants/nav-icons';
 
 @Component({
   selector: 'app-deliverability',
@@ -168,9 +170,7 @@ import { DomSanitizer } from '@angular/platform-browser';
           <h3 class="rs-title">Bounce Breakdown</h3>
           <div class="bounce-grid">
             <div class="bounce-card" *ngFor="let b of bounceData">
-              <div class="bounce-icon" [style.background]="b.iconBg">
-                <span [innerHTML]="b.safeIcon"></span>
-              </div>
+              <span class="nav-icon" [innerHTML]="b.safeIcon"></span>
               <span class="bounce-val">{{ b.value }}</span>
               <span class="bounce-label">{{ b.label }}</span>
               <span class="bounce-pct">{{ b.pct }}% of total</span>
@@ -269,8 +269,8 @@ import { DomSanitizer } from '@angular/platform-browser';
 
     .bounce-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:1rem; margin-bottom:1.5rem; }
     .bounce-card { display:flex; flex-direction:column; align-items:center; gap:.5rem; padding:1.25rem; background:#f8fafc; border-radius:12px; border:1px solid #f1f5f9; text-align:center; }
-    .bounce-icon { width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; }
-    .bounce-icon svg { width:18px; height:18px; display: block; }
+    .nav-icon { display:flex; align-items:center; justify-content:center; color:#64748b; }
+    .nav-icon svg { width:20px; height:20px; display:block; }
     .bounce-val { font-size:1.5rem; font-weight:800; color:#0f172a; }
     .bounce-label { font-size:.78rem; font-weight:600; color:#334155; }
     .bounce-pct { font-size:.7rem; color:#94a3b8; }
@@ -282,38 +282,26 @@ import { DomSanitizer } from '@angular/platform-browser';
     @media(max-width:800px) { .bounce-grid { grid-template-columns:repeat(2,1fr); } }
   `]
 })
-export class DeliverabilityComponent {
+export class DeliverabilityComponent implements OnInit {
   private sanitizer = inject(DomSanitizer);
+  private analyticsApi = inject(AnalyticsApiService);
 
   activeSubTab = signal('score');
   scoreView = signal<'factors' | 'time'>('factors');
 
-  deliverabilityScore = 72;
-  scorePercent = 72;
-  scoreRating = 'Fair';
+  deliverabilityScore = 0;
+  scorePercent = 0;
+  scoreRating = '—';
   scoreRatingClass = 'fair';
-  scoreChange = -2;
-
-  scoreHistory = [
-    { label: 'Week 1', score: 68 },
-    { label: 'Week 2', score: 71 },
-    { label: 'Week 3', score: 74 },
-    { label: 'Week 4', score: 72 },
-    { label: 'Week 5', score: 69 },
-    { label: 'Week 6', score: 72 },
-  ];
-
+  scoreChange = 0;
+  scoreHistory: { label: string; score: number }[] = [];
   timeLinePoints = '';
   timeAreaPoints = '';
   timeDots: { x: number; y: number }[] = [];
-
-  metrics = [
-    { name: 'Open rate', rate: '24.2%', recommended: 'greater than 33.0%', statusClass: 'warning' },
-    { name: 'Click rate', rate: '0.16%', recommended: 'greater than 1.20%', statusClass: 'danger' },
-    { name: 'Bounce rate', rate: '2.54%', recommended: 'less than 1.00%', statusClass: 'danger' },
-    { name: 'Unsubscribe rate', rate: '0.75%', recommended: 'less than 0.30%', statusClass: 'warning' },
-    { name: 'Spam complaint rate', rate: '0.09%', recommended: 'less than 0.01%', statusClass: 'danger' },
-  ];
+  metrics: { name: string; rate: string; recommended: string; statusClass: string }[] = [];
+  deliveryReports: { name: string; sent: number; delivered: number; bounced: number; rate: number }[] = [];
+  bounceData: { label: string; value: string; pct: string; safeIcon: SafeHtml }[] = [];
+  bouncedEmails: { email: string; type: string; reason: string; date: string }[] = [];
 
   actions = [
     {
@@ -328,36 +316,30 @@ export class DeliverabilityComponent {
     },
   ];
 
-  deliveryReports = [
-    { name: 'March Newsletter', sent: 4821, delivered: 4712, bounced: 109, rate: 97.7 },
-    { name: 'Book Launch: The Ember Crown', sent: 3200, delivered: 3168, bounced: 32, rate: 99.0 },
-    { name: 'February Roundup', sent: 4650, delivered: 4534, bounced: 116, rate: 97.5 },
-    { name: 'Holiday Special', sent: 5100, delivered: 5049, bounced: 51, rate: 99.0 },
-  ];
-
-  bounceData: any[] = [
-    { label: 'Hard Bounces', value: '127', pct: '0.51', iconBg: 'rgba(239,68,68,0.1)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>' },
-    { label: 'Soft Bounces', value: '308', pct: '1.24', iconBg: 'rgba(245,158,11,0.1)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>' },
-    { label: 'Suppressed', value: '45', pct: '0.18', iconBg: 'rgba(99,102,241,0.1)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2"><path d="M18.36 6.64a9 9 0 0 1 .22 12.73M1 1l22 22"/></svg>' },
-    { label: 'Complaints', value: '12', pct: '0.05', iconBg: 'rgba(239,68,68,0.1)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>' },
-  ];
-
-  bouncedEmails = [
-    { email: 'old_addr@expired.com', type: 'hard', reason: 'Mailbox does not exist', date: 'Apr 3, 2026' },
-    { email: 'full_inbox@example.com', type: 'soft', reason: 'Mailbox full', date: 'Apr 2, 2026' },
-    { email: 'temp_error@mail.com', type: 'soft', reason: 'Temporary server error', date: 'Mar 30, 2026' },
-    { email: 'blocked@domain.net', type: 'hard', reason: 'Domain not found', date: 'Mar 28, 2026' },
-  ];
-
-  constructor() {
-    this.bounceData.forEach(b => {
-      b.safeIcon = this.sanitizer.bypassSecurityTrustHtml(b.icon);
+  ngOnInit() {
+    this.analyticsApi.getAnalytics(30).subscribe(b => {
+      this.deliverabilityScore = b.deliverabilityScore;
+      this.scorePercent = b.deliverabilityScore;
+      this.scoreChange = b.scoreChange;
+      this.scoreRating = this.deliverabilityScore >= 80 ? 'Good' : this.deliverabilityScore >= 60 ? 'Fair' : 'Poor';
+      this.scoreRatingClass = this.deliverabilityScore >= 80 ? 'good' : this.deliverabilityScore >= 60 ? 'fair' : 'poor';
+      this.scoreHistory = b.scoreHistory;
+      this.metrics = b.deliverabilityMetrics;
+      this.deliveryReports = b.deliveryReports;
+      this.bounceData = b.bounceStats.map(stat => ({
+        label: stat.label,
+        value: stat.value,
+        pct: stat.pct,
+        safeIcon: this.sanitizer.bypassSecurityTrustHtml(NAV_ICONS[stat.iconKey] ?? NAV_ICONS['hard-bounce']),
+      }));
+      this.bouncedEmails = b.bouncedEmails;
+      this.buildTimeChart();
     });
-    this.buildTimeChart();
   }
 
   buildTimeChart() {
     const data = this.scoreHistory;
+    if (data.length < 2) return;
     const max = Math.max(...data.map(d => d.score));
     const min = Math.min(...data.map(d => d.score));
     const range = max - min || 1;

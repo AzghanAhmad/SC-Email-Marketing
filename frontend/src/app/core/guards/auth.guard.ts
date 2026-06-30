@@ -18,13 +18,13 @@ export const authGuard: CanActivateFn = (_route, state) => {
 
   return auth.whenReady().pipe(
     switchMap(() => {
-      if (auth.isLoggedIn()) {
+      if (auth.hasValidSession()) {
+        if (!auth.isLoggedIn() && auth.getToken()) {
+          return auth.refreshProfile().pipe(
+            map(() => (auth.hasValidSession() ? true : loginRedirect()))
+          );
+        }
         return of(true);
-      }
-      if (auth.getToken()) {
-        return auth.refreshProfile().pipe(
-          map(() => (auth.getToken() ? true : loginRedirect()))
-        );
       }
       return of(loginRedirect());
     })

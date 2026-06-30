@@ -20,26 +20,68 @@ public static class MigrationHelper
         [
             "Campaigns", "CampaignCalendarEvents", "NewsletterSchedules", "AbTests"
         ],
+        ["20260626125706_SyncCampaignModel"] =
+        [
+            "Campaigns", "CampaignCalendarEvents", "NewsletterSchedules", "AbTests"
+        ],
     };
 
     public static async Task MigrateAsync(AppDbContext db, ILogger logger, CancellationToken cancellationToken = default)
     {
+        var connectionString = db.Database.GetConnectionString();
+        if (!string.IsNullOrWhiteSpace(connectionString))
+            await DatabaseConfiguration.EnsureDatabaseExistsAsync(connectionString, logger, cancellationToken);
+
         await ReconcileAppliedMigrationsAsync(db, logger, cancellationToken);
 
         try
         {
             await db.Database.MigrateAsync(cancellationToken);
         }
-        catch (MySqlException ex) when (IsAlreadyExists(ex))
+        catch (MySqlException ex) when (IsAlreadyExists(ex) || IsKeyTooLong(ex))
         {
             logger.LogWarning(ex, "Migration DDL conflict — reconciling migration history and retrying");
             await ReconcileAppliedMigrationsAsync(db, logger, cancellationToken);
             await db.Database.MigrateAsync(cancellationToken);
         }
+
+        await EnsureCampaignSchemaAsync(db, logger, cancellationToken);
     }
+
+    private static bool IsKeyTooLong(MySqlException ex) =>
+        ex.Message.Contains("key was too long", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsAlreadyExists(MySqlException ex) =>
         ex.Message.Contains("already exists", StringComparison.OrdinalIgnoreCase);
+
+    private static async Task EnsureCampaignSchemaAsync(
+        AppDbContext db,
+        ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        if (!await TableExistsAsync(db, "Campaigns", cancellationToken))
+            return;
+
+        await db.Database.ExecuteSqlRawAsync("""
+            SET @sql = IF(
+                (SELECT DATA_TYPE FROM information_schema.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Campaigns' AND COLUMN_NAME = 'Status') = 'longtext',
+                'ALTER TABLE `Campaigns` MODIFY `Status` varchar(64) CHARACTER SET utf8mb4 NOT NULL',
+                'SELECT 1');
+            PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+            """, cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync("""
+            SET @sql = IF(
+                (SELECT COUNT(*) FROM information_schema.statistics
+                 WHERE table_schema = DATABASE() AND table_name = 'Campaigns' AND index_name = 'IX_Campaigns_UserId_Status') = 0,
+                'CREATE INDEX `IX_Campaigns_UserId_Status` ON `Campaigns` (`UserId`, `Status`)',
+                'SELECT 1');
+            PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+            """, cancellationToken);
+
+        logger.LogDebug("Campaign schema verified (Status column + UserId/Status index)");
+    }
 
     private static async Task ReconcileAppliedMigrationsAsync(
         AppDbContext db,
@@ -98,7 +140,7 @@ public static class MigrationHelper
                 SELECT COUNT(*)
                 FROM information_schema.tables
                 WHERE table_schema = DATABASE()
-                  AND table_name = @table
+                  AND LOWER(table_name) = LOWER(@table)
                 """;
             var parameter = command.CreateParameter();
             parameter.ParameterName = "@table";

@@ -1,8 +1,8 @@
-import { Component, OnInit, signal } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
-import { MockDataService, Subscriber, Segment } from '../../core/services/mock-data.service';
+import { AudienceApiService, SubscriberProfile, AudienceSegmentCard } from '../../core/services/audience-api.service';
 
 type AudienceTab = 'subscribers' | 'segments' | 'add';
 
@@ -103,9 +103,11 @@ type AudienceTab = 'subscribers' | 'segments' | 'add';
               </tbody>
             </table>
             <div class="empty-state" *ngIf="filtered.length === 0">
-              <div class="empty-state-icon">🔍</div>
+              <div class="empty-state-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" stroke-width="1.5" width="48" height="48"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              </div>
               <h3>No subscribers found</h3>
-              <p>Try adjusting your search or filter criteria</p>
+              <p>{{ subscribers.length === 0 ? 'Add your first subscriber to get started' : 'Try adjusting your search or filter criteria' }}</p>
             </div>
           </div>
         </div>
@@ -234,36 +236,53 @@ type AudienceTab = 'subscribers' | 'segments' | 'add';
   `]
 })
 export class AudienceComponent implements OnInit {
+  private audienceApi = inject(AudienceApiService);
+
   activeTab = signal<AudienceTab>('subscribers');
-  subscribers: Subscriber[] = [];
-  segments: Segment[] = [];
-  filtered: Subscriber[] = [];
+  subscribers: SubscriberProfile[] = [];
+  segments: AudienceSegmentCard[] = [];
+  filtered: SubscriberProfile[] = [];
   searchQuery = '';
   statusFilter = '';
   addSuccess = false;
   newSub = { firstName: '', lastName: '', email: '', tags: '', segment: '' };
 
-  constructor(private mockData: MockDataService) {}
-
   ngOnInit() {
-    this.subscribers = this.mockData.getSubscribers();
-    this.segments = this.mockData.getSegments();
-    this.filtered = [...this.subscribers];
+    this.loadSubscribers();
+    this.audienceApi.getListsSegments().subscribe(bundle => {
+      this.segments = bundle.segments;
+    });
+  }
+
+  loadSubscribers() {
+    this.audienceApi.getProfiles(this.searchQuery || undefined, this.statusFilter || undefined)
+      .subscribe(profiles => {
+        this.subscribers = profiles;
+        this.filtered = [...profiles];
+      });
   }
 
   filterSubscribers() {
-    this.filtered = this.subscribers.filter(s => {
-      const q = this.searchQuery.toLowerCase();
-      const matchQ = !q || s.name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q);
-      const matchS = !this.statusFilter || s.status === this.statusFilter;
-      return matchQ && matchS;
-    });
+    this.loadSubscribers();
   }
 
   addSubscriber() {
     if (!this.newSub.firstName || !this.newSub.email) return;
-    this.addSuccess = true;
-    setTimeout(() => { this.addSuccess = false; this.resetForm(); }, 2500);
+    const name = [this.newSub.firstName, this.newSub.lastName].filter(Boolean).join(' ');
+    const tags = this.newSub.tags.split(',').map(t => t.trim()).filter(Boolean);
+    this.audienceApi.createProfile({
+      name,
+      email: this.newSub.email,
+      status: 'active',
+      tags,
+      openRate: 0,
+      listId: this.newSub.segment || undefined,
+    }).subscribe(profile => {
+      this.subscribers.unshift(profile);
+      this.filtered = [...this.subscribers];
+      this.addSuccess = true;
+      setTimeout(() => { this.addSuccess = false; this.resetForm(); this.activeTab.set('subscribers'); }, 2500);
+    });
   }
 
   resetForm() {

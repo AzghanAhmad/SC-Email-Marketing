@@ -46,15 +46,37 @@ public class CampaignsController(CampaignService campaigns) : ControllerBase
     [HttpPost("{id:guid}/send")]
     public async Task<ActionResult<CampaignDto>> Send(Guid id, [FromBody] SendCampaignRequest? request)
     {
-        var result = await campaigns.SendCampaignAsync(GetUserId(), id, request?.ScheduleOnly ?? false);
-        return result is null ? NotFound() : Ok(result);
+        try
+        {
+            var result = await campaigns.SendCampaignAsync(GetUserId(), id, request?.ScheduleOnly ?? false);
+            return result is null ? NotFound() : Ok(result);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(403, new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [HttpPost("send")]
     public async Task<ActionResult<CampaignDto>> CreateAndSend([FromBody] CreateCampaignRequest request, [FromQuery] bool schedule = false)
     {
-        var result = await campaigns.SendNewCampaignAsync(GetUserId(), request, schedule);
-        return result is null ? BadRequest() : Ok(result);
+        try
+        {
+            var result = await campaigns.SendNewCampaignAsync(GetUserId(), request, schedule);
+            return result is null ? BadRequest(new { message = "Could not create campaign." }) : Ok(result);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(403, new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [HttpPost("calendar-events")]
@@ -82,6 +104,35 @@ public class CampaignsController(CampaignService campaigns) : ControllerBase
     public async Task<IActionResult> DeleteAbTest(Guid id)
     {
         var deleted = await campaigns.DeleteAbTestAsync(GetUserId(), id);
+        return deleted ? NoContent() : NotFound();
+    }
+
+    [HttpGet("audience-segments")]
+    public async Task<ActionResult<List<AudienceSegmentDto>>> GetAudienceSegments() =>
+        Ok(await campaigns.GetAudienceSegmentsAsync(GetUserId()));
+
+    [HttpPost("estimate-reach")]
+    public async Task<ActionResult<ReachEstimateDto>> EstimateReach([FromBody] ReachEstimateRequest request) =>
+        Ok(await campaigns.EstimateReachAsync(GetUserId(), request));
+
+    [HttpPost("test-send")]
+    public async Task<ActionResult<TestSendResponse>> TestSend([FromBody] TestSendRequest request)
+    {
+        var result = await campaigns.SendTestEmailAsync(GetUserId(), request);
+        return result is null ? BadRequest() : Ok(result);
+    }
+
+    [HttpPut("calendar-events/{id:guid}")]
+    public async Task<ActionResult<CalendarEventDto>> UpdateCalendarEvent(Guid id, [FromBody] UpdateCalendarEventRequest request)
+    {
+        var updated = await campaigns.UpdateCalendarEventAsync(GetUserId(), id, request);
+        return updated is null ? NotFound() : Ok(updated);
+    }
+
+    [HttpDelete("calendar-events/{id:guid}")]
+    public async Task<IActionResult> DeleteCalendarEvent(Guid id)
+    {
+        var deleted = await campaigns.DeleteCalendarEventAsync(GetUserId(), id);
         return deleted ? NoContent() : NotFound();
     }
 

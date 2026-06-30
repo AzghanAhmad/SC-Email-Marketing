@@ -22,6 +22,171 @@ namespace ScribeCount.Email.Api.Data.Migrations
 
             MySqlModelBuilderExtensions.AutoIncrementColumns(modelBuilder);
 
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.AbTest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<decimal?>("OpenRateA")
+                        .HasColumnType("decimal(65,30)");
+
+                    b.Property<decimal?>("OpenRateB")
+                        .HasColumnType("decimal(65,30)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("SubjectA")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("SubjectB")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("TestSize")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<int>("WaitHours")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Winner")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("WinnerMetric")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("AbTests");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.Campaign", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("CampaignType")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<decimal>("ClickRate")
+                        .HasColumnType("decimal(65,30)");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("ExtrasJson")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("FromName")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<decimal>("OpenRate")
+                        .HasColumnType("decimal(65,30)");
+
+                    b.Property<string>("PreviewText")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("ScheduledAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("SendToSegment")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("SentAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("SentCount")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("char(36)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Status");
+
+                    b.ToTable("Campaigns");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.CampaignCalendarEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int?>("DaysFromRelease")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("EventDate")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("char(36)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("CampaignCalendarEvents");
+                });
+
             modelBuilder.Entity("ScribeCount.Email.Api.Entities.CampaignMetric", b =>
                 {
                     b.Property<Guid>("Id")
@@ -257,6 +422,69 @@ namespace ScribeCount.Email.Api.Data.Migrations
                     b.ToTable("MailboxMessages");
                 });
 
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.NewsletterSchedule", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("DayOfMonth")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("DayOfWeek")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Frequency")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("PreviewText")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("ReplyQuestion")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("SendTime")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<bool>("TimezoneOptimized")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("char(36)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .IsUnique();
+
+                    b.ToTable("NewsletterSchedules");
+                });
+
             modelBuilder.Entity("ScribeCount.Email.Api.Entities.Subscriber", b =>
                 {
                     b.Property<Guid>("Id")
@@ -404,6 +632,39 @@ namespace ScribeCount.Email.Api.Data.Migrations
                     b.ToTable("UserFlows");
                 });
 
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.AbTest", b =>
+                {
+                    b.HasOne("ScribeCount.Email.Api.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.Campaign", b =>
+                {
+                    b.HasOne("ScribeCount.Email.Api.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.CampaignCalendarEvent", b =>
+                {
+                    b.HasOne("ScribeCount.Email.Api.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("ScribeCount.Email.Api.Entities.CampaignMetric", b =>
                 {
                     b.HasOne("ScribeCount.Email.Api.Entities.User", "User")
@@ -441,6 +702,17 @@ namespace ScribeCount.Email.Api.Data.Migrations
                 {
                     b.HasOne("ScribeCount.Email.Api.Entities.User", "User")
                         .WithMany("MailboxMessages")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.NewsletterSchedule", b =>
+                {
+                    b.HasOne("ScribeCount.Email.Api.Entities.User", "User")
+                        .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();

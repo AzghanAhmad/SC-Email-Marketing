@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Email } from './email.service';
 import { EmailListItem, groupEmailsIntoThreads } from './email-thread';
+import { formatInboxListTime } from './email-datetime.utils';
 
 @Component({
   selector: 'app-email-list',
@@ -738,21 +739,7 @@ export class EmailListComponent implements OnChanges, OnInit {
   }
 
   formatTime(date: Date): string {
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const mins = Math.floor(diff / 60000);
-    const hours = Math.floor(diff / 3600000);
-    const days = Math.floor(diff / 86400000);
-
-    if (diff < 0) {
-      // Scheduled (future)
-      return 'Scheduled';
-    }
-    if (mins < 1) return 'Just now';
-    if (mins < 60) return mins + 'm ago';
-    if (hours < 24) return hours + 'h ago';
-    if (days < 7) return days + 'd ago';
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return formatInboxListTime(date);
   }
 
   getEmptyMessage(): string {

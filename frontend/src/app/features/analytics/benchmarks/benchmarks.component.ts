@@ -1,5 +1,6 @@
-import { Component } from '@angular/core';
+import { Component, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { AnalyticsApiService } from '../../../core/services/analytics-api.service';
 
 @Component({
   selector: 'app-benchmarks',
@@ -84,15 +85,9 @@ import { CommonModule } from '@angular/common';
     @media(max-width:600px) { .benchmark-grid { grid-template-columns:1fr; } }
   `]
 })
-export class BenchmarksComponent {
-  benchmarks = [
-    { metric: 'Open Rate', yours: '54.2%', yoursNum: 54.2, industry: '33.0%', industryNum: 33, yourColor: '#10b981' },
-    { metric: 'Click Rate', yours: '12.8%', yoursNum: 12.8, industry: '4.5%', industryNum: 4.5, yourColor: '#10b981' },
-    { metric: 'Bounce Rate', yours: '2.5%', yoursNum: 2.5, industry: '1.0%', industryNum: 1, yourColor: '#ef4444' },
-    { metric: 'Unsubscribe Rate', yours: '0.4%', yoursNum: 0.4, industry: '0.3%', industryNum: 0.3, yourColor: '#f59e0b' },
-    { metric: 'Spam Complaint Rate', yours: '0.09%', yoursNum: 0.09, industry: '0.01%', industryNum: 0.01, yourColor: '#ef4444' },
-    { metric: 'Revenue per Email', yours: '$0.17', yoursNum: 17, industry: '$0.08', industryNum: 8, yourColor: '#10b981' },
-  ];
+export class BenchmarksComponent implements OnInit {
+  private analyticsApi = inject(AnalyticsApiService);
+  benchmarks: { metric: string; yours: string; yoursNum: number; industry: string; industryNum: number; yourColor: string }[] = [];
 
   tips = [
     { bullet: '🧹', title: 'Clean your list regularly', description: 'Remove inactive subscribers to improve deliverability and engagement rates.' },
@@ -100,4 +95,17 @@ export class BenchmarksComponent {
     { bullet: '⏰', title: 'Optimize send times', description: 'Send emails Tuesday–Thursday between 9–11am for highest open rates.' },
     { bullet: '🎯', title: 'Segment your audience', description: 'Use targeted segments to send relevant content that drives higher engagement.' },
   ];
+
+  ngOnInit() {
+    this.analyticsApi.getAnalytics(30).subscribe(b => {
+      this.benchmarks = b.benchmarks.map(row => ({
+        metric: row.metric,
+        yours: row.yours,
+        yoursNum: row.yoursNum,
+        industry: row.industry,
+        industryNum: row.industryNum,
+        yourColor: row.yourColor,
+      }));
+    });
+  }
 }

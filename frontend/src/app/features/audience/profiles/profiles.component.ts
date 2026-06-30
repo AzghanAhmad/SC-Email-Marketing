@@ -1,12 +1,14 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { MockDataService, Subscriber } from '../../../core/services/mock-data.service';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { AudienceApiService, AudienceList, SubscriberProfile } from '../../../core/services/audience-api.service';
+import { campaignUrlForList, campaignUrlForSegment } from '../audience-campaign-links';
 
 @Component({
   selector: 'app-profiles',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, RouterLink],
   template: `
     <div class="page-wrapper">
       <div class="page-header">
@@ -18,6 +20,21 @@ import { MockDataService, Subscriber } from '../../../core/services/mock-data.se
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           Add Profile
         </button>
+      </div>
+
+      <div class="audience-banner glass-card" *ngIf="audienceContext">
+        <div class="banner-main">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="18" height="18"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <div>
+            <span class="banner-label">Filtered by {{ audienceContext.type === 'list' ? 'list' : 'segment' }}</span>
+            <strong class="banner-name">{{ audienceContext.name }}</strong>
+          </div>
+        </div>
+        <div class="banner-actions">
+          <a class="btn-ghost btn-sm" routerLink="/audience/lists-segments">Lists & Segments</a>
+          <a class="btn-primary btn-sm" [routerLink]="audienceContext.campaignUrl">Send email</a>
+          <button type="button" class="btn-ghost btn-sm" (click)="clearAudienceFilter()">Clear filter</button>
+        </div>
       </div>
 
       <div class="glass-card table-card">
@@ -33,7 +50,7 @@ import { MockDataService, Subscriber } from '../../../core/services/mock-data.se
               <option value="unsubscribed">Unsubscribed</option>
               <option value="bounced">Bounced</option>
             </select>
-            <span class="result-count">{{ filtered.length }} profiles</span>
+            <span class="result-count">{{ filtered().length }} profiles</span>
           </div>
         </div>
         <table class="data-table">
@@ -41,7 +58,10 @@ import { MockDataService, Subscriber } from '../../../core/services/mock-data.se
             <tr><th>Profile</th><th>Email</th><th>Status</th><th>Tags</th><th>Engagement</th><th>Joined</th><th></th></tr>
           </thead>
           <tbody>
-            <tr *ngFor="let p of filtered">
+            <tr *ngIf="filtered().length === 0">
+              <td colspan="7" class="empty-row">No subscriber profiles yet.</td>
+            </tr>
+            <tr *ngFor="let p of filtered()" class="clickable-row" (click)="viewProfile(p.id)">
               <td>
                 <div class="profile-cell">
                   <div class="profile-avatar" [style.background]="getAvatarColor(p.name)">{{ p.name[0] }}</div>
@@ -63,7 +83,10 @@ import { MockDataService, Subscriber } from '../../../core/services/mock-data.se
               </td>
               <td class="muted">{{ p.joinedAt }}</td>
               <td>
-                <button class="btn-ghost btn-sm" data-tooltip="View full profile details">View</button>
+                <div class="row-actions">
+                  <button type="button" class="btn-ghost btn-sm" (click)="viewProfile(p.id); $event.stopPropagation()">View</button>
+                  <button type="button" class="btn-ghost btn-sm btn-delete" (click)="confirmDelete(p, $event)">Delete</button>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -91,6 +114,13 @@ import { MockDataService, Subscriber } from '../../../core/services/mock-data.se
               <input type="email" [(ngModel)]="newProfile.email" placeholder="john.doe@example.com" class="text-input">
             </div>
             <div class="setup-field">
+              <label>Add to list (optional)</label>
+              <select [(ngModel)]="newProfile.listId" class="select-input">
+                <option value="">No list</option>
+                <option *ngFor="let l of availableLists()" [value]="l.id">{{ l.name }}</option>
+              </select>
+            </div>
+            <div class="setup-field">
               <label>Status</label>
               <select [(ngModel)]="newProfile.status" class="select-input">
                 <option value="active">Active</option>
@@ -101,13 +131,6 @@ import { MockDataService, Subscriber } from '../../../core/services/mock-data.se
             <div class="setup-field">
               <label>Tags (comma separated)</label>
               <input type="text" [(ngModel)]="newProfile.tagsString" placeholder="fantasy, launch-list, vip" class="text-input">
-            </div>
-            <div class="setup-field">
-              <label>Open Rate (Engagement %)</label>
-              <div style="display: flex; align-items: center; gap: 12px;">
-                <input type="range" min="0" max="100" [(ngModel)]="newProfile.openRate" style="flex: 1; cursor: pointer;">
-                <span style="font-size: 0.875rem; font-weight: 600; min-width: 36px; text-align: right;">{{ newProfile.openRate }}%</span>
-              </div>
             </div>
           </div>
           <div class="modal-footer">
@@ -192,13 +215,35 @@ import { MockDataService, Subscriber } from '../../../core/services/mock-data.se
     .text-input:focus, .select-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     @keyframes scaleUp { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    .empty-row { text-align:center; color:#94a3b8; padding:1.5rem !important; }
+    .clickable-row { cursor:pointer; }
+    .clickable-row:hover { background:#f8fafc; }
+    .row-actions { display:flex; gap:.35rem; justify-content:flex-end; }
+    .btn-delete { color:#dc2626 !important; }
+    .btn-delete:hover { background:rgba(239,68,68,0.08) !important; }
+
+    .audience-banner {
+      display:flex; align-items:center; justify-content:space-between; gap:1rem;
+      padding:1rem 1.25rem; margin-bottom:1rem; flex-wrap:wrap;
+      border:1.5px solid rgba(59,130,246,0.2); background:linear-gradient(135deg,rgba(59,130,246,0.06),rgba(99,102,241,0.04));
+    }
+    .banner-main { display:flex; align-items:center; gap:.75rem; color:#334155; }
+    .banner-label { display:block; font-size:.72rem; text-transform:uppercase; letter-spacing:.04em; color:#64748b; font-weight:600; }
+    .banner-name { font-size:.9375rem; color:#0f172a; }
+    .banner-actions { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
   `]
 })
 export class ProfilesComponent implements OnInit {
-  subscribers: Subscriber[] = [];
-  filtered: Subscriber[] = [];
+  private audienceApi = inject(AudienceApiService);
+  private router = inject(Router);
+  private route = inject(ActivatedRoute);
+  filtered = signal<SubscriberProfile[]>([]);
+  availableLists = signal<AudienceList[]>([]);
   searchQuery = '';
   statusFilter = '';
+  filterListId = '';
+  filterSegmentId = '';
+  audienceContext: { name: string; type: 'list' | 'segment'; campaignUrl: string } | null = null;
 
   showAddProfileModal = false;
   newProfile = {
@@ -206,23 +251,58 @@ export class ProfilesComponent implements OnInit {
     email: '',
     status: 'active' as 'active' | 'unsubscribed' | 'bounced',
     tagsString: '',
-    openRate: 50
+    listId: '',
   };
 
-  constructor(private mockData: MockDataService) {}
-
   ngOnInit() {
-    this.subscribers = this.mockData.getSubscribers();
-    this.filtered = [...this.subscribers];
+    this.route.queryParams.subscribe(params => {
+      this.filterListId = (params['listId'] as string) || '';
+      this.filterSegmentId = (params['segmentId'] as string) || '';
+      const audienceName = (params['audienceName'] as string) || '';
+      if (this.filterListId) {
+        this.audienceContext = {
+          name: audienceName || 'List',
+          type: 'list',
+          campaignUrl: campaignUrlForList(this.filterListId, audienceName),
+        };
+      } else if (this.filterSegmentId) {
+        this.audienceContext = {
+          name: audienceName || 'Segment',
+          type: 'segment',
+          campaignUrl: campaignUrlForSegment(this.filterSegmentId, audienceName),
+        };
+      } else {
+        this.audienceContext = null;
+      }
+      this.loadProfiles();
+    });
+    this.audienceApi.getListsSegments().subscribe(b => this.availableLists.set(b.lists));
+  }
+
+  loadProfiles() {
+    this.audienceApi.getProfiles(
+      this.searchQuery || undefined,
+      this.statusFilter || undefined,
+      this.filterListId || undefined,
+      this.filterSegmentId || undefined,
+    ).subscribe(rows => {
+      this.filtered.set([...rows]);
+    });
   }
 
   filter() {
-    this.filtered = this.subscribers.filter(s => {
-      const q = this.searchQuery.toLowerCase();
-      const matchQ = !q || s.name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q);
-      const matchS = !this.statusFilter || s.status === this.statusFilter;
-      return matchQ && matchS;
+    this.audienceApi.getProfiles(
+      this.searchQuery || undefined,
+      this.statusFilter || undefined,
+      this.filterListId || undefined,
+      this.filterSegmentId || undefined,
+    ).subscribe(rows => {
+      this.filtered.set(rows);
     });
+  }
+
+  clearAudienceFilter() {
+    void this.router.navigate(['/audience/profiles']);
   }
 
   getAvatarColor(name: string): string {
@@ -237,9 +317,21 @@ export class ProfilesComponent implements OnInit {
       email: '',
       status: 'active',
       tagsString: '',
-      openRate: 50
+      listId: '',
     };
     this.showAddProfileModal = true;
+  }
+
+  viewProfile(id: string) {
+    if (!id) return;
+    void this.router.navigate(['/audience/profiles', id]);
+  }
+
+  confirmDelete(profile: SubscriberProfile, event: MouseEvent) {
+    event.stopPropagation();
+    const label = profile.name || profile.email;
+    if (!confirm(`Delete profile "${label}"? This cannot be undone.`)) return;
+    this.audienceApi.deleteProfile(profile.id).subscribe(() => this.filter());
   }
 
   closeAddProfileModal() {
@@ -253,18 +345,15 @@ export class ProfilesComponent implements OnInit {
       ? this.newProfile.tagsString.split(',').map(t => t.trim()).filter(t => t.length > 0)
       : [];
 
-    const newSub: Subscriber = {
-      id: `${Date.now()}`,
+    this.audienceApi.createProfile({
       name: this.newProfile.name,
       email: this.newProfile.email,
       status: this.newProfile.status,
       tags: parsedTags,
-      openRate: this.newProfile.openRate,
-      joinedAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-    };
-
-    this.subscribers.unshift(newSub);
-    this.filter();
-    this.closeAddProfileModal();
+      listIds: this.newProfile.listId ? [this.newProfile.listId] : undefined,
+    }).subscribe(created => {
+      this.filter();
+      this.closeAddProfileModal();
+    });
   }
 }

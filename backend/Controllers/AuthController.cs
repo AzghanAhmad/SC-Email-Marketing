@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using ScribeCount.Email.Api.Data;
 using ScribeCount.Email.Api.DTOs;
 using ScribeCount.Email.Api.Entities;
+using ScribeCount.Email.Api.Middleware;
 using ScribeCount.Email.Api.Services;
 
 namespace ScribeCount.Email.Api.Controllers;
@@ -47,7 +48,7 @@ public class AuthController(AppDbContext db, JwtTokenService jwt) : ControllerBa
         if (user is null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
             return Unauthorized(new { message = "Invalid email or password." });
 
-        return Ok(new AuthResponse(jwt.GenerateToken(user), ToUserDto(user, user.MailboxConnection?.IsConnected == true)));
+        return Ok(new AuthResponse(jwt.GenerateToken(user), ToUserDto(user, MailboxService.IsLinked(user.MailboxConnection))));
     }
 
     [Authorize]
@@ -56,8 +57,9 @@ public class AuthController(AppDbContext db, JwtTokenService jwt) : ControllerBa
     {
         var userId = GetUserId();
         var user = await db.Users.Include(u => u.MailboxConnection).FirstOrDefaultAsync(u => u.Id == userId);
-        if (user is null) return NotFound();
-        return Ok(ToUserDto(user, user.MailboxConnection?.IsConnected == true));
+        if (user is null)
+            return Unauthorized(new { message = StaleSessionMiddleware.Message });
+        return Ok(ToUserDto(user, MailboxService.IsLinked(user.MailboxConnection)));
     }
 
     [Authorize]

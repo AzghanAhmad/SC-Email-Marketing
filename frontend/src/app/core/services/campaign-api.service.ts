@@ -1,64 +1,29 @@
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from './api.service';
-import { Campaign } from './mock-data.service';
+import {
+  AbTest,
+  AudienceSegment,
+  CalendarEvent,
+  Campaign,
+  CampaignsBundle,
+  CreateCampaignPayload,
+  NewsletterSchedule,
+  ReachEstimate,
+  TestSendResponse,
+} from '../models/campaign.models';
 
-export interface CalendarEvent {
-  id: string;
-  name: string;
-  type: string;
-  date: string;
-  status: 'planned' | 'draft' | 'scheduled' | 'sent';
-  daysFromRelease?: number;
-}
-
-export interface NewsletterSchedule {
-  name: string;
-  frequency: 'weekly' | 'biweekly' | 'monthly';
-  dayOfWeek: string;
-  dayOfMonth: string;
-  sendTime: string;
-  timezoneOptimized: boolean;
-  subject: string;
-  previewText: string;
-  replyQuestion: string;
-  content: string;
-  status: 'active' | 'paused' | 'draft';
-}
-
-export interface AbTest {
-  id: string;
-  name: string;
-  subjectA: string;
-  subjectB: string;
-  testSize: number;
-  winnerMetric: 'opens' | 'clicks';
-  waitHours: number;
-  status: 'draft' | 'running' | 'complete';
-  openRateA?: number;
-  openRateB?: number;
-  winner?: 'A' | 'B';
-}
-
-export interface CampaignsBundle {
-  campaigns: Campaign[];
-  calendarEvents: CalendarEvent[];
-  newsletter: NewsletterSchedule;
-  abTests: AbTest[];
-}
-
-export interface CreateCampaignPayload {
-  name: string;
-  subject: string;
-  previewText?: string;
-  content?: string;
-  campaignType?: string;
-  fromName?: string;
-  sendToSegment?: string;
-  status?: string;
-  scheduledAt?: string | null;
-  extras?: Record<string, string>;
-}
+export type {
+  AbTest,
+  AudienceSegment,
+  CalendarEvent,
+  Campaign,
+  CampaignsBundle,
+  CreateCampaignPayload,
+  NewsletterSchedule,
+  ReachEstimate,
+  TestSendResponse,
+};
 
 @Injectable({ providedIn: 'root' })
 export class CampaignApiService {
@@ -66,6 +31,10 @@ export class CampaignApiService {
 
   getBundle(): Observable<CampaignsBundle> {
     return this.api.get<CampaignsBundle>('/campaigns');
+  }
+
+  getCampaign(id: string): Observable<Campaign> {
+    return this.api.get<Campaign>(`/campaigns/${id}`);
   }
 
   createCampaign(payload: CreateCampaignPayload): Observable<Campaign> {
@@ -109,5 +78,47 @@ export class CampaignApiService {
 
   deleteAbTest(id: string): Observable<void> {
     return this.api.delete<void>(`/campaigns/ab-tests/${id}`);
+  }
+
+  getAudienceSegments(): Observable<AudienceSegment[]> {
+    return this.api.get<AudienceSegment[]>('/campaigns/audience-segments');
+  }
+
+  estimateReach(payload: {
+    segment?: string;
+    enabledSuppressionRules: string[];
+    listIds?: string[];
+    segmentIds?: string[];
+    contactIds?: string[];
+    excludeUnengaged?: boolean;
+    arcTag?: string;
+  }): Observable<ReachEstimate> {
+    return this.api.post<ReachEstimate>('/campaigns/estimate-reach', {
+      segment: payload.segment ?? 'all',
+      enabledSuppressionRules: payload.enabledSuppressionRules,
+      listIds: payload.listIds,
+      segmentIds: payload.segmentIds,
+      contactIds: payload.contactIds,
+      excludeUnengaged: payload.excludeUnengaged ?? false,
+      arcTag: payload.arcTag || undefined,
+    });
+  }
+
+  sendTestEmail(payload: {
+    campaignId?: string;
+    subject?: string;
+    previewText?: string;
+    content?: string;
+    fromName?: string;
+  }): Observable<TestSendResponse> {
+    return this.api.post<TestSendResponse>('/campaigns/test-send', payload);
+  }
+
+  updateCalendarEvent(id: string, payload: Partial<{ name: string; type: string; date: string; status: string }>): Observable<CalendarEvent> {
+    return this.api.put<CalendarEvent>(`/campaigns/calendar-events/${id}`, payload);
+  }
+
+  deleteCalendarEvent(id: string): Observable<void> {
+    return this.api.delete<void>(`/campaigns/calendar-events/${id}`);
   }
 }

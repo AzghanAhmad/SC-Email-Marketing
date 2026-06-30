@@ -91,6 +91,9 @@ import { MailboxApiService, MailboxSetupInstructions, type SaveMailboxConnection
       <div class="action-row">
         <button class="btn-secondary" type="button" (click)="testConnection()" [disabled]="busy()">Test connection</button>
         <button class="btn-primary" type="button" (click)="saveAndSync()" [disabled]="busy()">Save and sync inbox</button>
+        <button class="btn-danger-outline" type="button" *ngIf="connected()" (click)="disconnectInbox()" [disabled]="busy()">
+          Disconnect inbox
+        </button>
       </div>
 
       <p class="status-msg" *ngIf="statusMessage()" [class.error]="statusError()">{{ statusMessage() }}</p>
@@ -141,6 +144,12 @@ import { MailboxApiService, MailboxSetupInstructions, type SaveMailboxConnection
     .btn-primary { background:#3b82f6; color:#fff; }
     .btn-secondary { background:#f1f5f9; color:#374151; border:1.5px solid #e2e8f0; }
     .btn-primary:disabled, .btn-secondary:disabled { opacity:.6; cursor:not-allowed; }
+    .btn-danger-outline {
+      padding:.625rem 1.125rem; border-radius:10px; font-size:.875rem; font-weight:600; cursor:pointer;
+      background:rgba(239,68,68,0.04); color:#dc2626; border:1.5px solid rgba(239,68,68,0.25);
+    }
+    .btn-danger-outline:hover:not(:disabled) { background:rgba(239,68,68,0.1); border-color:#dc2626; }
+    .btn-danger-outline:disabled { opacity:.6; cursor:not-allowed; }
     .status-msg { margin-top:1rem; font-size:.8125rem; color:#059669; padding:.75rem 1rem; border-radius:10px; background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.15); line-height:1.5; }
     .status-msg.error { color:#b91c1c; background:rgba(239,68,68,0.08); border-color:rgba(239,68,68,0.2); }
     .status-hint { margin-top:.5rem; font-size:.78rem; color:#64748b; line-height:1.5; }
@@ -202,12 +211,10 @@ export class InboxConnectionComponent implements OnInit {
   ) {}
 
   ngOnInit() {
-    this.connected.set(!!this.auth.user()?.mailboxConnected);
-    this.mailboxApi.getSetupInstructions().subscribe(i => this.instructions = i);
     this.mailboxApi.getConnection().subscribe({
       next: conn => {
-        if (!conn.isConnected) return;
-        this.connected.set(true);
+        this.connected.set(conn.isConnected || !!conn.emailAddress?.trim());
+        if (!conn.emailAddress) return;
         this.form.emailAddress = conn.emailAddress;
         this.form.username = conn.username;
         this.form.imapHost = conn.imapHost;
@@ -217,8 +224,10 @@ export class InboxConnectionComponent implements OnInit {
         this.form.smtpPort = conn.smtpPort;
         this.form.smtpUseSsl = conn.smtpUseSsl;
         this.form.provider = conn.provider;
-      }
+      },
+      error: () => this.connected.set(false)
     });
+    this.mailboxApi.getSetupInstructions().subscribe(i => this.instructions = i);
   }
 
   applyProvider(id: string) {
@@ -294,15 +303,46 @@ export class InboxConnectionComponent implements OnInit {
     this.mailboxApi.connect(this.toRequest()).subscribe({
       next: (res) => {
         this.connected.set(true);
-        this.auth.refreshProfile().subscribe(() => {
-          this.emailService.loadMessages().subscribe();
-          this.statusMessage.set(res.message || 'Inbox connected.');
-          this.statusError.set(false);
-          this.busy.set(false);
-          this.router.navigate(['/email/inbox']);
-        });
+        this.auth.updateCachedUser({ mailboxConnected: true });
+        this.statusMessage.set(res.message || 'Inbox connected.');
+        this.statusError.set(false);
+        this.busy.set(false);
+
+        this.auth.refreshProfile().subscribe();
+        this.emailService.loadMessages().subscribe();
+
+        if (res.connection?.isConnected) {
+          void this.router.navigate(['/email', 'inbox']);
+        }
       },
-      error: err => { this.statusMessage.set(err.message); this.statusError.set(true); this.busy.set(false); }
+      error: err => {
+        this.statusMessage.set(err.message);
+        this.statusError.set(true);
+        this.busy.set(false);
+      }
+    });
+  }
+
+  disconnectInbox() {
+    if (!this.connected()) return;
+    this.busy.set(true);
+    this.statusError.set(false);
+    this.mailboxApi.disconnect().subscribe({
+      next: () => {
+        this.connected.set(false);
+        this.auth.updateCachedUser({ mailboxConnected: false });
+        this.form.password = '';
+        this.statusMessage.set('Inbox disconnected. You can connect a different Gmail or Outlook account.');
+        this.statusError.set(false);
+        this.busy.set(false);
+        this.emailService.clearInbox();
+        this.auth.refreshProfile().subscribe();
+      },
+      error: err => {
+        this.statusMessage.set(err.message || 'Could not disconnect inbox.');
+        this.statusError.set(true);
+        this.busy.set(false);
+      }
     });
   }
 }

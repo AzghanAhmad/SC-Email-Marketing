@@ -23,7 +23,7 @@ namespace ScribeCount.Email.Api.Data.Migrations
                     `PreviewText` longtext CHARACTER SET utf8mb4 NOT NULL,
                     `Content` longtext CHARACTER SET utf8mb4 NOT NULL,
                     `CampaignType` longtext CHARACTER SET utf8mb4 NOT NULL,
-                    `Status` longtext CHARACTER SET utf8mb4 NOT NULL,
+                    `Status` varchar(64) CHARACTER SET utf8mb4 NOT NULL,
                     `FromName` longtext CHARACTER SET utf8mb4 NOT NULL,
                     `SendToSegment` longtext CHARACTER SET utf8mb4 NOT NULL,
                     `OpenRate` decimal(65,30) NOT NULL,

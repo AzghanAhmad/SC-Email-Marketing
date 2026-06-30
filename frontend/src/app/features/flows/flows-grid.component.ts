@@ -127,6 +127,18 @@ type FamilyFilter = 'all' | 'onboarding' | 'transaction' | 'launch' | 'retention
       font-family: inherit; cursor: pointer; transition: all .15s;
     }
     .btn-ghost-sm:hover { border-color: #93c5fd; color: #3b82f6; background: #eff6ff; }
+
+    @media(max-width:768px) {
+      .flows-grid { grid-template-columns:1fr; }
+      .priority-banner { grid-template-columns:1fr; }
+      .family-filter-bar { overflow-x:auto; flex-wrap:nowrap; -webkit-overflow-scrolling:touch; scrollbar-width:none; padding-bottom:.25rem; }
+      .family-filter-bar::-webkit-scrollbar { display:none; }
+      .family-filter-btn { flex-shrink:0; }
+    }
+    @media(max-width:480px) {
+      .priority-item { font-size:.74rem; }
+      .family-filter-btn { font-size:.75rem; padding:.35rem .75rem; }
+    }
   `]
 })
 export class FlowsGridComponent implements OnChanges, OnInit {

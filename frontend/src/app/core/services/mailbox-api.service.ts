@@ -62,6 +62,10 @@ export class MailboxApiService {
     return this.api.post<{ connection: MailboxConnection; message: string }>('/mailbox/connect', request);
   }
 
+  disconnect(): Observable<MailboxConnection> {
+    return this.api.post<MailboxConnection>('/mailbox/disconnect', {});
+  }
+
   sync(): Observable<{ synced: number; message: string }> {
     return this.api.post<{ synced: number; message: string }>('/mailbox/sync', {});
   }

@@ -12,6 +12,14 @@ export const routes: Routes = [
     loadComponent: () => import('./auth/signup/signup.component').then(m => m.SignupComponent)
   },
   {
+    path: 'unsubscribe',
+    loadComponent: () => import('./features/public/unsubscribe.component').then(m => m.UnsubscribeComponent)
+  },
+  {
+    path: 'email/view',
+    loadComponent: () => import('./features/public/campaign-email-view.component').then(m => m.CampaignEmailViewComponent)
+  },
+  {
     path: '',
     loadComponent: () => import('./layout/main-layout/main-layout.component').then(m => m.MainLayoutComponent),
     canActivate: [authGuard],
@@ -24,6 +32,10 @@ export const routes: Routes = [
       {
         path: 'campaigns',
         loadComponent: () => import('./features/campaigns/campaigns.component').then(m => m.CampaignsComponent)
+      },
+      {
+        path: 'campaigns/:id/report',
+        loadComponent: () => import('./features/campaigns/campaign-report.component').then(m => m.CampaignReportComponent)
       },
       // Flows
       {
@@ -51,6 +63,10 @@ export const routes: Routes = [
       {
         path: 'audience/lists-segments',
         loadComponent: () => import('./features/audience/lists-segments/lists-segments.component').then(m => m.ListsSegmentsComponent)
+      },
+      {
+        path: 'audience/profiles/:id',
+        loadComponent: () => import('./features/audience/profiles/profile-detail.component').then(m => m.ProfileDetailComponent)
       },
       {
         path: 'audience/profiles',

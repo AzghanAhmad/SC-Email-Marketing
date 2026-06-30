@@ -1,48 +1,81 @@
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Hosting;
 
 namespace ScribeCount.Email.Api.Services;
 
 public static class DatabaseConfiguration
 {
-    public static string ResolveConnectionString(IConfiguration configuration)
+    public static async Task EnsureDatabaseExistsAsync(
+        string connectionString,
+        ILogger? logger = null,
+        CancellationToken cancellationToken = default)
     {
-        // Railway injects these when the MySQL service is linked — prefer over manual vars.
+        var builder = new MySqlConnector.MySqlConnectionStringBuilder(connectionString);
+        var database = string.IsNullOrWhiteSpace(builder.Database) ? "scribecount_email" : builder.Database;
+        var escaped = database.Replace("`", "``", StringComparison.Ordinal);
+
+        builder.Database = "";
+        await using var connection = new MySqlConnector.MySqlConnection(builder.ConnectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"CREATE DATABASE IF NOT EXISTS `{escaped}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;";
+        await command.ExecuteNonQueryAsync(cancellationToken);
+
+        logger?.LogInformation("Database {Database} is ready", database);
+    }
+
+    public static string ResolveConnectionString(IConfiguration configuration, IHostEnvironment? environment = null)
+    {
+        var isDevelopment = environment?.IsDevelopment()
+            ?? string.Equals(
+                Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT"),
+                "Development",
+                StringComparison.OrdinalIgnoreCase);
+
+        if (isDevelopment && !UseRailwayDbInDevelopment())
+        {
+            var local = NormalizeConnectionString(configuration.GetConnectionString("DefaultConnection"));
+            if (!string.IsNullOrWhiteSpace(local))
+                return ApplySslForHost(local);
+        }
+
         var fromRailwayVars = BuildFromRailwayEnvVars();
         if (fromRailwayVars != null)
             return fromRailwayVars;
 
         var fromUrl = NormalizeConnectionString(
-            Environment.GetEnvironmentVariable("MYSQL_URL")
-            ?? Environment.GetEnvironmentVariable("DATABASE_URL"));
+            Env("MYSQL_URL") ?? Env("DATABASE_URL"));
         if (!string.IsNullOrWhiteSpace(fromUrl))
-            return fromUrl;
+            return ApplySslForHost(fromUrl);
 
         var fromConfig = NormalizeConnectionString(configuration.GetConnectionString("DefaultConnection"));
         if (!string.IsNullOrWhiteSpace(fromConfig))
-            return fromConfig;
+            return ApplySslForHost(fromConfig);
 
-        return "Server=localhost;Port=3306;Database=scribecount_email;User=root;Password=;";
+        return DefaultLocalConnectionString();
     }
+
+    private static bool UseRailwayDbInDevelopment() =>
+        string.Equals(Env("USE_RAILWAY_DB"), "true", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(Env("USE_RAILWAY_DB"), "1", StringComparison.OrdinalIgnoreCase);
+
+    private static string DefaultLocalConnectionString() =>
+        "Server=127.0.0.1;Port=3306;Database=scribecount_email;User=root;Password=;SslMode=None;Connection Timeout=30;";
 
     private static string? BuildFromRailwayEnvVars()
     {
-        var host = Environment.GetEnvironmentVariable("MYSQLHOST")
-            ?? Environment.GetEnvironmentVariable("MYSQL_HOST");
+        var host = Env("MYSQLHOST") ?? Env("MYSQL_HOST");
         if (string.IsNullOrWhiteSpace(host))
             return null;
 
-        var port = Environment.GetEnvironmentVariable("MYSQLPORT")
-            ?? Environment.GetEnvironmentVariable("MYSQL_PORT")
-            ?? "3306";
-        var user = Environment.GetEnvironmentVariable("MYSQLUSER")
-            ?? Environment.GetEnvironmentVariable("MYSQL_USER")
-            ?? "root";
-        var password = Environment.GetEnvironmentVariable("MYSQLPASSWORD")
-            ?? Environment.GetEnvironmentVariable("MYSQL_PASSWORD")
-            ?? "";
-        var database = Environment.GetEnvironmentVariable("MYSQLDATABASE")
-            ?? Environment.GetEnvironmentVariable("MYSQL_DATABASE")
-            ?? "railway";
+        var port = Env("MYSQLPORT") ?? Env("MYSQL_PORT") ?? "3306";
+        var user = Env("MYSQLUSER") ?? Env("MYSQL_USER") ?? "root";
+        var password = Env("MYSQLPASSWORD") ?? Env("MYSQL_PASSWORD") ?? "";
+        var database = Env("MYSQLDATABASE") ?? Env("MYSQL_DATABASE") ?? "railway";
+
+        if (string.IsNullOrWhiteSpace(database))
+            database = "railway";
 
         return Format(host, port, database, user, password);
     }
@@ -65,6 +98,39 @@ public static class DatabaseConfiguration
             return trimmed;
 
         return null;
+    }
+
+    private static string ApplySslForHost(string connectionString)
+    {
+        var builder = new MySqlConnector.MySqlConnectionStringBuilder(connectionString);
+
+        if (string.IsNullOrWhiteSpace(builder.Database))
+            builder.Database = "scribecount_email";
+
+        if (IsLocalHost(builder.Server))
+        {
+            builder.Server = "127.0.0.1";
+            builder.SslMode = MySqlConnector.MySqlSslMode.None;
+        }
+        else if (builder.SslMode == MySqlConnector.MySqlSslMode.Preferred)
+        {
+            builder.SslMode = MySqlConnector.MySqlSslMode.Required;
+        }
+
+        if (builder.ConnectionTimeout == 0)
+            builder.ConnectionTimeout = 30;
+
+        return builder.ConnectionString;
+    }
+
+    private static bool IsLocalHost(string? host)
+    {
+        if (string.IsNullOrWhiteSpace(host))
+            return true;
+
+        return host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+            || host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase)
+            || host.Equals("::1", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool LooksLikeAdoNetConnectionString(string value) =>
@@ -157,6 +223,15 @@ public static class DatabaseConfiguration
     private static string? NextToken(IReadOnlyList<string> tokens, ref int index) =>
         index + 1 < tokens.Count ? tokens[++index] : null;
 
-    private static string Format(string host, string port, string database, string user, string password) =>
-        $"Server={host};Port={port};Database={database};User={user};Password={password};SslMode=Required;";
+    private static string Format(string host, string port, string database, string user, string password)
+    {
+        var ssl = IsLocalHost(host) ? "SslMode=None" : "SslMode=Required";
+        return $"Server={host};Port={port};Database={database};User={user};Password={password};{ssl};Connection Timeout=30;";
+    }
+
+    private static string? Env(string name)
+    {
+        var value = Environment.GetEnvironmentVariable(name);
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
 }

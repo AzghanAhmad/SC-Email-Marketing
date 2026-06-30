@@ -1,6 +1,8 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { DomSanitizer } from '@angular/platform-browser';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
+import { AnalyticsApiService } from '../../../core/services/analytics-api.service';
+import { NAV_ICONS } from '../../../core/constants/nav-icons';
 
 @Component({
   selector: 'app-analytics-dashboards',
@@ -14,11 +16,10 @@ import { DomSanitizer } from '@angular/platform-browser';
           <p class="page-subtitle">Comprehensive analytics across campaigns, flows, and audience</p>
         </div>
         <div class="header-actions">
-          <select class="period-select">
-            <option>Last 30 days</option>
-            <option>Last 7 days</option>
-            <option>Last 90 days</option>
-            <option>This year</option>
+          <select class="period-select" [value]="periodDays" (change)="onPeriodChange($event)">
+            <option [value]="7">Last 7 days</option>
+            <option [value]="30">Last 30 days</option>
+            <option [value]="90">Last 90 days</option>
           </select>
         </div>
       </div>
@@ -26,9 +27,7 @@ import { DomSanitizer } from '@angular/platform-browser';
       <!-- Overview KPIs -->
       <div class="kpi-grid">
         <div class="glass-card kpi-card" *ngFor="let k of kpis">
-          <div class="kpi-icon" [style.background]="k.iconBg">
-            <span [innerHTML]="k.safeIcon"></span>
-          </div>
+          <span class="nav-icon" [innerHTML]="k.safeIcon"></span>
           <div class="kpi-body">
             <span class="kpi-val">{{ k.value }}</span>
             <span class="kpi-label">{{ k.label }}</span>
@@ -147,6 +146,9 @@ import { DomSanitizer } from '@angular/platform-browser';
             </tr>
           </thead>
           <tbody>
+            <tr *ngIf="campaignFunnel.length === 0">
+              <td colspan="7" class="empty-row">No sent campaigns in this period yet.</td>
+            </tr>
             <tr *ngFor="let c of campaignFunnel">
               <td class="camp-name">{{ c.name }}</td>
               <td>{{ c.sent | number }}</td>
@@ -170,8 +172,8 @@ import { DomSanitizer } from '@angular/platform-browser';
 
     .kpi-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:1.25rem; margin-bottom:1.75rem; }
     .kpi-card { display:flex; align-items:center; gap:1rem; padding:1.25rem 1.375rem; position:relative; }
-    .kpi-icon { width:42px; height:42px; border-radius:12px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-    .kpi-icon svg { width:20px; height:20px; display: block; }
+    .nav-icon { display:flex; align-items:center; justify-content:center; flex-shrink:0; color:#64748b; }
+    .nav-icon svg { width:20px; height:20px; display:block; }
     .kpi-body { flex:1; display:flex; flex-direction:column; }
     .kpi-val { font-size:1.5rem; font-weight:800; color:#0f172a; letter-spacing:-.03em; line-height:1.1; }
     .kpi-label { font-size:.7rem; font-weight:600; color:#94a3b8; text-transform:uppercase; letter-spacing:.06em; margin-top:.2rem; }
@@ -215,76 +217,63 @@ import { DomSanitizer } from '@angular/platform-browser';
       background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px;
       padding:.625rem .75rem;
     }
+    .empty-row { text-align:center; color:#94a3b8; padding:1.5rem !important; }
 
     @media(max-width:1200px) { .kpi-grid { grid-template-columns:repeat(2,1fr); } .engagement-grid { grid-template-columns:repeat(3,1fr); } }
     @media(max-width:900px) { .charts-row { grid-template-columns:1fr; } }
     @media(max-width:600px) { .kpi-grid { grid-template-columns:1fr; } .engagement-grid { grid-template-columns:repeat(2,1fr); } }
   `]
 })
-export class AnalyticsDashboardsComponent {
+export class AnalyticsDashboardsComponent implements OnInit {
   private sanitizer = inject(DomSanitizer);
+  private analyticsApi = inject(AnalyticsApiService);
 
-  kpis: any[] = [
-    { label: 'Emails Sent', value: '24,830', change: 8.1, iconBg: 'rgba(59,130,246,0.1)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>' },
-    { label: 'Open Rate (MPP adj.)', value: '54.2%', change: 3.2, iconBg: 'rgba(16,185,129,0.1)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>' },
-    { label: 'Click Rate', value: '12.8%', change: 1.4, iconBg: 'rgba(99,102,241,0.1)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>' },
-    { label: 'Click-to-Open', value: '23.6%', change: 1.8, iconBg: 'rgba(139,92,246,0.1)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>' },
-    { label: 'Conversion Rate', value: '2.1%', change: 4.5, iconBg: 'rgba(16,185,129,0.1)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2"><polyline points="4 14 9 9 13 13 20 6"/><polyline points="20 12 20 6 14 6"/></svg>' },
-    { label: 'Revenue', value: '$4,280', change: 22.7, iconBg: 'rgba(245,158,11,0.1)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>' },
-  ];
-
-  volumeData = [
-    { label: 'Oct', sent: 3800, delivered: 3720 },
-    { label: 'Nov', sent: 4200, delivered: 4100 },
-    { label: 'Dec', sent: 5100, delivered: 5020 },
-    { label: 'Jan', sent: 3200, delivered: 3140 },
-    { label: 'Feb', sent: 4650, delivered: 4560 },
-    { label: 'Mar', sent: 4821, delivered: 4712 },
-  ];
-  maxVol = Math.max(...[3800, 4200, 5100, 3200, 4650, 4821]);
-
-  engagementData = [
-    { label: 'Oct', open: 48, click: 9 },
-    { label: 'Nov', open: 51, click: 11 },
-    { label: 'Dec', open: 62, click: 18 },
-    { label: 'Jan', open: 54, click: 13 },
-    { label: 'Feb', open: 49, click: 9 },
-    { label: 'Mar', open: 54, click: 13 },
-  ];
-
+  periodDays = 30;
+  kpis: { label: string; value: string; change: number; safeIcon: SafeHtml }[] = [];
+  volumeData: { label: string; sent: number; delivered: number }[] = [];
+  maxVol = 1;
+  engagementData: { label: string; open: number; click: number }[] = [];
   openLinePts = '';
   openAreaPts = '';
   clickLinePts = '';
   clickAreaPts = '';
+  engBreakdown: { label: string; value: number; color: string }[] = [];
+  campaignFunnel: { name: string; sent: number; delivered: number; opens: number; clicks: number; purchases: number; revenue: string }[] = [];
 
-  engBreakdown = [
-    { label: 'Opened', value: 54, color: '#60a5fa' },
-    { label: 'Clicked', value: 13, color: '#818cf8' },
-    { label: 'Replied', value: 4, color: '#a78bfa' },
-    { label: 'Forwarded', value: 2, color: '#34d399' },
-    { label: 'Unsubscribed', value: 0.4, color: '#f87171' },
-  ];
+  ngOnInit() { this.loadData(); }
 
-  campaignFunnel = [
-    { name: 'Spring Catalog Launch', sent: 4821, delivered: 4712, opens: 2544, clicks: 611, purchases: 84, revenue: '$1,980' },
-    { name: 'Weekly Reader Letter', sent: 3510, delivered: 3448, opens: 1862, clicks: 429, purchases: 38, revenue: '$870' },
-    { name: 'Series Bundle Promo', sent: 2765, delivered: 2701, opens: 1422, clicks: 388, purchases: 57, revenue: '$1,430' },
-    { name: 'Re-engagement Check-in', sent: 2180, delivered: 2089, opens: 771, clicks: 148, purchases: 10, revenue: '$280' },
-  ];
+  onPeriodChange(ev: Event) {
+    this.periodDays = Number((ev.target as HTMLSelectElement).value);
+    this.loadData();
+  }
 
-  constructor() {
-    this.kpis.forEach(k => {
-      k.safeIcon = this.sanitizer.bypassSecurityTrustHtml(k.icon);
+  private loadData() {
+    this.analyticsApi.getAnalytics(this.periodDays).subscribe(bundle => {
+      this.kpis = bundle.kpis.map(k => ({
+        label: k.label,
+        value: k.value,
+        change: k.change,
+        safeIcon: this.sanitizer.bypassSecurityTrustHtml(NAV_ICONS[k.iconKey] ?? NAV_ICONS['chart']),
+      }));
+      this.volumeData = bundle.volumeData;
+      this.maxVol = Math.max(1, ...this.volumeData.map(d => d.sent));
+      this.engagementData = bundle.engagementTrend.map(e => ({ label: e.label, open: e.open, click: e.click }));
+      this.engBreakdown = bundle.engagementBreakdown;
+      this.campaignFunnel = bundle.campaignFunnel;
+      this.buildCharts();
     });
-    this.buildCharts();
   }
 
   buildCharts() {
+    if (this.engagementData.length < 2) {
+      this.openLinePts = this.openAreaPts = this.clickLinePts = this.clickAreaPts = '';
+      return;
+    }
     const W = 300, H = 120, PAD = 10;
     const buildLine = (data: number[], maxVal: number) => {
       const pts = data.map((v, i) => ({
         x: PAD + (i / (data.length - 1)) * (W - PAD * 2),
-        y: H - PAD - (v / maxVal) * (H - PAD * 2)
+        y: H - PAD - (maxVal > 0 ? (v / maxVal) * (H - PAD * 2) : 0)
       }));
       const line = pts.map(p => `${p.x},${p.y}`).join(' ');
       const area = `${pts[0].x},${H} ${line} ${pts[pts.length - 1].x},${H}`;
@@ -293,7 +282,7 @@ export class AnalyticsDashboardsComponent {
 
     const openData = this.engagementData.map(d => d.open);
     const clickData = this.engagementData.map(d => d.click);
-    const maxE = Math.max(...openData);
+    const maxE = Math.max(1, ...openData, ...clickData);
 
     const openRes = buildLine(openData, maxE);
     this.openLinePts = openRes.line;

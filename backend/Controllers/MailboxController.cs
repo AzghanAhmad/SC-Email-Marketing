@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using ScribeCount.Email.Api.Data;
 using ScribeCount.Email.Api.DTOs;
 using ScribeCount.Email.Api.Entities;
+using ScribeCount.Email.Api.Middleware;
 using ScribeCount.Email.Api.Services;
 
 namespace ScribeCount.Email.Api.Controllers;
@@ -25,7 +26,7 @@ public class MailboxController(AppDbContext db, MailboxService mailbox) : Contro
     [HttpGet("connection")]
     public async Task<ActionResult<MailboxConnectionDto>> GetConnection()
     {
-        var conn = await db.MailboxConnections.FirstOrDefaultAsync(c => c.UserId == GetUserId());
+        var conn = await mailbox.GetConnectionForUserAsync(GetUserId());
         if (conn is null)
         {
             return Ok(new MailboxConnectionDto(
@@ -54,21 +55,37 @@ public class MailboxController(AppDbContext db, MailboxService mailbox) : Contro
         var (success, message) = await mailbox.TestConnectionAsync(request!);
         if (!success) return BadRequest(new { message });
 
-        var conn = await mailbox.SaveConnectionAsync(GetUserId(), request!);
-        var syncMessage = "Inbox connected.";
         try
         {
-            var count = await mailbox.SyncInboxAsync(GetUserId());
-            syncMessage = count > 0
-                ? $"Inbox connected. Imported {count} message(s)."
-                : "Inbox connected. No new messages found in your mailbox.";
-        }
-        catch (Exception ex)
-        {
-            syncMessage = $"Inbox connected, but sync failed: {ex.Message}";
-        }
+            var conn = await mailbox.SaveConnectionAsync(GetUserId(), request!);
+            var syncMessage = "Inbox connected.";
+            try
+            {
+                var count = await mailbox.SyncInboxAsync(GetUserId());
+                syncMessage = count > 0
+                    ? $"Inbox connected. Imported {count} message(s)."
+                    : "Inbox connected. No new messages found in your mailbox.";
+            }
+            catch (Exception ex)
+            {
+                syncMessage = $"Inbox connected, but sync failed: {ex.Message}";
+            }
 
-        return Ok(new { connection = MapConnection(conn), message = syncMessage });
+            return Ok(new { connection = MapConnection(conn), message = syncMessage });
+        }
+        catch (InvalidOperationException ex) when (ex.Message == StaleSessionMiddleware.Message)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+    }
+
+    [HttpPost("disconnect")]
+    public async Task<ActionResult<MailboxConnectionDto>> Disconnect()
+    {
+        await mailbox.DisconnectAsync(GetUserId());
+        return Ok(new MailboxConnectionDto(
+            "", "imap.gmail.com", 993, true, "smtp.gmail.com", 587, true,
+            "", "gmail", false, null));
     }
 
     [HttpPost("sync")]

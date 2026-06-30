@@ -10,7 +10,7 @@ import { EmailViewComponent } from './email-view.component';
 import { ComposeModalComponent } from './compose-modal.component';
 import { EmailTipsComponent } from './email-tips.component';
 import { buildQuotedHtml } from './email-quote';
-import { Subscription, of } from 'rxjs';
+import { Subscription } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
 
 @Component({
@@ -43,8 +43,11 @@ import { switchMap } from 'rxjs/operators';
         {{ syncNotice }}
       </div>
       <div class="sync-banner error" *ngIf="syncError && !showMailboxBanner && !syncing">
-        {{ syncError }}
-        <button type="button" class="sync-retry-btn" (click)="refreshMailbox()" [disabled]="syncing">Retry sync</button>
+        <span class="sync-error-text">{{ syncError }}</span>
+        <div class="sync-error-actions">
+          <a routerLink="/settings" [queryParams]="{ tab: 'inbox' }" class="sync-retry-btn">Update credentials</a>
+          <button type="button" class="sync-retry-btn" (click)="refreshMailbox()" [disabled]="syncing">Retry sync</button>
+        </div>
       </div>
 
       <!-- Page toolbar -->
@@ -68,8 +71,11 @@ import { switchMap } from 'rxjs/operators';
       <div class="email-content-row">
       <app-email-sidebar
         [activeFolder]="currentFolder"
+        [mailboxConnected]="!showMailboxBanner"
+        [connectedEmail]="connectedEmail"
         (onFolderSelect)="navigateToFolder($event)"
         (onCompose)="openCompose()"
+        (onDisconnect)="disconnectInbox()"
       />
 
       <!-- Email List -->
@@ -198,9 +204,12 @@ import { switchMap } from 'rxjs/operators';
       background: #fef2f2;
       border-bottom-color: #fecaca;
       color: #b91c1c;
+      justify-content: space-between;
+      flex-wrap: wrap;
     }
+    .sync-error-text { flex: 1; min-width: 200px; line-height: 1.45; }
+    .sync-error-actions { display: flex; gap: .5rem; flex-shrink: 0; margin-left: auto; }
     .sync-retry-btn {
-      margin-left: auto;
       padding: .35rem .75rem;
       border: 1px solid currentColor;
       border-radius: 8px;
@@ -209,6 +218,9 @@ import { switchMap } from 'rxjs/operators';
       font-size: .75rem;
       font-weight: 600;
       cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
     }
     .sync-retry-btn:disabled { opacity: .6; cursor: not-allowed; }
     .email-toolbar {
@@ -342,6 +354,22 @@ import { switchMap } from 'rxjs/operators';
       color: #34d399;
       flex-shrink: 0;
     }
+
+    /* ── Responsive ── */
+    @media (max-width: 768px) {
+      .email-page { height: auto; min-height: calc(100vh - 64px); overflow: auto; }
+      .email-content-row { flex-direction: column; overflow: visible; height: auto; }
+      app-email-sidebar { display: none; }
+      app-email-list { max-width: none; min-width: 0; width: 100%; height: auto; min-height: 300px; }
+      app-email-view { width: 100%; flex: none; height: auto; min-height: 400px; }
+      .toolbar-refresh-btn span { display: none; }
+      .mailbox-banner { flex-direction: column; align-items: flex-start; }
+    }
+    @media (max-width: 480px) {
+      .email-toolbar { padding: .625rem .875rem; }
+      .toolbar-title { font-size: .9375rem; }
+      .tips-fab { bottom: .875rem; right: .875rem; width: 40px; height: 40px; }
+    }
   `]
 })
 export class EmailPageComponent implements OnInit, OnDestroy {
@@ -386,12 +414,7 @@ export class EmailPageComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.auth.whenReady().pipe(
-      switchMap(() => {
-        if (!this.auth.user() && this.auth.getToken()) {
-          return this.auth.refreshProfile();
-        }
-        return of(null);
-      })
+      switchMap(() => this.auth.refreshProfile())
     ).subscribe(() => this.runInZone(() => this.bootstrapInbox()));
 
     this.routeSub = this.route.params.subscribe(params => {
@@ -404,17 +427,50 @@ export class EmailPageComponent implements OnInit, OnDestroy {
     this.loading = true;
     this.mailboxApi.getConnection().subscribe({
       next: (conn) => {
-        this.showMailboxBanner = !conn.isConnected;
-        this.connectedEmail = conn.emailAddress || '';
-        if (conn.isConnected) {
+        const linked = this.isMailboxLinked(conn);
+        this.showMailboxBanner = !linked;
+        this.connectedEmail = linked ? (conn.emailAddress || '') : '';
+        if (linked) {
+          this.auth.updateCachedUser({ mailboxConnected: true });
           this.runSyncAndLoad();
         } else {
           this.loadMessagesFromApi();
         }
       },
       error: () => {
-        this.showMailboxBanner = !this.auth.user()?.mailboxConnected;
+        this.showMailboxBanner = true;
+        this.connectedEmail = '';
         this.loadMessagesFromApi();
+      }
+    });
+  }
+
+  disconnectInbox() {
+    if (this.showMailboxBanner) return;
+    this.mailboxApi.disconnect().subscribe({
+      next: () => {
+        this.runInZone(() => {
+          this.auth.updateCachedUser({ mailboxConnected: false });
+          this.auth.refreshProfile().subscribe();
+          this.showMailboxBanner = true;
+          this.connectedEmail = '';
+          this.syncNotice = '';
+          this.syncError = '';
+          this.syncing = false;
+          this.loading = false;
+          this.emailService.clearInbox();
+          this.selectedEmailId = null;
+          this.selectedEmail = null;
+          this.currentEmails = [];
+          this.emailsListKey++;
+          this.flushView();
+        });
+      },
+      error: (err) => {
+        this.runInZone(() => {
+          this.syncError = err.message || 'Could not disconnect inbox.';
+          this.flushView();
+        });
       }
     });
   }
@@ -491,6 +547,10 @@ export class EmailPageComponent implements OnInit, OnDestroy {
     this.currentFolder = folder;
     this.currentEmails = [...this.emailService.getEmailsByFolder(folder)];
     this.emailsListKey++;
+  }
+
+  private isMailboxLinked(conn: { isConnected: boolean; emailAddress?: string }): boolean {
+    return conn.isConnected || !!conn.emailAddress?.trim();
   }
 
   private updateMailboxBanner() {

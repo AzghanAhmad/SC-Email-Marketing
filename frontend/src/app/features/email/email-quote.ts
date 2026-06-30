@@ -1,4 +1,5 @@
 import { Email } from './email.service';
+import { formatEmailDetailDate } from './email-datetime.utils';
 
 function escapeHtml(text: string): string {
   return text
@@ -18,7 +19,7 @@ function formatBodyHtml(body: string): string {
 }
 
 export function buildQuotedHtml(email: Email, kind: 'reply' | 'forward'): string {
-  const dateStr = email.timestamp.toLocaleString();
+  const dateStr = formatEmailDetailDate(email.timestamp);
   const header =
     kind === 'reply'
       ? `<p class="quote-line"><strong>On ${escapeHtml(dateStr)}, ${escapeHtml(email.from)} &lt;${escapeHtml(email.fromEmail)}&gt; wrote:</strong></p>`

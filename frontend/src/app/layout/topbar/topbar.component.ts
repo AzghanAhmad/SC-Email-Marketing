@@ -4,6 +4,7 @@ import { Router, RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../../core/services/auth.service';
 import { NavbarSearchResult, NavbarSearchService } from '../../core/services/navbar-search.service';
+import { LayoutService } from '../../core/services/layout.service';
 
 interface AppNotification {
   id: string;
@@ -19,10 +20,38 @@ interface AppNotification {
   standalone: true,
   imports: [CommonModule, RouterModule, FormsModule],
   template: `
-    <header class="topbar" (click)="onTopbarClick($event)">
+    <header class="topbar" [class.drawer-open]="layout.sidebarOpen() && layout.isMobile()" (click)="onTopbarClick($event)">
+
+      <!-- Hamburger (mobile only) -->
+      <button
+        class="hamburger-btn"
+        (click)="toggleSidebar($event)"
+        [attr.aria-label]="layout.sidebarOpen() ? 'Close menu' : 'Open menu'"
+        [attr.aria-expanded]="layout.sidebarOpen()">
+        <svg *ngIf="!layout.sidebarOpen() || !layout.isMobile()" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20">
+          <line x1="3" y1="6" x2="21" y2="6"/>
+          <line x1="3" y1="12" x2="21" y2="12"/>
+          <line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+        <svg *ngIf="layout.sidebarOpen() && layout.isMobile()" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+
       <div class="topbar-left">
-        <div class="search-wrap topbar-panel" #searchPanel>
+        <button
+          type="button"
+          class="search-toggle-btn"
+          *ngIf="layout.isMobile() && !searchExpanded()"
+          (click)="openMobileSearch($event)"
+          aria-label="Open search">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+        </button>
+        <div class="search-wrap topbar-panel" #searchPanel [class.search-expanded]="searchExpanded() || !layout.isMobile()">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
           <input
@@ -33,8 +62,18 @@ interface AppNotification {
             (ngModelChange)="onSearchChange($event)"
             (focus)="showSearch.set(true)"
             (keydown.enter)="selectFirstSearchResult()"
-            (keydown.escape)="closeAllPanels()"
+            (keydown.escape)="closeMobileSearch()"
           />
+          <button
+            type="button"
+            class="search-close-btn"
+            *ngIf="layout.isMobile() && searchExpanded()"
+            (click)="closeMobileSearch($event)"
+            aria-label="Close search">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
           <div class="dropdown search-dropdown" *ngIf="showSearch() && searchQuery().trim()">
             <div class="dropdown-header">
               <span>Search results</span>
@@ -138,7 +177,7 @@ interface AppNotification {
         </div>
 
         <!-- About / Help -->
-        <button class="icon-btn" routerLink="/about" (click)="closeAllPanels()" data-tooltip="About ScribeCount Email">
+        <button class="icon-btn" routerLink="/about" (click)="navigateAndClose()" data-tooltip="About ScribeCount Email">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10"/>
             <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
@@ -164,11 +203,11 @@ interface AppNotification {
               </div>
             </div>
             <div class="dropdown-divider"></div>
-            <a routerLink="/settings" class="dropdown-item" (click)="closeAllPanels()">
+            <a routerLink="/settings" class="dropdown-item" (click)="navigateAndClose()">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
               Settings
             </a>
-            <a routerLink="/about" class="dropdown-item" (click)="closeAllPanels()">
+            <a routerLink="/about" class="dropdown-item" (click)="navigateAndClose()">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
               About
             </a>
@@ -185,24 +224,49 @@ interface AppNotification {
   styles: [`
     .topbar {
       height:64px; display:flex; align-items:center; justify-content:space-between;
-      padding:0 2rem;
+      padding:0 1.5rem;
       background:linear-gradient(180deg, rgba(22,38,62,0.98) 0%, rgba(14,24,40,0.98) 100%);
       backdrop-filter:blur(20px);
       border-bottom:1px solid rgba(255,255,255,0.07);
       position:fixed; top:0; left:252px; right:0; z-index:40;
       box-shadow:0 1px 0 rgba(0,0,0,0.15);
+      gap:.75rem;
     }
-    .topbar-left { display:flex; align-items:center; gap:1rem; flex:1; max-width:420px; }
-    .topbar-right { display:flex; align-items:center; gap:.5rem; position:relative; }
+    .topbar-left { display:flex; align-items:center; gap:1rem; flex:1; max-width:420px; min-width:0; }
+    .topbar-right { display:flex; align-items:center; gap:.5rem; position:relative; flex-shrink:0; }
     .topbar-panel { position:relative; }
 
-    .search-wrap { width:100%; min-width:220px; }
-    .search-wrap svg { color:rgba(255,255,255,0.45); }
+    /* Hamburger — hidden on desktop */
+    .hamburger-btn {
+      display:none; width:38px; height:38px; flex-shrink:0;
+      align-items:center; justify-content:center;
+      background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1);
+      border-radius:10px; cursor:pointer; color:rgba(255,255,255,0.75);
+      transition:all .2s;
+    }
+    .hamburger-btn:hover { background:rgba(255,255,255,0.12); color:white; }
+
+    .search-wrap { width:100%; min-width:0; display:flex; align-items:center; gap:.5rem; position:relative; }
+    .search-wrap svg.search-icon { color:rgba(255,255,255,0.45); flex-shrink:0; width:17px; height:17px; }
+    .search-toggle-btn {
+      display:none; width:38px; height:38px; flex-shrink:0;
+      align-items:center; justify-content:center;
+      background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1);
+      border-radius:10px; cursor:pointer; color:rgba(255,255,255,0.75);
+    }
+    .search-toggle-btn svg { width:17px; height:17px; }
+    .search-close-btn {
+      display:none; width:30px; height:30px; flex-shrink:0;
+      align-items:center; justify-content:center;
+      background:rgba(255,255,255,0.08); border:none; border-radius:8px;
+      cursor:pointer; color:rgba(255,255,255,0.65);
+    }
     .search-input {
-      width:100%; min-width:220px;
+      width:100%;
       background:rgba(255,255,255,0.08);
       border:1.5px solid rgba(255,255,255,0.1);
       color:rgba(255,255,255,0.95);
+      min-width:0;
     }
     .search-input::placeholder { color:rgba(255,255,255,0.4); }
     .search-input:focus {
@@ -229,7 +293,7 @@ interface AppNotification {
       width:38px; height:38px; display:flex; align-items:center; justify-content:center;
       background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1);
       border-radius:10px; cursor:pointer; color:rgba(255,255,255,0.55);
-      transition:all .2s; position:relative; text-decoration:none;
+      transition:all .2s; position:relative; text-decoration:none; flex-shrink:0;
     }
     .icon-btn:hover { background:rgba(255,255,255,0.12); color:rgba(255,255,255,0.95); border-color:rgba(255,255,255,0.14); }
     .icon-btn svg { width:17px; height:17px; }
@@ -249,17 +313,16 @@ interface AppNotification {
       width:28px; height:28px; border-radius:8px;
       background:linear-gradient(135deg,#60a5fa,#a78bfa);
       display:flex; align-items:center; justify-content:center;
-      font-size:.7rem; font-weight:700; color:white;
+      font-size:.7rem; font-weight:700; color:white; flex-shrink:0;
     }
     .user-avatar.lg { width:38px; height:38px; border-radius:10px; font-size:.875rem; flex-shrink:0; }
-    .user-name-top { font-size:.8125rem; font-weight:600; color:rgba(255,255,255,0.92); }
-    .user-btn > svg { color:rgba(255,255,255,0.45); }
+    .user-name-top { font-size:.8125rem; font-weight:600; color:rgba(255,255,255,0.92); white-space:nowrap; }
+    .user-btn > svg { color:rgba(255,255,255,0.45); flex-shrink:0; }
     .user-btn:hover > svg { color:rgba(255,255,255,0.75); }
 
     .dropdown {
       position:absolute; top:calc(100% + .5rem); right:0;
-      background:#ffffff;
-      border:1.5px solid #e2e8f0; border-radius:14px;
+      background:#ffffff; border:1.5px solid #e2e8f0; border-radius:14px;
       box-shadow:0 12px 40px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.06);
       z-index:100; min-width:280px;
       animation:fadeUp .2s ease-out;
@@ -294,7 +357,7 @@ interface AppNotification {
 
     .dropdown-user-info { display:flex; align-items:center; gap:.75rem; padding:1rem; }
     .dui-name { font-size:.875rem; font-weight:600; color:#0f172a; margin:0 0 .15rem; }
-    .dui-email { font-size:.75rem; color:#94a3b8; margin:0; }
+    .dui-email { font-size:.75rem; color:#94a3b8; margin:0; word-break:break-all; }
     .dropdown-divider { height:1px; background:#f1f5f9; margin:.25rem 0; }
     .dropdown-item {
       display:flex; align-items:center; gap:.75rem;
@@ -345,15 +408,57 @@ interface AppNotification {
     .ap-suggestion:hover { background:#eff6ff; border-color:#bfdbfe; color:#3b82f6; }
 
     .ap-input-row { display:flex; gap:.5rem; padding:.875rem 1rem; border-top:1px solid #f1f5f9; }
-    .ap-input { flex:1; padding:.55rem .875rem; background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:10px; font-size:.8125rem; font-family:inherit; color:#0f172a; outline:none; transition:border-color .15s; }
+    .ap-input { flex:1; padding:.55rem .875rem; background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:10px; font-size:.8125rem; font-family:inherit; color:#0f172a; outline:none; transition:border-color .15s; min-width:0; }
     .ap-input:focus { border-color:#3b82f6; background:#fff; }
     .ap-send { width:34px; height:34px; border-radius:9px; background:linear-gradient(135deg,#3b82f6,#6366f1); border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; color:white; transition:all .15s; flex-shrink:0; }
     .ap-send:hover { opacity:.9; }
     .ap-send:disabled { opacity:.4; cursor:not-allowed; }
+
+    /* ── Mobile responsive ── */
+    @media (max-width: 768px) {
+      .topbar {
+        left: 0;
+        padding: 0 1rem;
+        gap: .5rem;
+        z-index: 55;
+      }
+      .hamburger-btn { display:flex; }
+      .hey-label { display:none; }
+      .user-name-top { display:none; }
+      .user-btn { padding:.4rem; }
+      .topbar-left { max-width:none; flex:1; min-width:0; }
+      .search-wrap { display:none; }
+      .search-wrap.search-expanded {
+        display:flex;
+        position:absolute;
+        left:3.25rem;
+        right:1rem;
+        top:50%;
+        transform:translateY(-50%);
+        z-index:60;
+      }
+      .search-toggle-btn { display:flex; }
+      .search-close-btn { display:flex; }
+      .notif-dropdown { min-width:280px; right:-1rem; }
+      .user-dropdown { right:-1rem; }
+      .assistant-panel { right:-1rem; width:calc(100vw - 2rem); }
+    }
+
+    @media (max-width: 480px) {
+      .topbar { padding: 0 .75rem; gap: .375rem; }
+      .search-input { font-size:.82rem; }
+      .icon-btn { width:34px; height:34px; }
+      .hamburger-btn { width:34px; height:34px; }
+      .search-toggle-btn { width:34px; height:34px; }
+      /* Hide "About" icon button on very small screens */
+      .icon-btn[routerLink="/about"] { display:none; }
+      .notif-dropdown { min-width:calc(100vw - 2rem); right:auto; left:-4rem; }
+    }
   `]
 })
 export class TopbarComponent {
   searchQuery = signal('');
+  searchExpanded = signal(false);
   showSearch = signal(false);
   showNotifs = signal(false);
   showUserMenu = signal(false);
@@ -365,7 +470,6 @@ export class TopbarComponent {
   ];
 
   searchResults = computed(() => this.navbarSearch.search(this.searchQuery()));
-
   unreadNotifCount = computed(() => this.notifications.filter(n => !n.read).length);
 
   suggestions = [
@@ -398,21 +502,56 @@ export class TopbarComponent {
   constructor(
     public auth: AuthService,
     private router: Router,
-    private navbarSearch: NavbarSearchService
+    private navbarSearch: NavbarSearchService,
+    public layout: LayoutService
   ) {}
 
   @HostListener('document:click')
-  onDocumentClick() {
-    this.closeAllPanels();
-  }
+  onDocumentClick() { this.closeAllPanels(); }
 
   @HostListener('document:keydown.escape')
-  onEscape() {
-    this.closeAllPanels();
+  onEscape() { this.closeAllPanels(); }
+
+  @HostListener('window:resize', ['$event'])
+  onResize(event: Event) {
+    const w = (event.target as Window).innerWidth;
+    this.layout.onResize(w);
+    if (w > 768) {
+      this.searchExpanded.set(false);
+    }
   }
 
   onTopbarClick(event: MouseEvent) {
     event.stopPropagation();
+    if (this.layout.isMobile() && this.layout.sidebarOpen()) {
+      const target = event.target as HTMLElement;
+      if (!target.closest('.hamburger-btn')) {
+        this.layout.close();
+      }
+    }
+  }
+
+  toggleSidebar(event: MouseEvent) {
+    event.stopPropagation();
+    this.layout.toggle();
+  }
+
+  openMobileSearch(event: MouseEvent) {
+    event.stopPropagation();
+    this.searchExpanded.set(true);
+    this.closeAllPanels();
+  }
+
+  closeMobileSearch(event?: MouseEvent) {
+    event?.stopPropagation();
+    this.searchExpanded.set(false);
+    this.showSearch.set(false);
+    this.searchQuery.set('');
+  }
+
+  navigateAndClose() {
+    this.closeAllPanels();
+    this.layout.close();
   }
 
   onSearchChange(value: string) {
@@ -429,7 +568,9 @@ export class TopbarComponent {
   }
 
   goToSearchResult(result: NavbarSearchResult) {
+    this.closeMobileSearch();
     this.closeAllPanels();
+    this.layout.close();
     this.searchQuery.set('');
     this.router.navigateByUrl(result.route);
   }
@@ -462,13 +603,12 @@ export class TopbarComponent {
     this.showAssistant.set(false);
   }
 
-  markAllNotifsRead() {
-    this.notifications.forEach(n => n.read = true);
-  }
+  markAllNotifsRead() { this.notifications.forEach(n => n.read = true); }
 
   openNotification(n: AppNotification) {
     n.read = true;
     this.closeAllPanels();
+    this.layout.close();
     this.router.navigateByUrl(n.route);
   }
 

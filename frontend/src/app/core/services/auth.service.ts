@@ -1,7 +1,9 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { Observable, of, tap, catchError, map, throwError, filter, take, finalize } from 'rxjs';
 import { toObservable } from '@angular/core/rxjs-interop';
 import { ApiService } from './api.service';
+import { EmailService } from '../../features/email/email.service';
 
 export interface User {
   id: string;
@@ -20,6 +22,7 @@ const TOKEN_KEY = 'scribecount_token';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
+  private readonly emailService = inject(EmailService);
   private _user = signal<User | null>(null);
   private _initialized = signal(false);
 
@@ -55,10 +58,7 @@ export class AuthService {
     }
     return this.api.get<User>('/auth/me').pipe(
       tap(user => this._user.set(user)),
-      catchError(() => {
-        this._user.set(null);
-        return of(null);
-      })
+      catchError(err => this.handleSessionError(err))
     );
   }
 
@@ -69,10 +69,7 @@ export class AuthService {
     }
     this.api.get<User>('/auth/me').pipe(
       tap(user => this._user.set(user)),
-      catchError(() => {
-        this._user.set(null);
-        return of(null);
-      }),
+      catchError(err => this.handleSessionError(err)),
       finalize(() => this._initialized.set(true))
     ).subscribe();
   }
@@ -104,6 +101,7 @@ export class AuthService {
 
   logout(): void {
     this.clearSession();
+    this.emailService.clearInbox();
   }
 
   updateCachedUser(partial: Partial<User>): void {
@@ -116,6 +114,7 @@ export class AuthService {
   }
 
   private persistAuth(res: AuthResponse): void {
+    this.emailService.clearInbox();
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem(TOKEN_KEY, res.token);
     }
@@ -126,5 +125,13 @@ export class AuthService {
     if (typeof localStorage !== 'undefined') {
       localStorage.removeItem(TOKEN_KEY);
     }
+  }
+
+  /** Only clear stored credentials when the token is actually rejected (401). */
+  private handleSessionError(err: unknown): Observable<null> {
+    if (err instanceof HttpErrorResponse && err.status === 401) {
+      this.clearSession();
+    }
+    return of(null);
   }
 }

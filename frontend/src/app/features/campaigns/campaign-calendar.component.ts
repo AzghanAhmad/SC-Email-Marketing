@@ -1,11 +1,7 @@
 import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-
-export interface CalendarEvent {
-  id: string; name: string; type: string; date: string;
-  status: 'planned' | 'draft' | 'scheduled' | 'sent';
-}
+import { CalendarEvent } from '../../core/models/campaign.models';
 
 export interface CampaignTypeOption {
   id: string; label: string; purpose: string; audience: string; icon: string; color: string;
@@ -49,7 +45,7 @@ export interface CampaignTypeOption {
           <h2 class="step-title">Campaign Calendar</h2>
           <p class="step-sub">Map your campaigns to your publishing schedule — never scramble for what to send or when</p>
         </div>
-        <button class="btn-primary" (click)="onAddEvent.emit()">
+        <button class="btn-primary" (click)="openAddModal()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           Add Campaign
         </button>
@@ -119,7 +115,7 @@ export interface CampaignTypeOption {
         </div>
         <div class="lt-row" *ngFor="let ct of campaignTypes">
           <div class="lt-type">
-            <div class="lt-icon" [style.background]="ct.color + '18'" [style.color]="ct.color" [innerHTML]="ct.icon"></div>
+            <div class="nav-icon lt-icon" [innerHTML]="ct.icon"></div>
             <span class="lt-type-name">{{ ct.label }}</span>
           </div>
           <span class="lt-purpose">{{ ct.purpose }}</span>
@@ -140,7 +136,45 @@ export interface CampaignTypeOption {
             <span class="ce-type-badge">{{ ev.type }}</span>
           </div>
           <span class="badge" [ngClass]="'badge-' + ev.status">{{ ev.status }}</span>
-          <button class="row-btn edit-btn btn-sm" (click)="onGoToCreate.emit()">Edit</button>
+          <div class="ce-actions">
+            <button class="row-btn edit-btn btn-sm" (click)="onEditEvent.emit(ev)">Create</button>
+            <button class="row-btn delete-btn btn-sm" (click)="onDeleteEvent.emit(ev.id)">Delete</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add event modal -->
+    <div class="modal-backdrop" *ngIf="showAddModal" (click)="showAddModal = false">
+      <div class="modal-card" (click)="$event.stopPropagation()">
+        <h3 class="modal-title">Add Planned Campaign</h3>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">Campaign Name</label>
+            <input type="text" class="form-input" [(ngModel)]="newEvent.name" placeholder="e.g. Book Launch — The Ember Crown" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Campaign Type</label>
+            <select class="form-input" [(ngModel)]="newEvent.type">
+              <option *ngFor="let ct of campaignTypes" [value]="ct.label">{{ ct.label }}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Planned Date</label>
+            <input type="date" class="form-input" [(ngModel)]="newEvent.date" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Status</label>
+            <select class="form-input" [(ngModel)]="newEvent.status">
+              <option value="planned">Planned</option>
+              <option value="draft">Draft</option>
+              <option value="scheduled">Scheduled</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" (click)="showAddModal = false">Cancel</button>
+          <button class="btn-primary" (click)="submitAddEvent()" [disabled]="!newEvent.name.trim()">Add to Calendar</button>
         </div>
       </div>
     </div>
@@ -193,7 +227,8 @@ export interface CampaignTypeOption {
     .lt-row:last-child { border-bottom:none; }
     .lt-header { font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#94a3b8; padding-bottom:.625rem; }
     .lt-type { display:flex; align-items:center; gap:.625rem; }
-    .lt-icon { width:28px; height:28px; border-radius:7px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .lt-icon { flex-shrink:0; color:#64748b; }
+    .nav-icon svg { width:20px; height:20px; display:block; }
     .lt-type-name { font-size:.875rem; font-weight:600; color:#0f172a; }
     .lt-purpose { font-size:.8125rem; color:#64748b; }
     .lt-audience { font-size:.75rem; color:#94a3b8; }
@@ -203,9 +238,17 @@ export interface CampaignTypeOption {
     .ce-info { flex:1; display:flex; align-items:center; gap:.625rem; flex-wrap:wrap; }
     .ce-name { font-size:.875rem; font-weight:600; color:#0f172a; }
     .ce-type-badge { font-size:.7rem; font-weight:700; padding:.15rem .5rem; background:rgba(59,130,246,0.08); color:#3b82f6; border-radius:6px; }
+    .ce-actions { display:flex; gap:.375rem; }
     .row-btn { display:inline-flex; align-items:center; gap:.3rem; padding:.35rem .65rem; border:1.5px solid #e2e8f0; border-radius:8px; background:#fff; font-size:.75rem; font-weight:600; font-family:inherit; cursor:pointer; transition:all .15s; }
     .edit-btn { color:#6366f1; border-color:rgba(99,102,241,0.2); background:rgba(99,102,241,0.04); }
     .edit-btn:hover { background:rgba(99,102,241,0.1); border-color:#6366f1; }
+    .delete-btn { color:#dc2626; border-color:rgba(220,38,38,0.2); background:rgba(220,38,38,0.04); }
+    .delete-btn:hover { background:rgba(220,38,38,0.1); border-color:#dc2626; }
+    .modal-backdrop { position:fixed; inset:0; background:rgba(15,23,42,0.45); display:flex; align-items:center; justify-content:center; z-index:1000; padding:1rem; }
+    .modal-card { background:#fff; border-radius:16px; width:100%; max-width:440px; box-shadow:0 20px 50px rgba(0,0,0,0.15); overflow:hidden; }
+    .modal-title { font-size:1rem; font-weight:700; color:#0f172a; margin:0; padding:1.25rem 1.5rem; border-bottom:1px solid #f1f5f9; }
+    .modal-body { padding:1.25rem 1.5rem; display:flex; flex-direction:column; gap:1rem; }
+    .modal-footer { padding:1rem 1.5rem; border-top:1px solid #f1f5f9; display:flex; justify-content:flex-end; gap:.75rem; background:#f8fafc; }
     @media(max-width:700px) { .cvf-callout { grid-template-columns:1fr; } .cvf-vs { display:none; } .lt-phase { grid-template-columns:1fr; } .lt-row { grid-template-columns:1fr 1fr; } .form-row-2 { grid-template-columns:1fr; } }
   `]
 })
@@ -216,10 +259,25 @@ export class CampaignCalendarComponent {
   @Input() baselineCampaigns: any[] = [];
   @Output() onCreateFromBaseline = new EventEmitter<any>();
   @Output() onStartCreateWithType = new EventEmitter<string>();
-  @Output() onAddEvent = new EventEmitter<void>();
+  @Output() onAddEvent = new EventEmitter<{ name: string; type: string; date: string; status: string }>();
+  @Output() onDeleteEvent = new EventEmitter<string>();
+  @Output() onEditEvent = new EventEmitter<CalendarEvent>();
   @Output() onGoToCreate = new EventEmitter<void>();
 
   calRelease = { title: '', date: '' };
+  showAddModal = false;
+  newEvent = { name: '', type: 'Book Launch', date: '', status: 'planned' };
+
+  openAddModal() {
+    this.newEvent = { name: '', type: this.campaignTypes[0]?.label || 'Book Launch', date: '', status: 'planned' };
+    this.showAddModal = true;
+  }
+
+  submitAddEvent() {
+    if (!this.newEvent.name.trim()) return;
+    this.onAddEvent.emit({ ...this.newEvent });
+    this.showAddModal = false;
+  }
 
   getRelativeDate(releaseDate: string, offsetDays: number): string {
     if (!releaseDate) return '';

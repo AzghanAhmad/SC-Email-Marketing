@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using ScribeCount.Email.Api.Data;
 using ScribeCount.Email.Api.DTOs;
@@ -7,113 +8,20 @@ using ScribeCount.Email.Api.Entities;
 
 namespace ScribeCount.Email.Api.Services;
 
-public class CampaignService(AppDbContext db)
+public class CampaignService(AppDbContext db, AudienceService audience, MailboxService mailbox, CampaignTrackingService tracking, ILogger<CampaignService> logger)
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
-    public async Task EnsureSeedDataAsync(Guid userId)
+    private static readonly Dictionary<string, (string Name, string Description, double Share)> SegmentDefinitions = new()
     {
-        if (await db.Campaigns.AnyAsync(c => c.UserId == userId)) return;
-
-        var campaigns = new[]
-        {
-            ("March Newsletter", "What I've been writing this month...", "sent", 54.2m, 12.8m, 4821, new DateTime(2026, 3, 15)),
-            ("Book Launch: The Ember Crown", "It's finally here!", "sent", 71.4m, 28.3m, 3200, new DateTime(2026, 3, 1)),
-            ("New Release Notification — The Ember Crown", "The next chapter in the Ember Chronicles is here", "sent", 68.9m, 34.1m, 621, new DateTime(2026, 3, 4)),
-            ("April Newsletter", "Spring reading picks + a surprise", "draft", 0m, 0m, 0, new DateTime(2026, 4, 10)),
-            ("VIP Early Access", "You get to read it first...", "scheduled", 0m, 0m, 0, new DateTime(2026, 4, 8)),
-            ("February Roundup", "February was wild. Here's why.", "sent", 48.9m, 9.1m, 4650, new DateTime(2026, 2, 28)),
-            ("Holiday Special", "A gift from me to you", "sent", 62.1m, 18.5m, 5100, new DateTime(2025, 12, 20)),
-            ("Parnassus Books Signing — Nashville", "Nashville readers: come find me at Parnassus this Saturday", "sent", 71.3m, 24.6m, 312, new DateTime(2026, 4, 5)),
-            ("Live Q&A — The Ember Crown", "Live Q&A this Thursday — bring your questions about The Ember Crown", "scheduled", 0m, 0m, 0, new DateTime(2026, 5, 22)),
-            ("Reader Community — Founding Invitation", "You're invited: I'm opening my reader community to my most loyal subscribers first", "draft", 0m, 0m, 0, new DateTime(2026, 6, 1)),
-            ("Backlist Spotlight — The Ashford Inheritance", "The book my readers call my best work", "scheduled", 0m, 0m, 0, new DateTime(2026, 6, 20)),
-        };
-
-        foreach (var (name, subject, status, openRate, clickRate, sent, date) in campaigns)
-        {
-            db.Campaigns.Add(new Campaign
-            {
-                Id = Guid.NewGuid(),
-                UserId = userId,
-                Name = name,
-                Subject = subject,
-                Status = status,
-                OpenRate = openRate,
-                ClickRate = clickRate,
-                SentCount = sent,
-                ScheduledAt = status == "scheduled" ? date : null,
-                SentAt = status == "sent" ? date : null,
-                FromName = "Jane Austen",
-                SendToSegment = "all",
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
-            });
-        }
-
-        var calendarEvents = new[]
-        {
-            ("ARC Invitation — The Ember Crown", "ARC Invitation", "sent", new DateTime(2026, 4, 15)),
-            ("ARC Follow-Up — The Ember Crown", "ARC Follow-Up", "sent", new DateTime(2026, 4, 28)),
-            ("Book Launch — The Ember Crown", "Book Launch", "sent", new DateTime(2026, 5, 1)),
-            ("Post-Launch Backlist", "Backlist Spotlight", "scheduled", new DateTime(2026, 5, 8)),
-            ("Flash Sale — Summer Promo", "Flash Sale", "planned", new DateTime(2026, 6, 15)),
-            ("Parnassus Books Signing — Nashville", "Event Announcement", "sent", new DateTime(2026, 4, 5)),
-            ("Live Q&A — The Ember Crown", "Event Announcement", "scheduled", new DateTime(2026, 5, 22)),
-            ("Event Reminder — Live Q&A", "Event Announcement", "planned", new DateTime(2026, 5, 21)),
-            ("Reader Community — Founding Invitation", "Reader Community", "draft", new DateTime(2026, 6, 1)),
-            ("Backlist Spotlight — The Ashford Inheritance", "Backlist Spotlight", "planned", new DateTime(2026, 6, 20)),
-        };
-
-        foreach (var (name, type, status, date) in calendarEvents)
-        {
-            db.CampaignCalendarEvents.Add(new CampaignCalendarEvent
-            {
-                Id = Guid.NewGuid(),
-                UserId = userId,
-                Name = name,
-                Type = type,
-                Status = status,
-                EventDate = date,
-            });
-        }
-
-        db.NewsletterSchedules.Add(new NewsletterSchedule
-        {
-            Id = Guid.NewGuid(),
-            UserId = userId,
-            Name = "Monthly Reader Letter",
-            Frequency = "monthly",
-            DayOfWeek = "Tuesday",
-            DayOfMonth = "1st",
-            SendTime = "09:00",
-            TimezoneOptimized = true,
-            Status = "draft",
-        });
-
-        db.AbTests.Add(new AbTest
-        {
-            Id = Guid.NewGuid(),
-            UserId = userId,
-            Name = "March Newsletter",
-            SubjectA = "The research that changed my book",
-            SubjectB = "March Newsletter — writing update + picks",
-            TestSize = 20,
-            WinnerMetric = "opens",
-            WaitHours = 8,
-            Status = "complete",
-            OpenRateA = 58.4m,
-            OpenRateB = 49.1m,
-            Winner = "A",
-        });
-
-        await db.SaveChangesAsync();
-    }
+        ["all"] = ("All Subscribers", "Your entire active subscriber list", 1.0),
+        ["vip"] = ("VIP Readers", "Highly engaged subscribers", 0.12),
+        ["launch"] = ("Launch List", "Subscribers opted in for book launches", 0.18),
+        ["newsletter"] = ("Newsletter Only", "General newsletter subscribers", 0.45),
+    };
 
     public async Task<CampaignsBundleDto> GetBundleAsync(Guid userId)
     {
-        await EnsureSeedDataAsync(userId);
-
         var campaigns = await db.Campaigns.Where(c => c.UserId == userId)
             .OrderByDescending(c => c.UpdatedAt).ToListAsync();
         var events = await db.CampaignCalendarEvents.Where(e => e.UserId == userId)
@@ -130,10 +38,46 @@ public class CampaignService(AppDbContext db)
         );
     }
 
+    public async Task<List<AudienceSegmentDto>> GetAudienceSegmentsAsync(Guid userId)
+    {
+        var activeCount = await db.Subscribers.CountAsync(s => s.UserId == userId && s.Status == "active");
+        if (activeCount == 0)
+        {
+            return SegmentDefinitions.Select(kv => new AudienceSegmentDto(
+                kv.Key, kv.Value.Name, 0, kv.Value.Description)).ToList();
+        }
+
+        return SegmentDefinitions.Select(kv =>
+        {
+            var count = kv.Key == "all"
+                ? activeCount
+                : Math.Max(1, (int)Math.Round(activeCount * kv.Value.Share));
+            return new AudienceSegmentDto(kv.Key, kv.Value.Name, count, kv.Value.Description);
+        }).ToList();
+    }
+
+    public async Task<ReachEstimateDto> EstimateReachAsync(Guid userId, ReachEstimateRequest request)
+    {
+        var segmentKey = string.IsNullOrWhiteSpace(request.Segment) ? "all" : request.Segment;
+        var rules = request.EnabledSuppressionRules ?? [];
+
+        var (before, after) = await audience.EstimateAudienceReachAsync(
+            userId,
+            request.ListIds,
+            request.SegmentIds,
+            request.ContactIds,
+            request.ExcludeUnengaged,
+            rules,
+            segmentKey,
+            request.ArcTag);
+
+        return new ReachEstimateDto(before, Math.Max(0, before - after), after);
+    }
+
     public async Task<CampaignDto?> GetCampaignAsync(Guid userId, Guid id)
     {
         var c = await db.Campaigns.FirstOrDefaultAsync(x => x.Id == id && x.UserId == userId);
-        return c is null ? null : MapCampaign(c);
+        return c is null ? null : await MapCampaignWithStatsAsync(c);
     }
 
     public async Task<CampaignDto> CreateCampaignAsync(Guid userId, CreateCampaignRequest request)
@@ -147,7 +91,7 @@ public class CampaignService(AppDbContext db)
             PreviewText = request.PreviewText ?? "",
             Content = request.Content ?? "",
             CampaignType = request.CampaignType ?? "",
-            FromName = request.FromName ?? "Jane Austen",
+            FromName = request.FromName ?? "Author",
             SendToSegment = request.SendToSegment ?? "all",
             Status = request.Status ?? "draft",
             ScheduledAt = request.ScheduledAt,
@@ -193,27 +137,359 @@ public class CampaignService(AppDbContext db)
         var c = await db.Campaigns.FirstOrDefaultAsync(x => x.Id == id && x.UserId == userId);
         if (c is null) return null;
 
-        if (scheduleOnly || c.ScheduledAt.HasValue)
+        if (c.UserId != userId)
+            throw new UnauthorizedAccessException("This campaign belongs to another account.");
+
+        if (scheduleOnly)
         {
+            if (!c.ScheduledAt.HasValue)
+                throw new InvalidOperationException("Pick a date and time to schedule this campaign.");
+
             c.Status = "scheduled";
+            c.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+            return MapCampaign(c);
         }
-        else
-        {
-            c.Status = "sent";
-            c.SentAt = DateTime.UtcNow;
-            c.SentCount = c.SentCount > 0 ? c.SentCount : 8421;
-            if (c.OpenRate == 0) c.OpenRate = 52.0m;
-            if (c.ClickRate == 0) c.ClickRate = 11.5m;
-        }
+
+        if (c.Status == "sent")
+            throw new InvalidOperationException("This campaign has already been sent.");
+
+        c.ScheduledAt = null;
+        var extras = ParseExtras(c.ExtrasJson);
+        EnsureExplicitAudience(extras, c.SendToSegment);
+        var suppression = ParseSuppressionRules(extras);
+        var sentAt = DateTime.UtcNow;
+
+        var recipients = await audience.ResolveCampaignRecipientsAsync(userId, c, suppression);
+        recipients = recipients.Where(r => r.UserId == userId).ToList();
+        if (recipients.Count == 0)
+            throw new InvalidOperationException("No active recipients match your audience and suppression rules.");
+
+        var delivered = await DeliverCampaignEmailsAsync(userId, c, recipients);
+
+        c.Status = "sent";
+        c.SentAt = sentAt;
+        c.SentCount = delivered;
+        await audience.RecordCampaignSendActivitiesAsync(userId, c, recipients);
+        await RefreshCampaignStatsAsync(c);
         c.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
-        return MapCampaign(c);
+        return await MapCampaignWithStatsAsync(c);
+    }
+
+    public async Task ProcessDueScheduledCampaignsAsync(CancellationToken cancellationToken = default)
+    {
+        var now = DateTime.UtcNow;
+        var due = await db.Campaigns
+            .Where(c => c.Status == "scheduled"
+                && c.ScheduledAt != null
+                && c.ScheduledAt <= now
+                && c.SentAt == null)
+            .Select(c => new { c.Id, c.UserId })
+            .ToListAsync(cancellationToken);
+
+        foreach (var item in due)
+        {
+            try
+            {
+                await SendCampaignAsync(item.UserId, item.Id, scheduleOnly: false);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to send scheduled campaign {CampaignId}", item.Id);
+            }
+        }
+    }
+
+    private async Task<int> DeliverCampaignEmailsAsync(Guid userId, Campaign campaign, IReadOnlyList<Subscriber> recipients)
+    {
+        if (campaign.UserId != userId)
+            throw new UnauthorizedAccessException("Cannot send a campaign that belongs to another account.");
+
+        var conn = await db.MailboxConnections.FirstOrDefaultAsync(c => c.UserId == userId);
+        if (conn is null || !conn.IsConnected)
+        {
+            throw new InvalidOperationException(
+                "Connect your mailbox under Email → Settings before sending campaigns.");
+        }
+
+        if (conn.UserId != userId)
+            throw new InvalidOperationException("Mailbox connection does not belong to your account.");
+
+        var sent = 0;
+
+        foreach (var recipient in recipients)
+        {
+            if (recipient.UserId != userId)
+            {
+                logger.LogWarning(
+                    "Skipped recipient {Email} — belongs to account {RecipientUserId}, not {UserId}",
+                    recipient.Email, recipient.UserId, userId);
+                continue;
+            }
+
+            try
+            {
+                var token = tracking.CreateToken(campaign.Id, recipient.Id, userId);
+                var body = BuildRecipientCampaignHtml(campaign, recipient, token);
+                var subject = CampaignMergeTagService.Apply(campaign.Subject, campaign, recipient);
+                await mailbox.SendEmailAsync(userId, new SendEmailRequest(
+                    recipient.Email,
+                    subject,
+                    body));
+                sent++;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to send campaign {CampaignId} to {Email}", campaign.Id, recipient.Email);
+            }
+        }
+
+        if (sent == 0)
+        {
+            throw new InvalidOperationException(
+                "Campaign could not be delivered. Check your mailbox connection and try again.");
+        }
+
+        return sent;
+    }
+
+    public async Task RecordCampaignOpenAsync(string token)
+    {
+        if (!tracking.TryParseToken(token, out var campaignId, out var subscriberId, out var userId)) return;
+
+        var alreadyOpened = await db.SubscriberActivities.AnyAsync(a =>
+            a.CampaignId == campaignId
+            && a.SubscriberId == subscriberId
+            && a.ActivityType == "campaign_opened");
+        if (alreadyOpened) return;
+
+        var campaign = await db.Campaigns.FirstOrDefaultAsync(c => c.Id == campaignId && c.UserId == userId);
+        if (campaign is null) return;
+
+        var fromEmail = ParseExtras(campaign.ExtrasJson).GetValueOrDefault("fromEmail") ?? campaign.FromName;
+        db.SubscriberActivities.Add(new SubscriberActivity
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            SubscriberId = subscriberId,
+            ActivityType = "campaign_opened",
+            Title = "Email campaign opened",
+            Description = $"({campaign.Name}) {campaign.Subject}",
+            CampaignId = campaign.Id,
+            CampaignSubject = campaign.Subject,
+            CampaignFrom = fromEmail,
+            Status = "opened",
+            OccurredAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+        await RefreshCampaignStatsAsync(campaign);
+        await db.SaveChangesAsync();
+    }
+
+    public async Task<UnsubscribePreviewDto?> GetUnsubscribePreviewAsync(string token)
+    {
+        if (!tracking.TryParseToken(token, out var campaignId, out var subscriberId, out var userId)) return null;
+
+        var campaign = await db.Campaigns.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == campaignId && c.UserId == userId);
+        var subscriber = await db.Subscribers.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == subscriberId && s.UserId == userId);
+        if (campaign is null || subscriber is null) return null;
+
+        return new UnsubscribePreviewDto(
+            subscriber.Email,
+            campaign.Name,
+            campaign.FromName,
+            subscriber.Status == "unsubscribed");
+    }
+
+    public async Task<UnsubscribeResultDto?> ConfirmUnsubscribeAsync(string token)
+    {
+        if (!tracking.TryParseToken(token, out var campaignId, out var subscriberId, out var userId)) return null;
+
+        var campaign = await db.Campaigns.FirstOrDefaultAsync(c => c.Id == campaignId && c.UserId == userId);
+        var subscriber = await db.Subscribers.FirstOrDefaultAsync(s => s.Id == subscriberId && s.UserId == userId);
+        if (campaign is null || subscriber is null) return null;
+
+        if (subscriber.Status == "unsubscribed")
+        {
+            return new UnsubscribeResultDto(
+                "You are already unsubscribed from this author's emails.",
+                subscriber.Email,
+                true);
+        }
+
+        subscriber.Status = "unsubscribed";
+        db.SubscriberActivities.Add(new SubscriberActivity
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            SubscriberId = subscriber.Id,
+            ActivityType = "unsubscribed",
+            Title = "Unsubscribed from email",
+            Description = $"Unsubscribed via campaign \"{campaign.Name}\"",
+            CampaignId = campaign.Id,
+            CampaignSubject = campaign.Subject,
+            CampaignFrom = campaign.FromName,
+            Status = "completed",
+            OccurredAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        return new UnsubscribeResultDto(
+            "You have been unsubscribed and will no longer receive emails from this list.",
+            subscriber.Email,
+            false);
+    }
+
+    public async Task<CampaignViewDto?> GetCampaignViewAsync(string token)
+    {
+        if (!tracking.TryParseToken(token, out var campaignId, out var subscriberId, out var userId)) return null;
+
+        var campaign = await db.Campaigns.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == campaignId && c.UserId == userId);
+        var subscriber = await db.Subscribers.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == subscriberId && s.UserId == userId);
+        if (campaign is null || subscriber is null) return null;
+
+        await RecordCampaignOpenAsync(token);
+
+        var html = BuildRecipientCampaignHtml(campaign, subscriber, token, includeTrackingPixel: false);
+        var subject = CampaignMergeTagService.Apply(campaign.Subject, campaign, subscriber);
+        return new CampaignViewDto(
+            subject,
+            campaign.FromName,
+            campaign.Name,
+            html,
+            campaign.PreviewText);
+    }
+
+    private async Task RefreshCampaignStatsAsync(Campaign campaign)
+    {
+        if (campaign.SentCount <= 0) return;
+
+        var activities = await db.SubscriberActivities
+            .Where(a => a.CampaignId == campaign.Id)
+            .ToListAsync();
+
+        var uniqueOpens = activities
+            .Where(a => a.ActivityType == "campaign_opened")
+            .Select(a => a.SubscriberId)
+            .Distinct()
+            .Count();
+        var uniqueClicks = activities
+            .Where(a => a.ActivityType == "campaign_clicked")
+            .Select(a => a.SubscriberId)
+            .Distinct()
+            .Count();
+
+        campaign.OpenRate = Math.Round(uniqueOpens * 100m / campaign.SentCount, 1);
+        campaign.ClickRate = Math.Round(uniqueClicks * 100m / campaign.SentCount, 1);
+        campaign.UpdatedAt = DateTime.UtcNow;
+    }
+
+    private async Task<CampaignDto> MapCampaignWithStatsAsync(Campaign c)
+    {
+        var activities = c.SentCount > 0
+            ? await db.SubscriberActivities.Where(a => a.CampaignId == c.Id).ToListAsync()
+            : [];
+
+        var uniqueOpens = activities
+            .Where(a => a.ActivityType == "campaign_opened")
+            .Select(a => a.SubscriberId)
+            .Distinct()
+            .Count();
+        var uniqueClicks = activities
+            .Where(a => a.ActivityType == "campaign_clicked")
+            .Select(a => a.SubscriberId)
+            .Distinct()
+            .Count();
+        var conversionRate = uniqueOpens > 0
+            ? Math.Round(uniqueClicks * 100m / uniqueOpens, 1)
+            : 0m;
+
+        return new CampaignDto(
+            c.Id.ToString(),
+            c.Name,
+            c.Subject,
+            c.PreviewText,
+            c.Content,
+            c.CampaignType,
+            c.Status,
+            c.FromName,
+            c.SendToSegment,
+            c.OpenRate,
+            c.ClickRate,
+            c.SentCount,
+            FormatDate(c.SentAt ?? c.ScheduledAt ?? c.CreatedAt),
+            c.ScheduledAt,
+            c.SentAt,
+            ParseExtras(c.ExtrasJson),
+            uniqueOpens,
+            uniqueClicks,
+            conversionRate);
+    }
+
+    private string BuildRecipientCampaignHtml(
+        Campaign campaign,
+        Subscriber recipient,
+        string token,
+        bool includeTrackingPixel = true)
+    {
+        var unsubUrl = tracking.UnsubscribeUrl(token);
+        var viewUrl = tracking.ViewInBrowserUrl(token);
+        var openPixel = includeTrackingPixel
+            ? $"""<img src="{tracking.OpenTrackingUrl(token)}" width="1" height="1" alt="" style="display:block;width:1px;height:1px;border:0;margin:0;padding:0;" />"""
+            : "";
+
+        var content = string.IsNullOrWhiteSpace(campaign.Content) ? "<p></p>" : campaign.Content;
+        content = CampaignMergeTagService.Apply(content, campaign, recipient);
+        content = InjectCampaignLinks(content, unsubUrl, viewUrl);
+
+        return content + openPixel;
+    }
+
+    private static string InjectCampaignLinks(string html, string unsubUrl, string viewUrl)
+    {
+        html = html.Replace("{{unsubscribe_url}}", unsubUrl, StringComparison.OrdinalIgnoreCase)
+            .Replace("{{view_in_browser_url}}", viewUrl, StringComparison.OrdinalIgnoreCase);
+
+        html = Regex.Replace(
+            html,
+            """<a([^>]*?)href\s*=\s*["']#["']([^>]*?)>\s*Unsubscribe\s*</a>""",
+            $"""<a$1href="{unsubUrl}"$2>Unsubscribe</a>""",
+            RegexOptions.IgnoreCase);
+
+        html = Regex.Replace(
+            html,
+            """<a([^>]*?)href\s*=\s*["']#["']([^>]*?)>\s*View in browser\s*</a>""",
+            $"""<a$1href="{viewUrl}"$2>View in browser</a>""",
+            RegexOptions.IgnoreCase);
+
+        return html;
     }
 
     public async Task<CampaignDto?> SendNewCampaignAsync(Guid userId, CreateCampaignRequest request, bool scheduleOnly)
     {
         var created = await CreateCampaignAsync(userId, request);
         return await SendCampaignAsync(userId, Guid.Parse(created.Id), scheduleOnly);
+    }
+
+    public async Task<TestSendResponse?> SendTestEmailAsync(Guid userId, TestSendRequest request)
+    {
+        var user = await db.Users.FindAsync(userId);
+        if (user is null || string.IsNullOrWhiteSpace(user.Email)) return null;
+
+        if (!string.IsNullOrWhiteSpace(request.CampaignId) && Guid.TryParse(request.CampaignId, out var campaignId))
+        {
+            var campaign = await db.Campaigns.FirstOrDefaultAsync(c => c.Id == campaignId && c.UserId == userId);
+            if (campaign is null) return null;
+        }
+
+        return new TestSendResponse(
+            $"Test preview queued for {user.Email}. Subject: \"{request.Subject ?? "Campaign preview"}\"",
+            user.Email);
     }
 
     public async Task<CalendarEventDto> CreateCalendarEventAsync(Guid userId, CreateCalendarEventRequest request)
@@ -231,6 +507,33 @@ public class CampaignService(AppDbContext db)
         db.CampaignCalendarEvents.Add(ev);
         await db.SaveChangesAsync();
         return MapCalendarEvent(ev);
+    }
+
+    public async Task<CalendarEventDto?> UpdateCalendarEventAsync(Guid userId, Guid id, UpdateCalendarEventRequest request)
+    {
+        var ev = await db.CampaignCalendarEvents.FirstOrDefaultAsync(e => e.Id == id && e.UserId == userId);
+        if (ev is null) return null;
+
+        if (!string.IsNullOrWhiteSpace(request.Name)) ev.Name = request.Name;
+        if (!string.IsNullOrWhiteSpace(request.Type)) ev.Type = request.Type;
+        if (!string.IsNullOrWhiteSpace(request.Status)) ev.Status = request.Status;
+        if (!string.IsNullOrWhiteSpace(request.Date))
+        {
+            var parsed = ParseDate(request.Date);
+            if (parsed.HasValue) ev.EventDate = parsed.Value;
+        }
+
+        await db.SaveChangesAsync();
+        return MapCalendarEvent(ev);
+    }
+
+    public async Task<bool> DeleteCalendarEventAsync(Guid userId, Guid id)
+    {
+        var ev = await db.CampaignCalendarEvents.FirstOrDefaultAsync(e => e.Id == id && e.UserId == userId);
+        if (ev is null) return false;
+        db.CampaignCalendarEvents.Remove(ev);
+        await db.SaveChangesAsync();
+        return true;
     }
 
     public async Task<NewsletterScheduleDto> SaveNewsletterAsync(Guid userId, NewsletterScheduleDto dto)
@@ -287,6 +590,47 @@ public class CampaignService(AppDbContext db)
         return true;
     }
 
+    private static List<string> ParseSuppressionRules(Dictionary<string, string> extras)
+    {
+        if (!extras.TryGetValue("suppressionRules", out var json) || string.IsNullOrWhiteSpace(json))
+            return [];
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(json, JsonOptions) ?? [];
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    private static void EnsureExplicitAudience(Dictionary<string, string> extras, string? sendToSegment)
+    {
+        static int CountIds(string? json)
+        {
+            if (string.IsNullOrWhiteSpace(json)) return 0;
+            try
+            {
+                return JsonSerializer.Deserialize<List<string>>(json, JsonOptions)?.Count(id => !string.IsNullOrWhiteSpace(id)) ?? 0;
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        var hasLists = CountIds(extras.GetValueOrDefault("recipientListIds")) > 0;
+        var hasSegments = CountIds(extras.GetValueOrDefault("recipientSegmentIds")) > 0;
+        var hasContacts = CountIds(extras.GetValueOrDefault("recipientContactIds")) > 0;
+        var hasRealSegment = !string.IsNullOrWhiteSpace(sendToSegment) && Guid.TryParse(sendToSegment, out _);
+
+        if (!hasLists && !hasSegments && !hasContacts && !hasRealSegment)
+        {
+            throw new InvalidOperationException(
+                "Select at least one list, segment, or contact in the Audience step before sending.");
+        }
+    }
+
     private static CampaignDto MapCampaign(Campaign c) => new(
         c.Id.ToString(),
         c.Name,
@@ -302,8 +646,23 @@ public class CampaignService(AppDbContext db)
         c.SentCount,
         FormatDate(c.SentAt ?? c.ScheduledAt ?? c.CreatedAt),
         c.ScheduledAt,
-        c.SentAt
+        c.SentAt,
+        ParseExtras(c.ExtrasJson)
     );
+
+    private static Dictionary<string, string> ParseExtras(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json) || json == "{}") return new Dictionary<string, string>();
+        try
+        {
+            return JsonSerializer.Deserialize<Dictionary<string, string>>(json, JsonOptions)
+                ?? new Dictionary<string, string>();
+        }
+        catch
+        {
+            return new Dictionary<string, string>();
+        }
+    }
 
     private static CalendarEventDto MapCalendarEvent(CampaignCalendarEvent e) => new(
         e.Id.ToString(),

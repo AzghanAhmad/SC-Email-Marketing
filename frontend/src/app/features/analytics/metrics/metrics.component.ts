@@ -1,5 +1,6 @@
-import { Component } from '@angular/core';
+import { Component, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { AnalyticsApiService } from '../../../core/services/analytics-api.service';
 
 @Component({
   selector: 'app-metrics',
@@ -12,8 +13,8 @@ import { CommonModule } from '@angular/common';
           <h1 class="page-title">Metrics</h1>
           <p class="page-subtitle">Track your key email marketing performance metrics over time</p>
         </div>
-        <select class="period-select">
-          <option>Last 30 days</option><option>Last 7 days</option><option>Last 90 days</option>
+        <select class="period-select" [value]="periodDays" (change)="onPeriodChange($event)">
+          <option [value]="7">Last 7 days</option><option [value]="30">Last 30 days</option><option [value]="90">Last 90 days</option>
         </select>
       </div>
 
@@ -76,6 +77,9 @@ import { CommonModule } from '@angular/common';
             </tr>
           </thead>
           <tbody>
+            <tr *ngIf="flowSteps.length === 0">
+              <td colspan="7" class="empty-row">No active flows yet.</td>
+            </tr>
             <tr *ngFor="let s of flowSteps">
               <td class="metric-name">{{ s.step }}</td>
               <td>{{ s.entered }}</td>
@@ -113,6 +117,9 @@ import { CommonModule } from '@angular/common';
             </tr>
           </thead>
           <tbody>
+            <tr *ngIf="sendAuditRows.length === 0">
+              <td colspan="5" class="empty-row">No send audit entries yet.</td>
+            </tr>
             <tr *ngFor="let row of sendAuditRows">
               <td>{{ row.subscriber }}</td>
               <td>{{ row.flow }}</td>
@@ -157,46 +164,35 @@ import { CommonModule } from '@angular/common';
     .goal-name { font-size:.82rem; font-weight:600; color:#0f172a; }
     .goal-rate { font-size:1.3rem; font-weight:800; color:#3b82f6; }
     .goal-note { font-size:.72rem; color:#64748b; }
+    .empty-row { text-align:center; color:#94a3b8; padding:1.5rem !important; }
 
     @media(max-width:900px) { .metrics-grid { grid-template-columns:repeat(2,1fr); } }
     @media(max-width:600px) { .metrics-grid { grid-template-columns:1fr; } .goal-grid { grid-template-columns:1fr; } }
   `]
 })
-export class MetricsComponent {
-  metrics = [
-    { label: 'Open Rate', value: '54.2%', change: 3.2, color: '#3b82f6', sparkline: '0,25 20,18 40,22 60,12 80,8 100,5' },
-    { label: 'Click Rate', value: '12.8%', change: 1.4, color: '#8b5cf6', sparkline: '0,22 20,20 40,18 60,15 80,12 100,8' },
-    { label: 'Bounce Rate', value: '2.5%', change: -0.3, color: '#ef4444', sparkline: '0,8 20,10 40,12 60,15 80,18 100,20' },
-    { label: 'Unsubscribe Rate', value: '0.4%', change: -0.1, color: '#f59e0b', sparkline: '0,15 20,12 40,14 60,10 80,8 100,6' },
-    { label: 'Revenue/Email', value: '$0.17', change: 12.4, color: '#10b981', sparkline: '0,28 20,22 40,18 60,14 80,10 100,5' },
-    { label: 'List Growth', value: '+521', change: 6.2, color: '#6366f1', sparkline: '0,25 20,20 40,22 60,15 80,10 100,8' },
-  ];
+export class MetricsComponent implements OnInit {
+  private analyticsApi = inject(AnalyticsApiService);
+  periodDays = 30;
+  metrics: { label: string; value: string; change: number; color: string; sparkline: string }[] = [];
+  detailMetrics: { name: string; current: string; previous: string; changeNum: number; spark: string }[] = [];
+  flowSteps: { step: string; entered: number; completed: number; delivered: number; opens: number; clicks: number; revenue: string }[] = [];
+  goalExitRates: { name: string; rate: number; note: string }[] = [];
+  sendAuditRows: { subscriber: string; flow: string; step: string; reason: string; time: string }[] = [];
 
-  detailMetrics = [
-    { name: 'Total Opens', current: '13,474', previous: '11,842', changeNum: 13.8, spark: '0,18 15,14 30,16 45,10 60,8' },
-    { name: 'Unique Clicks', current: '3,178', previous: '2,940', changeNum: 8.1, spark: '0,16 15,14 30,12 45,10 60,6' },
-    { name: 'Deliverability', current: '97.5%', previous: '96.8%', changeNum: 0.7, spark: '0,10 15,8 30,9 45,6 60,4' },
-    { name: 'Spam Complaints', current: '0.09%', previous: '0.12%', changeNum: -25.0, spark: '0,15 15,12 30,14 45,10 60,8' },
-    { name: 'Revenue (Total)', current: '$4,280', previous: '$3,490', changeNum: 22.6, spark: '0,18 15,15 30,12 45,8 60,4' },
-  ];
+  ngOnInit() { this.loadData(); }
 
-  flowSteps = [
-    { step: 'Welcome Email 1', entered: 1280, completed: 1196, delivered: 1270, opens: 812, clicks: 204, revenue: '$520' },
-    { step: 'Welcome Email 2', entered: 1196, completed: 1083, delivered: 1188, opens: 662, clicks: 161, revenue: '$390' },
-    { step: 'Welcome Email 3', entered: 1083, completed: 947, delivered: 1072, opens: 521, clicks: 118, revenue: '$240' },
-    { step: 'Post-Purchase Follow-up', entered: 402, completed: 377, delivered: 398, opens: 309, clicks: 84, revenue: '$310' },
-  ];
+  onPeriodChange(ev: Event) {
+    this.periodDays = Number((ev.target as HTMLSelectElement).value);
+    this.loadData();
+  }
 
-  goalExitRates = [
-    { name: 'Welcome Flow', rate: 12.4, note: 'Healthy for book-click objective' },
-    { name: 'Abandoned Cart', rate: 7.9, note: 'Within expected recovery range' },
-    { name: 'Re-engagement', rate: 24.3, note: 'Strong re-open performance' },
-  ];
-
-  sendAuditRows = [
-    { subscriber: 'reader1@example.com', flow: 'Welcome', step: 'Email 2', reason: 'Completed Email 1 and wait timer elapsed', time: '2h ago' },
-    { subscriber: 'reader2@example.com', flow: 'Abandoned Cart', step: 'Reminder 1', reason: 'Cart event captured with no purchase in 45 min', time: '4h ago' },
-    { subscriber: 'reader3@example.com', flow: 'Re-engagement', step: 'Ping 1', reason: 'No opens/clicks in 120 days', time: '8h ago' },
-    { subscriber: 'reader4@example.com', flow: 'Post-Purchase', step: 'Thank You', reason: 'Purchase confirmed in direct store', time: '1d ago' },
-  ];
+  private loadData() {
+    this.analyticsApi.getAnalytics(this.periodDays).subscribe(b => {
+      this.metrics = b.metrics.map(m => ({ label: m.label, value: m.value, change: m.change, color: m.color, sparkline: m.sparkline }));
+      this.detailMetrics = b.metricDetails.map(d => ({ name: d.name, current: d.current, previous: d.previous, changeNum: d.changeNum, spark: d.spark }));
+      this.flowSteps = b.flowSteps.map(s => ({ step: s.step, entered: s.entered, completed: s.completed, delivered: s.delivered, opens: s.opens, clicks: s.clicks, revenue: s.revenue }));
+      this.goalExitRates = b.goalExitRates;
+      this.sendAuditRows = b.sendAuditRows;
+    });
+  }
 }

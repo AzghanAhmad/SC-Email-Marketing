@@ -21,10 +21,20 @@ import { AuthService } from '../../core/services/auth.service';
               <span class="logo-sub">EMAIL</span>
             </span>
           </a>
+          <!-- Desktop nav links -->
           <nav class="nav-links">
             <a routerLink="/login" class="nav-active">Log In</a>
             <a routerLink="/signup" class="btn-signup">Sign Up</a>
           </nav>
+          <!-- Hamburger (mobile) -->
+          <button class="nav-hamburger" [class.open]="mobileMenuOpen" (click)="mobileMenuOpen = !mobileMenuOpen" aria-label="Toggle menu">
+            <span></span><span></span><span></span>
+          </button>
+        </div>
+        <!-- Mobile dropdown menu -->
+        <div class="nav-mobile-menu" [class.open]="mobileMenuOpen">
+          <a routerLink="/login" class="nav-active" (click)="mobileMenuOpen=false">Log In</a>
+          <a routerLink="/signup" class="btn-signup" (click)="mobileMenuOpen=false">Sign Up</a>
         </div>
       </header>
 
@@ -129,25 +139,62 @@ import { AuthService } from '../../core/services/auth.service';
     @keyframes fadeUp { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
     @keyframes shake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-6px)} 40%{transform:translateX(6px)} 60%{transform:translateX(-4px)} 80%{transform:translateX(4px)} }
     @keyframes spin { to{transform:rotate(360deg)} }
+    @keyframes slideDown { from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:translateY(0)} }
     .anim-up { opacity:0; animation:fadeUp .7s cubic-bezier(.4,0,.2,1) forwards; }
     .d2{animation-delay:.1s} .d3{animation-delay:.2s} .d4{animation-delay:.3s}
     .animate-shake { animation:shake .4s ease-in-out; }
 
+    /* ── Navbar ── */
     .nav { position:fixed;top:0;left:0;right:0;z-index:100;background:transparent;transition:background .35s,box-shadow .35s; }
-    .nav.scrolled { background:rgba(16,28,46,.95);backdrop-filter:blur(18px);box-shadow:0 4px 30px rgba(0,0,0,.3); }
-    .nav-inner { max-width:1200px;margin:0 auto;padding:.85rem 1.5rem;display:flex;align-items:center;justify-content:space-between; }
-    .nav-logo { display:flex;align-items:center;gap:.6rem;text-decoration:none;color:white; }
+    .nav.scrolled { background:rgba(16,28,46,.96);backdrop-filter:blur(18px);box-shadow:0 4px 30px rgba(0,0,0,.3); }
+    .nav-inner { max-width:1200px;margin:0 auto;padding:.85rem 1.5rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;position:relative; }
+    .nav-logo { display:flex;align-items:center;gap:.6rem;text-decoration:none;color:white;flex-shrink:0; }
     .logo-mark { width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:#ffffff;border-radius:8px;overflow:hidden; }
-    .logo-mark svg { width:100%;height:100%; }
-    .logo-text { font-weight:700;font-size:1.05rem;letter-spacing:-.02em;line-height:1.2; }
+    .logo-text { font-weight:700;font-size:1.05rem;letter-spacing:-.02em;line-height:1.2;color:white; }
     .logo-text-group { display:flex;flex-direction:column; }
     .logo-sub { font-size:.55rem;font-weight:700;color:#38bdf8;letter-spacing:.12em;text-transform:uppercase;line-height:1; }
+
     .nav-links { display:flex;align-items:center;gap:1.5rem; }
     .nav-links a { color:rgba(255,255,255,.7);text-decoration:none;font-size:.9rem;font-weight:500;transition:color .2s; }
     .nav-links a:hover,.nav-active { color:white !important; }
     .btn-signup { background:rgba(255,255,255,.12) !important;color:white !important;padding:.5rem 1.1rem;border-radius:10px;font-weight:600 !important;border:1px solid rgba(255,255,255,.2) !important;transition:all .2s !important; }
     .btn-signup:hover { background:rgba(255,255,255,.2) !important; }
 
+    /* Hamburger button */
+    .nav-hamburger {
+      display:none;flex-direction:column;gap:5px;
+      background:none;border:none;cursor:pointer;
+      padding:.4rem;border-radius:8px;color:rgba(255,255,255,.85);
+      transition:background .2s;
+    }
+    .nav-hamburger:hover { background:rgba(255,255,255,.1); }
+    .nav-hamburger span { display:block;width:22px;height:2px;background:currentColor;border-radius:2px;transition:all .3s; }
+    .nav-hamburger.open span:nth-child(1) { transform:rotate(45deg) translate(5px,5px); }
+    .nav-hamburger.open span:nth-child(2) { opacity:0;transform:scaleX(0); }
+    .nav-hamburger.open span:nth-child(3) { transform:rotate(-45deg) translate(5px,-5px); }
+
+    /* Mobile dropdown */
+    .nav-mobile-menu {
+      display:none;flex-direction:column;gap:.375rem;
+      padding:.875rem 1.25rem 1.125rem;
+      background:rgba(14,24,46,.97);
+      backdrop-filter:blur(20px);
+      border-top:1px solid rgba(255,255,255,.07);
+    }
+    .nav-mobile-menu.open { display:flex;animation:slideDown .22s ease-out; }
+    .nav-mobile-menu a {
+      color:rgba(255,255,255,.72);text-decoration:none;font-size:.95rem;font-weight:500;
+      padding:.7rem .875rem;border-radius:10px;transition:all .15s;
+    }
+    .nav-mobile-menu a:hover,.nav-mobile-menu .nav-active { background:rgba(255,255,255,.07);color:white; }
+    .nav-mobile-menu .btn-signup {
+      display:block;text-align:center;margin-top:.25rem;
+      padding:.75rem !important;
+      background:linear-gradient(135deg,rgba(96,165,250,.2),rgba(129,140,248,.2)) !important;
+      border:1px solid rgba(255,255,255,.18) !important;
+    }
+
+    /* ── Hero ── */
     .auth-hero { min-height:100vh;display:flex;align-items:center;padding:5rem 1.5rem 3rem;position:relative; }
     .auth-hero::before { content:'';position:absolute;top:0;right:0;width:50%;height:100%;background:radial-gradient(ellipse at 80% 50%,rgba(96,165,250,0.06) 0%,transparent 70%);pointer-events:none; }
     .auth-hero-inner { max-width:1200px;margin:0 auto;width:100%;display:grid;grid-template-columns:1fr 1fr;gap:4rem;align-items:center; }
@@ -164,6 +211,7 @@ import { AuthService } from '../../core/services/auth.service';
     .hs-label { font-size:.75rem;color:rgba(255,255,255,.5);font-weight:500; }
     .hero-stat-div { width:1px;height:32px;background:rgba(255,255,255,.12); }
 
+    /* ── Auth card ── */
     .form-side { display:flex;justify-content:center; }
     .auth-card { width:100%;max-width:420px;background:rgba(255,255,255,.07);backdrop-filter:blur(24px);border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:2.25rem;box-shadow:0 24px 64px rgba(0,0,0,.4); }
     .card-title { font-size:1.4rem;font-weight:700;color:white;margin:0 0 .35rem;text-align:center; }
@@ -194,7 +242,6 @@ import { AuthService } from '../../core/services/auth.service';
     .card-links a { color:#818cf8;text-decoration:none;font-weight:500; }
     .card-links a:hover { text-decoration:underline; }
     .dot { color:rgba(255,255,255,.2); }
-
     .card-divider { display:flex;align-items:center;gap:1rem;margin:1.25rem 0 1rem; }
     .card-divider::before,.card-divider::after { content:'';flex:1;height:1px;background:rgba(255,255,255,.1); }
     .card-divider span { font-size:.8rem;color:rgba(255,255,255,.3);font-weight:500; }
@@ -202,14 +249,16 @@ import { AuthService } from '../../core/services/auth.service';
     .btn-outline { display:block;width:100%;padding:.8rem;text-align:center;border:1.5px solid rgba(255,255,255,.15);border-radius:12px;background:transparent;color:rgba(255,255,255,.8);font-size:.9rem;font-weight:600;text-decoration:none;font-family:inherit;cursor:pointer;transition:all .2s; }
     .btn-outline:hover { border-color:rgba(255,255,255,.3);color:white;background:rgba(255,255,255,.06); }
 
+    /* ── Footer ── */
     .footer { background:rgba(0,0,0,.3);border-top:1px solid rgba(255,255,255,.06); }
-    .footer-inner { max-width:1200px;margin:0 auto;padding:1.25rem 1.5rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem; }
+    .footer-inner { max-width:1200px;margin:0 auto;padding:1.25rem 1.5rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem; }
     .footer-logo { font-size:.875rem;font-weight:700;color:rgba(255,255,255,.6); }
     .footer-copy { font-size:.8rem;color:rgba(255,255,255,.3); }
     .footer-links-row { display:flex;gap:1.25rem; }
     .footer-links-row a { font-size:.8rem;color:rgba(255,255,255,.3);text-decoration:none;transition:color .2s; }
     .footer-links-row a:hover { color:rgba(255,255,255,.7); }
 
+    /* ── Responsive ── */
     @media(max-width:900px) {
       .auth-hero-inner { grid-template-columns:1fr;gap:2.5rem; }
       .hero-left { text-align:center; }
@@ -218,9 +267,21 @@ import { AuthService } from '../../core/services/auth.service';
       .hero-badges { justify-content:center; }
       .hero-stats { justify-content:center; }
     }
+    @media(max-width:768px) {
+      .nav-links { display:none; }
+      .nav-hamburger { display:flex; }
+      .auth-hero { padding:4.5rem 1rem 2.5rem; }
+      .footer-inner { flex-direction:column;align-items:center;text-align:center;gap:.625rem; }
+      .footer-links-row { justify-content:center; }
+    }
     @media(max-width:480px) {
       .hero-title { font-size:1.8rem; }
-      .auth-card { padding:1.5rem; }
+      .hero-sub { font-size:.95rem; }
+      .hero-stats { flex-wrap:wrap;gap:1rem; }
+      .hero-stat-div { display:none; }
+      .auth-card { padding:1.5rem 1.25rem; }
+      .nav-inner { padding:.75rem 1rem; }
+      .badge-pill { font-size:.75rem;padding:.35rem .75rem; }
     }
   `]
 })
@@ -229,6 +290,7 @@ export class LoginComponent {
   password = '';
   showPassword = false;
   navScrolled = false;
+  mobileMenuOpen = false;
   readonly year = new Date().getFullYear();
   isSubmitting = signal(false);
   generalError = signal('');
@@ -258,11 +320,13 @@ export class LoginComponent {
     this.generalError.set('');
     this.authService.login(this.email, this.password).subscribe({
       next: () => {
-        const returnUrl = this.route.snapshot.queryParamMap.get('returnUrl');
-        const target = returnUrl && returnUrl.startsWith('/') && !returnUrl.startsWith('//')
-          ? returnUrl
-          : '/email/inbox';
-        this.router.navigateByUrl(target);
+        this.authService.refreshProfile().subscribe(() => {
+          const returnUrl = this.route.snapshot.queryParamMap.get('returnUrl');
+          const target = returnUrl && returnUrl.startsWith('/') && !returnUrl.startsWith('//')
+            ? returnUrl
+            : '/email/inbox';
+          this.router.navigateByUrl(target);
+        });
       },
       error: (err) => { this.generalError.set(err.message); this.isSubmitting.set(false); }
     });

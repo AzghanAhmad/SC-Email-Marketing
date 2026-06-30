@@ -1,6 +1,8 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { DomSanitizer } from '@angular/platform-browser';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
+import { AnalyticsApiService } from '../../../core/services/analytics-api.service';
+import { NAV_ICONS } from '../../../core/constants/nav-icons';
 
 @Component({
   selector: 'app-custom-reports',
@@ -19,11 +21,9 @@ import { DomSanitizer } from '@angular/platform-browser';
         </button>
       </div>
 
-      <div class="reports-grid">
+      <div class="reports-grid" *ngIf="reports.length > 0">
         <div class="glass-card report-card" *ngFor="let r of reports">
-          <div class="rc-icon" [style.background]="r.iconBg">
-            <span [innerHTML]="r.safeIcon"></span>
-          </div>
+          <span class="nav-icon" [innerHTML]="r.safeIcon"></span>
           <div class="rc-body">
             <h3 class="rc-name">{{ r.name }}</h3>
             <p class="rc-desc">{{ r.description }}</p>
@@ -41,9 +41,9 @@ import { DomSanitizer } from '@angular/platform-browser';
         </div>
       </div>
 
-      <div class="glass-card empty-prompt" *ngIf="reports.length > 0">
-        <div class="ep-icon">📊</div>
-        <h3 class="ep-title">Create Custom Reports</h3>
+      <div class="glass-card empty-prompt" *ngIf="reports.length === 0">
+        <span class="nav-icon ep-icon-svg" [innerHTML]="emptyIcon"></span>
+        <h3 class="ep-title">No Custom Reports Yet</h3>
         <p class="ep-desc">Build reports combining campaign, flow, and audience data. Export as CSV or schedule automated delivery.</p>
         <button class="btn-secondary" data-tooltip="Learn how to create custom reports">Learn More</button>
       </div>
@@ -52,8 +52,9 @@ import { DomSanitizer } from '@angular/platform-browser';
   styles: [`
     .reports-grid { display:flex; flex-direction:column; gap:1rem; margin-bottom:1.5rem; }
     .report-card { display:flex; align-items:center; gap:1.25rem; padding:1.375rem 1.5rem; }
-    .rc-icon { width:44px; height:44px; border-radius:12px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-    .rc-icon svg { width:20px; height:20px; display: block; }
+    .nav-icon { display:flex; align-items:center; justify-content:center; flex-shrink:0; color:#64748b; }
+    .nav-icon svg { width:20px; height:20px; display:block; }
+    .ep-icon-svg { margin-bottom:.75rem; color:#94a3b8; }
     .rc-body { flex:1; }
     .rc-name { font-size:.9375rem; font-weight:700; color:#0f172a; margin:0 0 .25rem; }
     .rc-desc { font-size:.8125rem; color:#94a3b8; margin:0 0 .5rem; }
@@ -63,24 +64,26 @@ import { DomSanitizer } from '@angular/platform-browser';
     .rc-actions { display:flex; align-items:center; gap:.5rem; }
 
     .empty-prompt { padding:2.5rem; text-align:center; display:flex; flex-direction:column; align-items:center; }
-    .ep-icon { font-size:2.5rem; margin-bottom:.75rem; }
     .ep-title { font-size:1.125rem; font-weight:700; color:#0f172a; margin:0 0 .5rem; }
     .ep-desc { font-size:.875rem; color:#94a3b8; margin:0 0 1.25rem; max-width:420px; line-height:1.5; }
   `]
 })
-export class CustomReportsComponent {
+export class CustomReportsComponent implements OnInit {
   private sanitizer = inject(DomSanitizer);
+  private analyticsApi = inject(AnalyticsApiService);
 
-  reports: any[] = [
-    { name: 'Monthly Performance Summary', type: 'Scheduled', description: 'Comprehensive monthly report of campaign and flow performance', lastUpdated: 'Apr 1, 2026', iconBg: 'rgba(59,130,246,0.1)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>' },
-    { name: 'Revenue Attribution Report', type: 'Manual', description: 'Track revenue attributed to email campaigns and flows', lastUpdated: 'Mar 28, 2026', iconBg: 'rgba(16,185,129,0.1)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>' },
-    { name: 'List Growth Analysis', type: 'Weekly', description: 'New subscriber sources, engagement quality, and list health metrics', lastUpdated: 'Apr 5, 2026', iconBg: 'rgba(139,92,246,0.1)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>' },
-    { name: 'Book Launch ROI', type: 'Manual', description: 'Compare email performance across different book launches', lastUpdated: 'Mar 15, 2026', iconBg: 'rgba(245,158,11,0.1)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>' },
-  ];
+  reports: { name: string; type: string; description: string; lastUpdated: string; safeIcon: SafeHtml }[] = [];
+  emptyIcon = this.sanitizer.bypassSecurityTrustHtml(NAV_ICONS['chart']);
 
-  constructor() {
-    this.reports.forEach(r => {
-      r.safeIcon = this.sanitizer.bypassSecurityTrustHtml(r.icon);
+  ngOnInit() {
+    this.analyticsApi.getAnalytics(30).subscribe(b => {
+      this.reports = b.customReports.map(r => ({
+        name: r.name,
+        type: r.type,
+        description: r.description,
+        lastUpdated: r.lastUpdated,
+        safeIcon: this.sanitizer.bypassSecurityTrustHtml(NAV_ICONS[r.iconKey] ?? NAV_ICONS['chart']),
+      }));
     });
   }
 }

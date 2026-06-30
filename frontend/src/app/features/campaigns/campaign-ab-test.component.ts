@@ -1,12 +1,7 @@
 import { Component, Output, EventEmitter, Input, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-
-interface ABTest {
-  id: string; name: string; subjectA: string; subjectB: string;
-  testSize: number; winnerMetric: 'opens'|'clicks'; waitHours: number;
-  status: 'draft'|'running'|'complete'; openRateA?: number; openRateB?: number; winner?: 'A'|'B';
-}
+import { AbTest } from '../../core/models/campaign.models';
 
 @Component({
   selector: 'app-campaign-ab-test',
@@ -95,6 +90,7 @@ interface ABTest {
           </div>
           <div class="ab-test-status">
             <span class="badge" [ngClass]="'badge-' + (test.status === 'complete' ? 'sent' : test.status === 'running' ? 'active' : 'draft')">{{ test.status }}</span>
+            <button type="button" class="ab-delete-btn" (click)="onDeleteAbTest.emit(test.id)">Delete</button>
           </div>
         </div>
       </div>
@@ -151,7 +147,9 @@ interface ABTest {
     .ab-result-label { font-size:.75rem; font-weight:700; color:#64748b; }
     .ab-result-rate { font-size:.875rem; font-weight:700; color:#0f172a; }
     .ab-winner-badge { font-size:.7rem; font-weight:700; padding:.15rem .45rem; background:#10b981; color:#fff; border-radius:100px; }
-    .ab-test-status { flex-shrink:0; }
+    .ab-test-status { flex-shrink:0; display:flex; flex-direction:column; align-items:flex-end; gap:.5rem; }
+    .ab-delete-btn { background:none; border:none; color:#dc2626; font-size:.75rem; font-weight:600; cursor:pointer; padding:0; }
+    .ab-delete-btn:hover { text-decoration:underline; }
     .ab-empty { display:flex; flex-direction:column; align-items:center; gap:.75rem; padding:2rem; color:#94a3b8; font-size:.875rem; text-align:center; }
     .ab-how-it-works { margin-top:1.25rem; }
     .ab-steps { display:flex; flex-direction:column; gap:.875rem; margin:1rem 0; }
@@ -171,11 +169,12 @@ interface ABTest {
   `]
 })
 export class CampaignAbTestComponent implements OnChanges {
-  @Input() abTests: ABTest[] = [];
+  @Input() abTests: AbTest[] = [];
   @Output() onToast = new EventEmitter<{message: string; type: 'success'|'warn'}>();
   @Output() onCreateAbTest = new EventEmitter<{
     subjectA: string; subjectB: string; testSize: number; winnerMetric: string; waitHours: number;
   }>();
+  @Output() onDeleteAbTest = new EventEmitter<string>();
 
   ngOnChanges(changes: SimpleChanges) {
     if (changes['abTests'] && changes['abTests'].currentValue) {

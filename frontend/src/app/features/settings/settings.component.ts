@@ -697,6 +697,33 @@ type SettingsTab = 'account' | 'domain' | 'inbox' | 'integrations' | 'store' | '
     .status-warn { color:#d97706; }
 
     @media(max-width:900px) { .test-event-grid { grid-template-columns:1fr; } .form-row-3 { grid-template-columns:1fr; } .log-row { grid-template-columns:1fr 1fr; } }
+    @media(max-width:768px) {
+      .settings-layout { grid-template-columns:1fr; gap:1rem; }
+      .settings-nav {
+        flex-direction:row; overflow-x:auto; position:static;
+        padding-bottom:.5rem; gap:.375rem;
+        -webkit-overflow-scrolling:touch;
+        scrollbar-width:none;
+      }
+      .settings-nav::-webkit-scrollbar { display:none; }
+      .snav-item { white-space:nowrap; flex-shrink:0; padding:.55rem .875rem; }
+      .form-row { grid-template-columns:1fr; }
+      .domain-input-row { flex-direction:column; }
+      .store-url-row { flex-direction:column; }
+      .dns-row { grid-template-columns:60px 1fr 1fr 32px; }
+      .plan-features { grid-template-columns:1fr; }
+      .billing-row { grid-template-columns:1fr 1fr; gap:.5rem; }
+      .settings-card { padding:1.25rem; }
+    }
+    @media(max-width:480px) {
+      .dns-row { grid-template-columns:1fr; }
+      .dns-row.header { display:none; }
+      .billing-row.header { display:none; }
+      .billing-row { grid-template-columns:1fr; }
+      .log-row.header-row { display:none; }
+      .test-event-card { flex-wrap:wrap; }
+      .notif-item { flex-direction:column; align-items:flex-start; gap:.5rem; }
+    }
 
     .notif-list { display:flex; flex-direction:column; gap:.5rem; }
     .notif-item { display:flex; align-items:center; justify-content:space-between; padding:1rem; background:#f8fafc; border-radius:12px; border:1px solid #f1f5f9; }

@@ -18,6 +18,17 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<AbTest> AbTests => Set<AbTest>();
     public DbSet<SubscriberGrowthPoint> SubscriberGrowthPoints => Set<SubscriberGrowthPoint>();
     public DbSet<DashboardActivity> DashboardActivities => Set<DashboardActivity>();
+    public DbSet<AudienceFolder> AudienceFolders => Set<AudienceFolder>();
+    public DbSet<AudienceList> AudienceLists => Set<AudienceList>();
+    public DbSet<AudienceSegmentItem> AudienceSegmentItems => Set<AudienceSegmentItem>();
+    public DbSet<EmailTemplate> EmailTemplates => Set<EmailTemplate>();
+    public DbSet<ContentBlock> ContentBlocks => Set<ContentBlock>();
+    public DbSet<BrandProfile> BrandProfiles => Set<BrandProfile>();
+    public DbSet<BrandAsset> BrandAssets => Set<BrandAsset>();
+    public DbSet<SignUpForm> SignUpForms => Set<SignUpForm>();
+    public DbSet<LandingPage> LandingPages => Set<LandingPage>();
+    public DbSet<GrowthToolConfig> GrowthToolConfigs => Set<GrowthToolConfig>();
+    public DbSet<SubscriberActivity> SubscriberActivities => Set<SubscriberActivity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -52,6 +63,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId);
             e.HasIndex(x => x.UserId);
+            e.HasIndex(x => new { x.UserId, x.ListId });
         });
 
         modelBuilder.Entity<CampaignMetric>(e =>
@@ -75,6 +87,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<Campaign>(e =>
         {
             e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId);
+            e.Property(x => x.Status).HasMaxLength(64);
             e.HasIndex(x => new { x.UserId, x.Status });
         });
 
@@ -94,6 +107,75 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId);
             e.HasIndex(x => x.UserId);
+        });
+
+        modelBuilder.Entity<AudienceFolder>(e =>
+        {
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId);
+            e.HasIndex(x => new { x.UserId, x.Kind });
+        });
+
+        modelBuilder.Entity<AudienceList>(e =>
+        {
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId);
+            e.HasOne(x => x.Folder).WithMany().HasForeignKey(x => x.FolderId).OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(x => x.UserId);
+        });
+
+        modelBuilder.Entity<AudienceSegmentItem>(e =>
+        {
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId);
+            e.HasOne(x => x.Folder).WithMany().HasForeignKey(x => x.FolderId).OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(x => x.UserId);
+        });
+
+        modelBuilder.Entity<EmailTemplate>(e =>
+        {
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId);
+            e.HasIndex(x => x.UserId);
+        });
+
+        modelBuilder.Entity<ContentBlock>(e =>
+        {
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId);
+            e.HasIndex(x => x.UserId);
+        });
+
+        modelBuilder.Entity<BrandProfile>(e =>
+        {
+            e.HasKey(x => x.UserId);
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId);
+        });
+
+        modelBuilder.Entity<BrandAsset>(e =>
+        {
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId);
+            e.HasIndex(x => x.UserId);
+        });
+
+        modelBuilder.Entity<SignUpForm>(e =>
+        {
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId);
+            e.HasIndex(x => x.UserId);
+        });
+
+        modelBuilder.Entity<LandingPage>(e =>
+        {
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId);
+            e.HasIndex(x => new { x.UserId, x.Slug }).IsUnique();
+        });
+
+        modelBuilder.Entity<GrowthToolConfig>(e =>
+        {
+            e.HasKey(x => new { x.UserId, x.ToolKey });
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId);
+        });
+
+        modelBuilder.Entity<SubscriberActivity>(e =>
+        {
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId);
+            e.HasOne(x => x.Subscriber).WithMany().HasForeignKey(x => x.SubscriberId);
+            e.HasIndex(x => new { x.SubscriberId, x.OccurredAt });
         });
     }
 }

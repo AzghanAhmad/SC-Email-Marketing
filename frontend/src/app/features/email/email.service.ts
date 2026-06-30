@@ -1,4 +1,5 @@
 import { Injectable, signal, computed } from '@angular/core';
+import { parseApiDate } from './email-datetime.utils';
 import { Observable, tap, map } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
 
@@ -111,6 +112,11 @@ export class EmailService {
   }
 
   constructor(private api: ApiService) {}
+
+  clearInbox(): void {
+    this._emails.set([]);
+    this._loaded.set(false);
+  }
 
   loadMessages(): Observable<Email[]> {
     return this.api.get<EmailDto[]>('/mailbox/messages').pipe(
@@ -264,7 +270,7 @@ export class EmailService {
     subject: dto.subject,
     preview: dto.preview,
     body: dto.body,
-    timestamp: new Date(dto.timestamp),
+    timestamp: parseApiDate(dto.timestamp),
     read: dto.read,
     starred: dto.starred,
     folder: (dto.folder || 'inbox').toLowerCase() as Email['folder'],

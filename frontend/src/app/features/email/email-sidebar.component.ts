@@ -35,6 +35,18 @@ export interface MailFolder {
           <span class="folder-count" *ngIf="folder.count">{{ folder.count }}</span>
         </button>
       </div>
+
+      <div class="sidebar-footer" *ngIf="mailboxConnected">
+        <p class="connected-email" *ngIf="connectedEmail" [title]="connectedEmail">{{ connectedEmail }}</p>
+        <button type="button" class="disconnect-btn" (click)="onDisconnect.emit()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+          <span>Disconnect inbox</span>
+        </button>
+      </div>
     </div>
   `,
   styles: [`
@@ -82,7 +94,8 @@ export interface MailFolder {
       display: flex;
       flex-direction: column;
       gap: 2px;
-      margin-bottom: 1.5rem;
+      flex: 1;
+      min-height: 0;
     }
 
     .folder-item {
@@ -131,12 +144,57 @@ export interface MailFolder {
       min-width: 20px;
       text-align: center;
     }
+
+    .sidebar-footer {
+      margin-top: auto;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border-light);
+      flex-shrink: 0;
+    }
+    .connected-email {
+      margin: 0 0 .625rem;
+      padding: 0 .25rem;
+      font-size: .7rem;
+      font-weight: 600;
+      color: var(--text-muted, #94a3b8);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .disconnect-btn {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      width: 100%;
+      padding: .55rem .75rem;
+      border-radius: 10px;
+      border: 1.5px solid rgba(239, 68, 68, 0.2);
+      background: rgba(239, 68, 68, 0.06);
+      color: #dc2626;
+      font-size: .8125rem;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background .15s, border-color .15s;
+    }
+    .disconnect-btn:hover {
+      background: rgba(239, 68, 68, 0.12);
+      border-color: rgba(239, 68, 68, 0.35);
+    }
+    .disconnect-btn svg {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+    }
   `]
 })
 export class EmailSidebarComponent {
   @Input() activeFolder = 'inbox';
+  @Input() mailboxConnected = false;
+  @Input() connectedEmail = '';
   @Output() onFolderSelect = new EventEmitter<string>();
   @Output() onCompose = new EventEmitter<void>();
+  @Output() onDisconnect = new EventEmitter<void>();
 
   private baseFolders: Omit<MailFolder, 'count'>[] = [
     { id: 'inbox', label: 'Inbox', route: '/email/inbox', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>' },
