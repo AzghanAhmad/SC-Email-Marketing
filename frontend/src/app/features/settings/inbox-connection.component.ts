@@ -23,6 +23,11 @@ import { MailboxApiService, MailboxSetupInstructions, type SaveMailboxConnection
         </span>
       </div>
 
+      <div class="hosting-banner" *ngIf="hostingRestricted()">
+        <p class="hosting-banner-title">Cloud hosting notice</p>
+        <p class="hosting-banner-text">{{ hostingNote() }}</p>
+      </div>
+
       <div class="provider-pills">
         <button type="button" class="provider-pill" *ngFor="let p of providers"
           [class.active]="form.provider === p.id"
@@ -96,10 +101,13 @@ import { MailboxApiService, MailboxSetupInstructions, type SaveMailboxConnection
         </button>
       </div>
 
-      <p class="status-msg" *ngIf="statusMessage()" [class.error]="statusError()">{{ statusMessage() }}</p>
-      <p class="status-hint" *ngIf="statusError() && form.provider === 'gmail'">
+      <p class="status-msg" *ngIf="statusMessage()" [class.error]="statusError()" [class.warning]="statusWarning()">{{ statusMessage() }}</p>
+      <p class="status-hint" *ngIf="statusError() && form.provider === 'gmail' && !hostingRestricted()">
         Still failing? Confirm IMAP is enabled in Gmail settings and
         <a [href]="gmailAppPasswordUrl" target="_blank" rel="noopener noreferrer" class="gmail-link">create a fresh App Password</a>.
+      </p>
+      <p class="status-hint" *ngIf="statusError() && hostingRestricted() && statusMessage().toLowerCase().includes('smtp')">
+        On Railway and similar hosts, outbound SMTP is blocked even with correct Gmail credentials. Inbox sync via IMAP should still work after you redeploy this fix.
       </p>
     </div>
 
@@ -152,6 +160,10 @@ import { MailboxApiService, MailboxSetupInstructions, type SaveMailboxConnection
     .btn-danger-outline:disabled { opacity:.6; cursor:not-allowed; }
     .status-msg { margin-top:1rem; font-size:.8125rem; color:#059669; padding:.75rem 1rem; border-radius:10px; background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.15); line-height:1.5; }
     .status-msg.error { color:#b91c1c; background:rgba(239,68,68,0.08); border-color:rgba(239,68,68,0.2); }
+    .status-msg.warning { color:#b45309; background:rgba(245,158,11,0.1); border-color:rgba(245,158,11,0.25); }
+    .hosting-banner { margin-bottom:1rem; padding:.875rem 1rem; background:#fffbeb; border:1.5px solid #fde68a; border-radius:12px; }
+    .hosting-banner-title { margin:0 0 .35rem; font-size:.8125rem; font-weight:700; color:#92400e; }
+    .hosting-banner-text { margin:0; font-size:.8125rem; color:#78350f; line-height:1.5; }
     .status-hint { margin-top:.5rem; font-size:.78rem; color:#64748b; line-height:1.5; }
     .gmail-help { margin-bottom:1.25rem; padding:1rem 1.125rem; background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:12px; }
     .gmail-help-title { margin:0 0 .5rem; font-size:.8125rem; font-weight:700; color:#0f172a; }
@@ -181,6 +193,9 @@ export class InboxConnectionComponent implements OnInit {
   busy = signal(false);
   statusMessage = signal('');
   statusError = signal(false);
+  statusWarning = signal(false);
+  hostingRestricted = signal(false);
+  hostingNote = signal('');
   instructions: MailboxSetupInstructions | null = null;
 
   providers = [
@@ -228,6 +243,10 @@ export class InboxConnectionComponent implements OnInit {
       error: () => this.connected.set(false)
     });
     this.mailboxApi.getSetupInstructions().subscribe(i => this.instructions = i);
+    this.mailboxApi.getHostingInfo().subscribe(info => {
+      this.hostingRestricted.set(!!info.smtpRestricted);
+      this.hostingNote.set(info.message || '');
+    });
   }
 
   applyProvider(id: string) {
@@ -290,9 +309,16 @@ export class InboxConnectionComponent implements OnInit {
     if (!this.prepareForm()) return;
     this.busy.set(true);
     this.statusError.set(false);
+    this.statusWarning.set(false);
     this.mailboxApi.testConnection(this.toRequest()).subscribe({
-      next: res => { this.statusMessage.set(res.message); this.busy.set(false); },
-      error: err => { this.statusMessage.set(err.message); this.statusError.set(true); this.busy.set(false); }
+      next: res => {
+        const imapOnly = res.message.toLowerCase().includes('smtp is blocked');
+        this.statusWarning.set(imapOnly);
+        this.statusError.set(false);
+        this.statusMessage.set(res.message);
+        this.busy.set(false);
+      },
+      error: err => { this.statusMessage.set(err.message); this.statusError.set(true); this.statusWarning.set(false); this.busy.set(false); }
     });
   }
 
@@ -300,12 +326,15 @@ export class InboxConnectionComponent implements OnInit {
     if (!this.prepareForm()) return;
     this.busy.set(true);
     this.statusError.set(false);
+    this.statusWarning.set(false);
     this.mailboxApi.connect(this.toRequest()).subscribe({
       next: (res) => {
         this.connected.set(true);
         this.auth.updateCachedUser({ mailboxConnected: true });
-        this.statusMessage.set(res.message || 'Inbox connected.');
+        const imapOnly = res.smtpAvailable === false;
+        this.statusWarning.set(imapOnly);
         this.statusError.set(false);
+        this.statusMessage.set(res.message || 'Inbox connected.');
         this.busy.set(false);
 
         this.auth.refreshProfile().subscribe();

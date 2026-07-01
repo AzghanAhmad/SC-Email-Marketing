@@ -61,22 +61,60 @@ public class MailboxService(AppDbContext db, ILogger<MailboxService> logger)
             return (false, $"IMAP failed: {MapConnectionError(ex, request.Provider)}");
         }
 
-        try
+        var smtp = await TryTestSmtpAsync(request, username, password, token);
+        if (smtp.Success)
+            return (true, "Connection successful. IMAP and SMTP are working.");
+
+        if (MailboxHosting.IsSmtpRestrictedHosting() && smtp.IsTimeoutOrUnreachable)
         {
-            using var smtp = new SmtpClient();
-            smtp.Timeout = 25000;
-            var smtpSecurity = ResolveSmtpSecurity(request);
-            await smtp.ConnectAsync(request.SmtpHost, request.SmtpPort, smtpSecurity, token);
-            await smtp.AuthenticateAsync(username, password, token);
-            await smtp.DisconnectAsync(true, token);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "SMTP connection test failed for {Email}", request.EmailAddress);
-            return (false, $"SMTP failed: {MapConnectionError(ex, request.Provider)}");
+            logger.LogInformation(
+                "SMTP unreachable on restricted hosting for {Email}; allowing IMAP-only connection",
+                request.EmailAddress);
+            return (true,
+                "IMAP connected successfully. SMTP is blocked on this hosting provider (Railway and similar platforms block outbound mail ports). Inbox sync will work; sending from Compose may not work on this deployment.");
         }
 
-        return (true, "Connection successful. IMAP and SMTP are working.");
+        return (false, $"SMTP failed: {smtp.Message}");
+    }
+
+    private async Task<(bool Success, bool IsTimeoutOrUnreachable, string Message)> TryTestSmtpAsync(
+        SaveMailboxConnectionRequest request,
+        string username,
+        string password,
+        CancellationToken token)
+    {
+        var portsToTry = new List<int> { request.SmtpPort };
+        if (request.SmtpPort == 587 && !portsToTry.Contains(465))
+            portsToTry.Add(465);
+
+        Exception? last = null;
+        foreach (var port in portsToTry)
+        {
+            try
+            {
+                using var smtp = new SmtpClient();
+                smtp.Timeout = 25000;
+                var security = port == 465
+                    ? SecureSocketOptions.SslOnConnect
+                    : ResolveSmtpSecurity(request);
+                await smtp.ConnectAsync(request.SmtpHost, port, security, token);
+                await smtp.AuthenticateAsync(username, password, token);
+                await smtp.DisconnectAsync(true, token);
+                return (true, false, "");
+            }
+            catch (Exception ex)
+            {
+                last = ex;
+                logger.LogWarning(ex, "SMTP connection test failed for {Email} on port {Port}", request.EmailAddress, port);
+            }
+        }
+
+        var message = MapConnectionError(last!, request.Provider, forSmtp: true);
+        var unreachable = last is OperationCanceledException
+            || message.Contains("timed out", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("refused", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("Could not reach", StringComparison.OrdinalIgnoreCase);
+        return (false, unreachable, message);
     }
 
     private static (string Username, string Password) NormalizeCredentials(SaveMailboxConnectionRequest request)
@@ -97,6 +135,14 @@ public class MailboxService(AppDbContext db, ILogger<MailboxService> logger)
         return request.SmtpUseSsl ? SecureSocketOptions.StartTls : SecureSocketOptions.Auto;
     }
 
+    private static SecureSocketOptions ResolveSmtpSecurity(MailboxConnection conn)
+    {
+        if (conn.SmtpPort == 465) return SecureSocketOptions.SslOnConnect;
+        if (string.Equals(conn.Provider, "gmail", StringComparison.OrdinalIgnoreCase))
+            return SecureSocketOptions.StartTls;
+        return conn.SmtpUseSsl ? SecureSocketOptions.StartTls : SecureSocketOptions.Auto;
+    }
+
     private static bool IsAuthFailure(Exception ex)
     {
         for (var current = ex; current != null; current = current.InnerException)
@@ -113,11 +159,15 @@ public class MailboxService(AppDbContext db, ILogger<MailboxService> logger)
         return false;
     }
 
-    private static string MapConnectionError(Exception ex, string provider)
+    private static string MapConnectionError(Exception ex, string provider, bool forSmtp = false)
     {
         var msg = ex.Message;
         if (ex is OperationCanceledException)
+        {
+            if (forSmtp && MailboxHosting.IsSmtpRestrictedHosting())
+                return MailboxHosting.SmtpSendBlockedMessage;
             return "Connection timed out. Check IMAP/SMTP host, port, and firewall settings.";
+        }
 
         if (IsAuthFailure(ex))
         {
@@ -347,8 +397,8 @@ public class MailboxService(AppDbContext db, ILogger<MailboxService> logger)
 
         try
         {
-            using var smtp = new SmtpClient();
-            await smtp.ConnectAsync(conn.SmtpHost, conn.SmtpPort, conn.SmtpUseSsl ? SecureSocketOptions.StartTls : SecureSocketOptions.Auto);
+            using var smtp = new SmtpClient { Timeout = 25000 };
+            await smtp.ConnectAsync(conn.SmtpHost, conn.SmtpPort, ResolveSmtpSecurity(conn));
             await smtp.AuthenticateAsync(conn.Username, password);
             await smtp.SendAsync(message);
             await smtp.DisconnectAsync(true);
@@ -356,7 +406,7 @@ public class MailboxService(AppDbContext db, ILogger<MailboxService> logger)
         catch (Exception ex)
         {
             logger.LogWarning(ex, "SMTP send failed for user {UserId}", userId);
-            throw new InvalidOperationException(MapConnectionError(ex, conn.Provider));
+            throw new InvalidOperationException(MapConnectionError(ex, conn.Provider, forSmtp: true));
         }
 
         var preview = request.Body.Length > 100 ? request.Body[..100] : request.Body;

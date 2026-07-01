@@ -58,8 +58,12 @@ export class MailboxApiService {
     return this.api.post<{ message: string }>('/mailbox/test', request);
   }
 
-  connect(request: SaveMailboxConnectionRequest): Observable<{ connection: MailboxConnection; message: string }> {
-    return this.api.post<{ connection: MailboxConnection; message: string }>('/mailbox/connect', request);
+  connect(request: SaveMailboxConnectionRequest): Observable<{ connection: MailboxConnection; message: string; smtpAvailable?: boolean }> {
+    return this.api.post<{ connection: MailboxConnection; message: string; smtpAvailable?: boolean }>('/mailbox/connect', request);
+  }
+
+  getHostingInfo(): Observable<{ smtpRestricted: boolean; message?: string }> {
+    return this.api.get<{ smtpRestricted: boolean; message?: string }>('/mailbox/hosting-info');
   }
 
   disconnect(): Observable<MailboxConnection> {

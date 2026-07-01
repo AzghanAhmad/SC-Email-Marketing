@@ -23,6 +23,15 @@ public class MailboxController(AppDbContext db, MailboxService mailbox) : Contro
     public ActionResult<MailboxSetupInstructionsDto> GetSetupInstructions() =>
         Ok(MailboxService.GetSetupInstructions());
 
+    [AllowAnonymous]
+    [HttpGet("hosting-info")]
+    public ActionResult GetHostingInfo() =>
+        Ok(new
+        {
+            smtpRestricted = MailboxHosting.IsSmtpRestrictedHosting(),
+            message = MailboxHosting.IsSmtpRestrictedHosting() ? MailboxHosting.SmtpRestrictedHostingNote : null
+        });
+
     [HttpGet("connection")]
     public async Task<ActionResult<MailboxConnectionDto>> GetConnection()
     {
@@ -52,8 +61,8 @@ public class MailboxController(AppDbContext db, MailboxService mailbox) : Contro
         var validationError = ValidateMailboxRequest(request);
         if (validationError is not null) return BadRequest(new { message = validationError });
 
-        var (success, message) = await mailbox.TestConnectionAsync(request!);
-        if (!success) return BadRequest(new { message });
+        var (success, testMessage) = await mailbox.TestConnectionAsync(request!);
+        if (!success) return BadRequest(new { message = testMessage });
 
         try
         {
@@ -71,7 +80,9 @@ public class MailboxController(AppDbContext db, MailboxService mailbox) : Contro
                 syncMessage = $"Inbox connected, but sync failed: {ex.Message}";
             }
 
-            return Ok(new { connection = MapConnection(conn), message = syncMessage });
+            var smtpRestricted = testMessage.Contains("SMTP is blocked", StringComparison.OrdinalIgnoreCase);
+            var message = smtpRestricted ? $"{testMessage} {syncMessage}" : syncMessage;
+            return Ok(new { connection = MapConnection(conn), message, smtpAvailable = !smtpRestricted });
         }
         catch (InvalidOperationException ex) when (ex.Message == StaleSessionMiddleware.Message)
         {
