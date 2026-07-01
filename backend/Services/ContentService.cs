@@ -60,6 +60,47 @@ public class ContentService(AppDbContext db)
         new("Social Follow Row", "Social Follow Row", "Follow icons for Instagram, Facebook, Goodreads, and more", "globe"),
     ];
 
+    private record WebsiteTemplateDef(
+        string Id, string Name, string Category, string PreviewCode, string Description, string IconKey,
+        string TemplateKind, string? FormType, string? ThemeGradient, string SuggestedName,
+        string Headline, string BodyDescription, string ButtonText, string ThankYouMessage, string DefaultStatus);
+
+    private static readonly WebsiteTemplateDef[] WebsiteTemplateCatalog =
+    [
+        new("signup-reader-magnet-popup", "Reader Magnet Popup", "Sign-up Form", "RM", "Popup form offering a free chapter or short story",
+            "form", "signup-form", "Popup", null, "Reader Magnet Popup",
+            "Get your free chapter", "Join my reader list for exclusive excerpts, launch news, and giveaways.",
+            "Send me the freebie", "Thanks — check your inbox for your download link!", "draft"),
+        new("signup-newsletter-flyout", "Newsletter Flyout", "Sign-up Form", "NF", "Bottom flyout banner for quick email capture",
+            "book", "signup-form", "Flyout", null, "Newsletter Flyout",
+            "Never miss a new release", "Short updates when a book goes live — no spam, just stories.",
+            "Join the list", "You're in! Welcome to the inner circle.", "draft"),
+        new("signup-vip-embedded", "VIP Embedded Form", "Sign-up Form", "VIP", "Embedded section for your website or blog",
+            "landing", "signup-form", "Embedded", null, "VIP Readers Embedded Form",
+            "Become a VIP reader", "Early chapters, ARC spots, and giveaways reserved for subscribers.",
+            "Subscribe free", "Welcome aboard — your first exclusive update is on the way.", "draft"),
+        new("signup-launch-full-page", "Launch Signup Page", "Sign-up Form", "LS", "Full-page signup for a book launch waitlist",
+            "trend", "signup-form", "Full Page", null, "Launch Waitlist",
+            "The wait is almost over", "Be first to know when the next book drops and get launch-week bonuses.",
+            "Join the waitlist", "You're on the list — I'll email you the moment it's live.", "draft"),
+        new("landing-reader-magnet", "Free Reader Magnet", "Landing Page", "FR", "High-converting page for a free novella or sample",
+            "book", "landing-page", null, "linear-gradient(135deg,#1e3a5f,#2d5a87)", "Free Reader Magnet",
+            "Your free reader magnet", "Download the exclusive short story and join thousands of readers who get my updates first.",
+            "Get my free book", "You're in! Check your inbox for the download link.", "draft"),
+        new("landing-book-launch", "Book Launch Page", "Landing Page", "BL", "Bold launch page with buy CTA and bonus offer",
+            "book", "landing-page", null, "linear-gradient(135deg,#991b1b,#dc2626)", "Book Launch Page",
+            "It's release day!", "Celebrate the launch with bonus content available this week only for new readers.",
+            "Buy the book", "Thank you for celebrating launch day with me!", "draft"),
+        new("landing-arc-team", "ARC Team Recruit", "Landing Page", "ARC", "Recruit advance readers for your next title",
+            "star", "landing-page", null, "linear-gradient(135deg,#4c1d95,#6d28d9)", "ARC Team Signup",
+            "Join my ARC team", "Read early copies and help shape the final edit before publication.",
+            "Apply for ARC access", "Application received — I'll be in touch with next steps.", "draft"),
+        new("landing-preorder-bonus", "Pre-order Bonus", "Landing Page", "PO", "Capture emails with an exclusive pre-order incentive",
+            "trend", "landing-page", null, "linear-gradient(135deg,#92400e,#d97706)", "Pre-order Bonus Page",
+            "Pre-order bonus inside", "Reserve your copy now and unlock an exclusive deleted scene.",
+            "Claim pre-order bonus", "Bonus unlocked — details are heading to your inbox.", "draft"),
+    ];
+
     private static readonly BrandColorDto[] DefaultColors =
     [
         new("Primary", "#1e3a5f"),
@@ -90,9 +131,21 @@ public class ContentService(AppDbContext db)
             templates.Select(MapTemplate).ToList(),
             blocks.Select(MapBlock).ToList(),
             colors,
-            assets.Select(a => new BrandAssetDto(a.Id.ToString(), a.Name, FormatSize(a.SizeBytes), a.IconKey)).ToList()
+            assets.Select(a => new BrandAssetDto(a.Id.ToString(), a.Name, FormatSize(a.SizeBytes), a.IconKey)).ToList(),
+            GetWebsiteTemplates()
         );
     }
+
+    public WebsiteTemplateDto? GetWebsiteTemplate(string id) =>
+        GetWebsiteTemplates().FirstOrDefault(t => t.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+
+    public static List<WebsiteTemplateDto> GetWebsiteTemplates() =>
+        WebsiteTemplateCatalog.Select(MapWebsiteTemplate).ToList();
+
+    private static WebsiteTemplateDto MapWebsiteTemplate(WebsiteTemplateDef d) => new(
+        d.Id, d.Name, d.Category, d.PreviewCode, d.Description, WebsiteTemplateBodies.Get(d.Id), d.IconKey,
+        d.TemplateKind, d.FormType, d.ThemeGradient, d.SuggestedName,
+        d.Headline, d.BodyDescription, d.ButtonText, d.ThankYouMessage, d.DefaultStatus);
 
     public async Task<EmailTemplateDto?> GetTemplateAsync(Guid userId, Guid id)
     {

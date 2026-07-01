@@ -73,7 +73,7 @@ import { DashboardApiService, DashboardData } from '../../core/services/dashboar
             <h3 class="perf-title">Business Performance Summary</h3>
             <p class="perf-period">{{ performance.periodLabel }}</p>
           </div>
-          <a routerLink="/marketing-analytics" class="btn-secondary btn-sm" data-tooltip="View full analytics dashboard">View Dashboard</a>
+          <a routerLink="/analytics/dashboards" class="btn-secondary btn-sm" data-tooltip="View full analytics dashboard">View Dashboard</a>
         </div>
         <div class="perf-kpi-row">
           <div class="perf-kpi">
@@ -451,7 +451,7 @@ export class DashboardComponent implements OnInit {
 
     this.attributionData = data.attribution;
     this.campaignData = data.campaignChart;
-    this.maxSent = Math.max(...this.campaignData.map(d => d.sent), 1);
+    this.maxSent = Math.max(...this.campaignData.map(d => Math.max(d.sent, d.opened)), 1);
     this.growthData = data.growthChart;
     this.activity = data.recentActivity;
     this.buildGrowthChart();
@@ -467,9 +467,19 @@ export class DashboardComponent implements OnInit {
     if (!data.length) return;
     const max = Math.max(...data.map(d => d.count));
     const min = Math.min(...data.map(d => d.count));
-    const padded_min = Math.floor(min / 1000) * 1000;
-    const padded_max = Math.ceil(max / 1000) * 1000;
-    const range = padded_max - padded_min || 1;
+    let paddedMin: number;
+    let paddedMax: number;
+    if (max === min) {
+      paddedMin = Math.max(0, min - 1);
+      paddedMax = max + 1;
+    } else if (max > 1000) {
+      paddedMin = Math.floor(min / 1000) * 1000;
+      paddedMax = Math.ceil(max / 1000) * 1000;
+    } else {
+      paddedMin = Math.max(0, min - 1);
+      paddedMax = max + 1;
+    }
+    const range = paddedMax - paddedMin || 1;
     const W = this.svgW, H = this.svgH;
     const PAD_T = 12, PAD_B = 8, PAD_L = 4, PAD_R = 4;
     const chartH = H - PAD_T - PAD_B;
@@ -480,7 +490,7 @@ export class DashboardComponent implements OnInit {
     this.yAxisLabels = [];
     this.gridLines = [];
     for (let i = steps; i >= 0; i--) {
-      const val = padded_min + (i / steps) * range;
+      const val = paddedMin + (i / steps) * range;
       this.yAxisLabels.push(val >= 1000 ? (val / 1000).toFixed(0) + 'k' : val.toFixed(0));
       const y = PAD_T + ((steps - i) / steps) * chartH;
       this.gridLines.push(y);
@@ -488,7 +498,7 @@ export class DashboardComponent implements OnInit {
 
     const pts = data.map((d, i) => ({
       x: PAD_L + (data.length === 1 ? chartW / 2 : (i / (data.length - 1)) * chartW),
-      y: PAD_T + (1 - (d.count - padded_min) / range) * chartH
+      y: PAD_T + (1 - (d.count - paddedMin) / range) * chartH
     }));
     this.growthDots = pts;
     this.growthLinePoints = pts.map(p => `${p.x},${p.y}`).join(' ');

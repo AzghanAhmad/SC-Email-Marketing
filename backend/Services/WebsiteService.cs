@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using ScribeCount.Email.Api.Data;
@@ -16,6 +17,8 @@ public class WebsiteService(AppDbContext db)
         ["Flyout"] = "book",
         ["Full Page"] = "trend",
     };
+
+    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
     public async Task<WebsiteBundleDto> GetBundleAsync(Guid userId)
     {
@@ -55,6 +58,12 @@ public class WebsiteService(AppDbContext db)
         );
     }
 
+    public async Task<SignUpFormDto?> GetFormAsync(Guid userId, Guid id)
+    {
+        var form = await db.SignUpForms.FirstOrDefaultAsync(f => f.Id == id && f.UserId == userId);
+        return form is null ? null : MapForm(form);
+    }
+
     public async Task<SignUpFormDto> CreateFormAsync(Guid userId, CreateSignUpFormRequest request)
     {
         var listName = request.TargetListName ?? "";
@@ -64,6 +73,7 @@ public class WebsiteService(AppDbContext db)
             if (list is not null) listName = list.Name;
         }
 
+        var content = BuildFormContent(request.Name, request.Headline, request.Description, request.ButtonText, request.ThankYouMessage);
         var form = new SignUpForm
         {
             Id = Guid.NewGuid(),
@@ -75,12 +85,56 @@ public class WebsiteService(AppDbContext db)
             TargetListName = listName,
             Submissions = 0,
             ConversionRate = 0,
+            ContentJson = WebsiteContentHelper.Serialize(content),
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
         db.SignUpForms.Add(form);
         await db.SaveChangesAsync();
         return MapForm(form);
+    }
+
+    public async Task<SignUpFormDto?> UpdateFormAsync(Guid userId, Guid id, UpdateSignUpFormRequest request)
+    {
+        var form = await db.SignUpForms.FirstOrDefaultAsync(f => f.Id == id && f.UserId == userId);
+        if (form is null) return null;
+
+        var listName = request.TargetListName ?? "";
+        if (request.TargetListId.HasValue)
+        {
+            var list = await db.AudienceLists.FirstOrDefaultAsync(l => l.Id == request.TargetListId && l.UserId == userId);
+            if (list is not null) listName = list.Name;
+        }
+
+        var fallback = WebsiteContentHelper.DefaultForm(request.Name);
+        var current = WebsiteContentHelper.Parse(form.ContentJson, fallback);
+        var merged = WebsiteContentHelper.Merge(current, new WebsitePageContent(
+            request.Headline ?? "", request.Description ?? "", request.ButtonText ?? "", request.ThankYouMessage ?? ""));
+
+        form.Name = request.Name.Trim();
+        form.FormType = request.FormType.Trim();
+        form.Status = string.IsNullOrWhiteSpace(request.Status) ? form.Status : request.Status;
+        form.TargetListId = request.TargetListId;
+        form.TargetListName = listName;
+        form.ContentJson = WebsiteContentHelper.Serialize(merged);
+        form.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        return MapForm(form);
+    }
+
+    public async Task<bool> DeleteFormAsync(Guid userId, Guid id)
+    {
+        var form = await db.SignUpForms.FirstOrDefaultAsync(f => f.Id == id && f.UserId == userId);
+        if (form is null) return false;
+        db.SignUpForms.Remove(form);
+        await db.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<LandingPageDto?> GetLandingPageAsync(Guid userId, Guid id)
+    {
+        var page = await db.LandingPages.FirstOrDefaultAsync(p => p.Id == id && p.UserId == userId);
+        return page is null ? null : MapPage(page);
     }
 
     public async Task<LandingPageDto> CreateLandingPageAsync(Guid userId, CreateLandingPageRequest request)
@@ -91,6 +145,7 @@ public class WebsiteService(AppDbContext db)
         while (await db.LandingPages.AnyAsync(p => p.UserId == userId && p.Slug == slug))
             slug = $"{baseSlug}-{++i}";
 
+        var content = BuildLandingContent(request.Name, request.Headline, request.Description, request.ButtonText, request.ThankYouMessage);
         var page = new LandingPage
         {
             Id = Guid.NewGuid(),
@@ -103,6 +158,7 @@ public class WebsiteService(AppDbContext db)
             IconKey = string.IsNullOrWhiteSpace(request.IconKey) ? "book" : request.IconKey,
             Visits = 0,
             Signups = 0,
+            ContentJson = WebsiteContentHelper.Serialize(content),
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -111,18 +167,214 @@ public class WebsiteService(AppDbContext db)
         return MapPage(page);
     }
 
-    private static SignUpFormDto MapForm(SignUpForm f) => new(
-        f.Id.ToString(), f.Name, f.FormType, f.Status, f.Submissions, f.ConversionRate,
-        f.TargetListName, f.UpdatedAt.ToString("MMM d, yyyy"),
-        FormTypeIcons.GetValueOrDefault(f.FormType, "form"));
+    public async Task<LandingPageDto?> UpdateLandingPageAsync(Guid userId, Guid id, UpdateLandingPageRequest request)
+    {
+        var page = await db.LandingPages.FirstOrDefaultAsync(p => p.Id == id && p.UserId == userId);
+        if (page is null) return null;
+
+        var fallback = WebsiteContentHelper.DefaultLanding(request.Name);
+        var current = WebsiteContentHelper.Parse(page.ContentJson, fallback);
+        var merged = WebsiteContentHelper.Merge(current, new WebsitePageContent(
+            request.Headline ?? "", request.Description ?? "", request.ButtonText ?? "", request.ThankYouMessage ?? ""));
+
+        if (!string.IsNullOrWhiteSpace(request.Slug))
+        {
+            var slug = Slugify(request.Slug);
+            if (slug != page.Slug && await db.LandingPages.AnyAsync(p => p.UserId == userId && p.Slug == slug && p.Id != id))
+                throw new InvalidOperationException("A landing page with that URL slug already exists.");
+            page.Slug = slug;
+        }
+
+        page.Name = request.Name.Trim();
+        page.Status = string.IsNullOrWhiteSpace(request.Status) ? page.Status : request.Status;
+        page.ThemeGradient = string.IsNullOrWhiteSpace(request.ThemeGradient) ? page.ThemeGradient : request.ThemeGradient;
+        page.IconKey = string.IsNullOrWhiteSpace(request.IconKey) ? page.IconKey : request.IconKey;
+        page.ContentJson = WebsiteContentHelper.Serialize(merged);
+        page.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        return MapPage(page);
+    }
+
+    public async Task<bool> DeleteLandingPageAsync(Guid userId, Guid id)
+    {
+        var page = await db.LandingPages.FirstOrDefaultAsync(p => p.Id == id && p.UserId == userId);
+        if (page is null) return false;
+        db.LandingPages.Remove(page);
+        await db.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<PublicFormPreviewDto?> GetPublicFormAsync(Guid id, bool allowDraft = false)
+    {
+        var form = await db.SignUpForms.FirstOrDefaultAsync(f => f.Id == id);
+        if (form is null) return null;
+        if (!allowDraft && form.Status != "active") return null;
+        return MapPublicForm(form);
+    }
+
+    public async Task<PublicLandingPageDto?> GetPublicLandingPageAsync(string slug, bool trackVisit = true)
+    {
+        var page = await db.LandingPages.FirstOrDefaultAsync(p => p.Slug == slug && p.Status == "published");
+        if (page is null) return null;
+        if (trackVisit)
+        {
+            page.Visits++;
+            page.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+        }
+        return MapPublicLanding(page);
+    }
+
+    public async Task<PublicLandingPageDto?> GetLandingPagePreviewAsync(Guid userId, Guid id)
+    {
+        var page = await db.LandingPages.FirstOrDefaultAsync(p => p.Id == id && p.UserId == userId);
+        return page is null ? null : MapPublicLanding(page);
+    }
+
+    public async Task<PublicFormSubmitResult?> SubmitFormAsync(Guid formId, PublicFormSubmitRequest request)
+    {
+        var form = await db.SignUpForms.FirstOrDefaultAsync(f => f.Id == formId && f.Status == "active");
+        if (form is null) return null;
+
+        var email = request.Email.Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(email) || !email.Contains('@'))
+            return new PublicFormSubmitResult("Please enter a valid email address.", false);
+
+        await UpsertSubscriberAsync(form.UserId, email, request.FirstName, form.TargetListId, "sign_up_form", form.Name);
+
+        form.Submissions++;
+        form.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
+        var content = WebsiteContentHelper.Parse(form.ContentJson, WebsiteContentHelper.DefaultForm(form.Name));
+        return new PublicFormSubmitResult(content.ThankYouMessage, true);
+    }
+
+    public async Task<PublicFormSubmitResult?> SubmitLandingPageAsync(string slug, PublicFormSubmitRequest request)
+    {
+        var page = await db.LandingPages.FirstOrDefaultAsync(p => p.Slug == slug && p.Status == "published");
+        if (page is null) return null;
+
+        var email = request.Email.Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(email) || !email.Contains('@'))
+            return new PublicFormSubmitResult("Please enter a valid email address.", false);
+
+        var defaultListId = await db.AudienceLists
+            .Where(l => l.UserId == page.UserId)
+            .OrderBy(l => l.CreatedAt)
+            .Select(l => (Guid?)l.Id)
+            .FirstOrDefaultAsync();
+
+        await UpsertSubscriberAsync(page.UserId, email, request.FirstName, defaultListId, "landing_page", page.Name);
+
+        page.Signups++;
+        page.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
+        var content = WebsiteContentHelper.Parse(page.ContentJson, WebsiteContentHelper.DefaultLanding(page.Name));
+        return new PublicFormSubmitResult(content.ThankYouMessage, true);
+    }
+
+    private async Task UpsertSubscriberAsync(
+        Guid userId, string email, string? firstName, Guid? listId, string sourceType, string sourceName)
+    {
+        var name = string.IsNullOrWhiteSpace(firstName) ? email.Split('@')[0] : firstName.Trim();
+        var existing = await db.Subscribers.FirstOrDefaultAsync(s => s.UserId == userId && s.Email == email);
+        if (existing is not null)
+        {
+            if (existing.Status == "unsubscribed") existing.Status = "active";
+            if (listId.HasValue)
+            {
+                var listIds = ParseListIds(existing.ListIdsJson);
+                var listKey = listId.Value.ToString();
+                if (!listIds.Contains(listKey))
+                {
+                    listIds.Add(listKey);
+                    existing.ListIdsJson = JsonSerializer.Serialize(listIds, JsonOptions);
+                }
+                existing.ListId ??= listId;
+            }
+            return;
+        }
+
+        var listIdsForNew = listId.HasValue ? new List<string> { listId.Value.ToString() } : [];
+        db.Subscribers.Add(new Subscriber
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            Name = name,
+            Email = email,
+            Status = "active",
+            TagsJson = JsonSerializer.Serialize(new[] { sourceType }, JsonOptions),
+            ListIdsJson = JsonSerializer.Serialize(listIdsForNew, JsonOptions),
+            Note = $"Signed up via {sourceName}",
+            OpenRate = 0,
+            ClickRate = 0,
+            ListId = listId,
+            JoinedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+    }
+
+    private static List<string> ParseListIds(string json)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(json, JsonOptions) ?? [];
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    private static SignUpFormDto MapForm(SignUpForm f)
+    {
+        var content = WebsiteContentHelper.Parse(f.ContentJson, WebsiteContentHelper.DefaultForm(f.Name));
+        return new SignUpFormDto(
+            f.Id.ToString(), f.Name, f.FormType, f.Status, f.Submissions, f.ConversionRate,
+            f.TargetListName, f.TargetListId?.ToString(), f.UpdatedAt.ToString("MMM d, yyyy"),
+            FormTypeIcons.GetValueOrDefault(f.FormType, "form"),
+            content.Headline, content.Description, content.ButtonText, content.ThankYouMessage);
+    }
 
     private static LandingPageDto MapPage(LandingPage p)
     {
         var conv = p.Visits == 0 ? 0 : Math.Round(p.Signups / (double)p.Visits * 100, 1);
+        var content = WebsiteContentHelper.Parse(p.ContentJson, WebsiteContentHelper.DefaultLanding(p.Name));
         return new LandingPageDto(
-            p.Id.ToString(), p.Name, p.Status, $"scribecount.com/p/{p.Slug}",
-            p.Visits, p.Signups, conv, p.ThemeGradient, p.IconKey);
+            p.Id.ToString(), p.Name, p.Status, p.Slug, $"scribecount.com/p/{p.Slug}",
+            p.Visits, p.Signups, conv, p.ThemeGradient, p.IconKey,
+            content.Headline, content.Description, content.ButtonText, content.ThankYouMessage);
     }
+
+    private static PublicFormPreviewDto MapPublicForm(SignUpForm f)
+    {
+        var content = WebsiteContentHelper.Parse(f.ContentJson, WebsiteContentHelper.DefaultForm(f.Name));
+        return new PublicFormPreviewDto(
+            f.Id.ToString(), f.Name, f.FormType, f.Status,
+            content.Headline, content.Description, content.ButtonText, content.ThankYouMessage);
+    }
+
+    private static PublicLandingPageDto MapPublicLanding(LandingPage p)
+    {
+        var content = WebsiteContentHelper.Parse(p.ContentJson, WebsiteContentHelper.DefaultLanding(p.Name));
+        return new PublicLandingPageDto(
+            p.Id.ToString(), p.Name, p.Slug, p.Status, p.ThemeGradient, p.IconKey,
+            content.Headline, content.Description, content.ButtonText, content.ThankYouMessage);
+    }
+
+    private static WebsitePageContent BuildFormContent(
+        string name, string? headline, string? description, string? buttonText, string? thankYou) =>
+        WebsiteContentHelper.Merge(
+            WebsiteContentHelper.DefaultForm(name),
+            new WebsitePageContent(headline ?? "", description ?? "", buttonText ?? "", thankYou ?? ""));
+
+    private static WebsitePageContent BuildLandingContent(
+        string name, string? headline, string? description, string? buttonText, string? thankYou) =>
+        WebsiteContentHelper.Merge(
+            WebsiteContentHelper.DefaultLanding(name),
+            new WebsitePageContent(headline ?? "", description ?? "", buttonText ?? "", thankYou ?? ""));
 
     private static string Slugify(string name)
     {

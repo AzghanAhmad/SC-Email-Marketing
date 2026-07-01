@@ -43,6 +43,26 @@ export interface ContentBundle {
   blocks: ContentBlock[];
   brandColors: BrandColor[];
   assets: BrandAsset[];
+  websiteTemplates: WebsiteTemplate[];
+}
+
+export interface WebsiteTemplate {
+  id: string;
+  name: string;
+  category: string;
+  previewCode: string;
+  description: string;
+  htmlBody: string;
+  iconKey: string;
+  templateKind: 'signup-form' | 'landing-page';
+  formType?: string;
+  themeGradient?: string;
+  suggestedName: string;
+  headline: string;
+  bodyDescription: string;
+  buttonText: string;
+  thankYouMessage: string;
+  defaultStatus: string;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -59,6 +79,10 @@ export class ContentApiService {
 
   useTemplate(id: string): Observable<Campaign> {
     return this.api.post<Campaign>(`/content/templates/${id}/use`, {});
+  }
+
+  getWebsiteTemplate(id: string): Observable<WebsiteTemplate> {
+    return this.api.get<WebsiteTemplate>(`/content/website-templates/${id}`);
   }
 
   createBlock(body: { name: string; blockType: string; description: string; iconKey: string }): Observable<ContentBlock> {

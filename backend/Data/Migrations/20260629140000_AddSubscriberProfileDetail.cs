@@ -12,21 +12,38 @@ namespace ScribeCount.Email.Api.Data.Migrations
     {
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            foreach (var (column, definition) in new (string, string)[]
+            foreach (var (column, sqlType, backfill) in new (string, string, string)[]
             {
-                ("ListIdsJson", "longtext CHARACTER SET utf8mb4 NOT NULL"),
-                ("Note", "longtext CHARACTER SET utf8mb4 NOT NULL"),
-                ("ClickRate", "decimal(5,2) NOT NULL DEFAULT 0"),
+                ("ListIdsJson", "longtext CHARACTER SET utf8mb4 NULL", "[]"),
+                ("Note", "longtext CHARACTER SET utf8mb4 NULL", ""),
+                ("ClickRate", "decimal(5,2) NOT NULL DEFAULT 0", null!),
             })
             {
                 migrationBuilder.Sql($"""
                     SET @sql = IF(
                         (SELECT COUNT(*) FROM information_schema.columns
                          WHERE table_schema = DATABASE() AND table_name = 'Subscribers' AND column_name = '{column}') = 0,
-                        'ALTER TABLE `Subscribers` ADD `{column}` {definition}',
+                        'ALTER TABLE `Subscribers` ADD `{column}` {sqlType}',
                         'SELECT 1');
                     PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
                     """);
+
+                if (backfill is not null)
+                {
+                    var value = backfill == "[]" ? "'[]'" : "''";
+                    migrationBuilder.Sql($"""
+                        UPDATE `Subscribers` SET `{column}` = {value} WHERE `{column}` IS NULL;
+                        """);
+
+                    migrationBuilder.Sql($"""
+                        SET @sql = IF(
+                            (SELECT IS_NULLABLE FROM information_schema.columns
+                             WHERE table_schema = DATABASE() AND table_name = 'Subscribers' AND column_name = '{column}') = 'YES',
+                            'ALTER TABLE `Subscribers` MODIFY `{column}` longtext CHARACTER SET utf8mb4 NOT NULL',
+                            'SELECT 1');
+                        PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+                        """);
+                }
             }
 
             migrationBuilder.Sql("""

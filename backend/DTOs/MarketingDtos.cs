@@ -96,7 +96,13 @@ public record ContentBundleDto(
     List<EmailTemplateDto> Templates,
     List<ContentBlockDto> Blocks,
     List<BrandColorDto> BrandColors,
-    List<BrandAssetDto> Assets);
+    List<BrandAssetDto> Assets,
+    List<WebsiteTemplateDto> WebsiteTemplates);
+
+public record WebsiteTemplateDto(
+    string Id, string Name, string Category, string PreviewCode, string Description, string HtmlBody, string IconKey,
+    string TemplateKind, string? FormType, string? ThemeGradient, string SuggestedName,
+    string Headline, string BodyDescription, string ButtonText, string ThankYouMessage, string DefaultStatus);
 
 public record CreateContentBlockRequest(
     string Name, string BlockType, string Description, string IconKey);
@@ -107,13 +113,15 @@ public record CreateBrandAssetRequest(string Name, string FileType, long SizeByt
 
 public record SignUpFormDto(
     string Id, string Name, string Type, string Status, int Submissions,
-    decimal ConversionRate, string TargetList, string LastModified, string IconKey);
+    decimal ConversionRate, string TargetList, string? TargetListId, string LastModified, string IconKey,
+    string Headline, string Description, string ButtonText, string ThankYouMessage);
 
 public record SignUpFormStatsDto(string Label, string Value, double Change);
 
 public record LandingPageDto(
-    string Id, string Name, string Status, string Url, int Visits, int Signups,
-    double ConvRate, string ThemeGradient, string IconKey);
+    string Id, string Name, string Status, string Slug, string Url, int Visits, int Signups,
+    double ConvRate, string ThemeGradient, string IconKey,
+    string Headline, string Description, string ButtonText, string ThankYouMessage);
 
 public record WebsiteBundleDto(
     List<SignUpFormStatsDto> Stats,
@@ -122,7 +130,29 @@ public record WebsiteBundleDto(
     List<AudienceListDto> Lists);
 
 public record CreateSignUpFormRequest(
-    string Name, string FormType, string Status, Guid? TargetListId, string? TargetListName);
+    string Name, string FormType, string Status, Guid? TargetListId, string? TargetListName,
+    string? Headline, string? Description, string? ButtonText, string? ThankYouMessage);
+
+public record UpdateSignUpFormRequest(
+    string Name, string FormType, string Status, Guid? TargetListId, string? TargetListName,
+    string? Headline, string? Description, string? ButtonText, string? ThankYouMessage);
 
 public record CreateLandingPageRequest(
-    string Name, string Status, string ThemeGradient, string IconKey);
+    string Name, string Status, string ThemeGradient, string IconKey,
+    string? Headline, string? Description, string? ButtonText, string? ThankYouMessage);
+
+public record UpdateLandingPageRequest(
+    string Name, string Status, string ThemeGradient, string IconKey, string? Slug,
+    string? Headline, string? Description, string? ButtonText, string? ThankYouMessage);
+
+public record PublicFormPreviewDto(
+    string Id, string Name, string FormType, string Status,
+    string Headline, string Description, string ButtonText, string ThankYouMessage);
+
+public record PublicLandingPageDto(
+    string Id, string Name, string Slug, string Status, string ThemeGradient, string IconKey,
+    string Headline, string Description, string ButtonText, string ThankYouMessage);
+
+public record PublicFormSubmitRequest(string Email, string? FirstName);
+
+public record PublicFormSubmitResult(string Message, bool Success);

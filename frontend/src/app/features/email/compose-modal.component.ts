@@ -641,7 +641,7 @@ export class ComposeModalComponent implements OnChanges, OnInit, AfterViewInit {
   actionType: 'send' | 'draft' | 'schedule' | null = null;
   busyMessage = '';
   showScorePanel = false;
-  private readonly maxAttachmentBytes = 10 * 1024 * 1024;
+  private readonly maxAttachmentBytes = 5 * 1024 * 1024;
 
   get isBusy(): boolean {
     return this.actionBusy || this.actionType !== null;
@@ -812,7 +812,7 @@ export class ComposeModalComponent implements OnChanges, OnInit, AfterViewInit {
     input.value = '';
     for (const file of files) {
       if (file.size > this.maxAttachmentBytes) {
-        this.sendError = `"${file.name}" is too large. Max size is 10 MB per file.`;
+        this.sendError = `"${file.name}" is too large. Max size is 5 MB per file.`;
         continue;
       }
       this.attachmentsLoading++;

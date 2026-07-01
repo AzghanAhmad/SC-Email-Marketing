@@ -46,6 +46,7 @@ public static class MigrationHelper
         }
 
         await EnsureCampaignSchemaAsync(db, logger, cancellationToken);
+        await EnsureMySqlPacketSizeAsync(db, logger, cancellationToken);
     }
 
     private static bool IsKeyTooLong(MySqlException ex) =>
@@ -81,6 +82,24 @@ public static class MigrationHelper
             """, cancellationToken);
 
         logger.LogDebug("Campaign schema verified (Status column + UserId/Status index)");
+    }
+
+    private static async Task EnsureMySqlPacketSizeAsync(
+        AppDbContext db,
+        ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "SET GLOBAL max_allowed_packet = 67108864",
+                cancellationToken);
+            logger.LogInformation("MySQL max_allowed_packet set to 64MB");
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Could not set GLOBAL max_allowed_packet (may require elevated DB privileges)");
+        }
     }
 
     private static async Task ReconcileAppliedMigrationsAsync(

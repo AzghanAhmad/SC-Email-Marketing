@@ -104,6 +104,7 @@ public class SignUpForm
     public string TargetListName { get; set; } = "";
     public int Submissions { get; set; }
     public decimal ConversionRate { get; set; }
+    public string ContentJson { get; set; } = "{}";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     public User User { get; set; } = null!;
@@ -120,6 +121,7 @@ public class LandingPage
     public string IconKey { get; set; } = "book";
     public int Visits { get; set; }
     public int Signups { get; set; }
+    public string ContentJson { get; set; } = "{}";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     public User User { get; set; } = null!;

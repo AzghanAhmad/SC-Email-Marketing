@@ -24,6 +24,13 @@ public class ContentController(ContentService content, CampaignService campaigns
         return template is null ? NotFound() : Ok(template);
     }
 
+    [HttpGet("website-templates/{id}")]
+    public ActionResult<WebsiteTemplateDto> GetWebsiteTemplate(string id)
+    {
+        var template = content.GetWebsiteTemplate(id);
+        return template is null ? NotFound() : Ok(template);
+    }
+
     [HttpPost("templates/{id:guid}/use")]
     public async Task<ActionResult<CampaignDto>> UseTemplate(Guid id)
     {

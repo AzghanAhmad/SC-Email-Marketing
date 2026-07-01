@@ -220,6 +220,14 @@ public class CampaignService(AppDbContext db, AudienceService audience, MailboxS
 
         foreach (var recipient in recipients)
         {
+            if (!string.Equals(recipient.Status, "active", StringComparison.OrdinalIgnoreCase))
+            {
+                logger.LogInformation(
+                    "Skipped recipient {Email} — status is {Status}",
+                    recipient.Email, recipient.Status);
+                continue;
+            }
+
             if (recipient.UserId != userId)
             {
                 logger.LogWarning(
@@ -291,6 +299,8 @@ public class CampaignService(AppDbContext db, AudienceService audience, MailboxS
     {
         if (!tracking.TryParseToken(token, out var campaignId, out var subscriberId, out var userId)) return null;
 
+        await RecordCampaignOpenAsync(token);
+
         var campaign = await db.Campaigns.AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == campaignId && c.UserId == userId);
         var subscriber = await db.Subscribers.AsNoTracking()
@@ -319,6 +329,8 @@ public class CampaignService(AppDbContext db, AudienceService audience, MailboxS
                 subscriber.Email,
                 true);
         }
+
+        await RecordCampaignOpenAsync(token);
 
         subscriber.Status = "unsubscribed";
         db.SubscriberActivities.Add(new SubscriberActivity
@@ -373,19 +385,11 @@ public class CampaignService(AppDbContext db, AudienceService audience, MailboxS
             .Where(a => a.CampaignId == campaign.Id)
             .ToListAsync();
 
-        var uniqueOpens = activities
-            .Where(a => a.ActivityType == "campaign_opened")
-            .Select(a => a.SubscriberId)
-            .Distinct()
-            .Count();
-        var uniqueClicks = activities
-            .Where(a => a.ActivityType == "campaign_clicked")
-            .Select(a => a.SubscriberId)
-            .Distinct()
-            .Count();
+        var (uniqueOpens, uniqueClicks, delivered) = MetricsHelper.CampaignEngagement(activities, campaign.Id);
+        var denominator = delivered > 0 ? delivered : campaign.SentCount;
 
-        campaign.OpenRate = Math.Round(uniqueOpens * 100m / campaign.SentCount, 1);
-        campaign.ClickRate = Math.Round(uniqueClicks * 100m / campaign.SentCount, 1);
+        campaign.OpenRate = MetricsHelper.OpenRate(uniqueOpens, denominator);
+        campaign.ClickRate = MetricsHelper.ClickRate(uniqueClicks, denominator);
         campaign.UpdatedAt = DateTime.UtcNow;
     }
 
@@ -395,19 +399,11 @@ public class CampaignService(AppDbContext db, AudienceService audience, MailboxS
             ? await db.SubscriberActivities.Where(a => a.CampaignId == c.Id).ToListAsync()
             : [];
 
-        var uniqueOpens = activities
-            .Where(a => a.ActivityType == "campaign_opened")
-            .Select(a => a.SubscriberId)
-            .Distinct()
-            .Count();
-        var uniqueClicks = activities
-            .Where(a => a.ActivityType == "campaign_clicked")
-            .Select(a => a.SubscriberId)
-            .Distinct()
-            .Count();
-        var conversionRate = uniqueOpens > 0
-            ? Math.Round(uniqueClicks * 100m / uniqueOpens, 1)
-            : 0m;
+        var (uniqueOpens, uniqueClicks, delivered) = MetricsHelper.CampaignEngagement(activities, c.Id);
+        var denominator = delivered > 0 ? delivered : c.SentCount;
+        var openRate = MetricsHelper.OpenRate(uniqueOpens, denominator);
+        var clickRate = MetricsHelper.ClickRate(uniqueClicks, denominator);
+        var conversionRate = MetricsHelper.ConversionRate(uniqueOpens, uniqueClicks);
 
         return new CampaignDto(
             c.Id.ToString(),
@@ -419,8 +415,8 @@ public class CampaignService(AppDbContext db, AudienceService audience, MailboxS
             c.Status,
             c.FromName,
             c.SendToSegment,
-            c.OpenRate,
-            c.ClickRate,
+            openRate,
+            clickRate,
             c.SentCount,
             FormatDate(c.SentAt ?? c.ScheduledAt ?? c.CreatedAt),
             c.ScheduledAt,

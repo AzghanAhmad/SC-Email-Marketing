@@ -44,6 +44,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         mysqlOptions.CommandTimeout(60);
         mysqlOptions.SchemaBehavior(Pomelo.EntityFrameworkCore.MySql.Infrastructure.MySqlSchemaBehavior.Ignore);
     });
+    options.AddInterceptors(new MySqlPacketSizeInterceptor());
 });
 
 builder.Services.AddScoped<JwtTokenService>();

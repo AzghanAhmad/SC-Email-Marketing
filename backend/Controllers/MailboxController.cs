@@ -151,19 +151,37 @@ public class MailboxController(AppDbContext db, MailboxService mailbox) : Contro
 
         var conn = await db.MailboxConnections.FirstOrDefaultAsync(c => c.UserId == GetUserId());
         var fromEmail = conn?.EmailAddress ?? msg.FromEmail;
-        var preview = request.Body.Length > 100 ? request.Body[..100] : request.Body;
+        var body = MailboxContentHelper.PrepareBodyForStorage(request.Body);
+        var attachmentsJson = MailboxService.SerializeAttachments(request.Attachments, msg.AttachmentsJson);
+
+        try
+        {
+            MailboxContentHelper.EnsureFitsDatabase(body, attachmentsJson);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
 
         msg.ToEmail = request.To;
         msg.ToName = string.IsNullOrWhiteSpace(request.To) ? "(no recipient)" : request.To.Split('@')[0];
         msg.Subject = string.IsNullOrWhiteSpace(request.Subject) ? "(no subject)" : request.Subject;
-        msg.Body = request.Body;
-        msg.Preview = string.IsNullOrWhiteSpace(preview) ? "(empty draft)" : preview;
+        msg.Body = body;
+        msg.Preview = MailboxContentHelper.PreparePreview(body);
         msg.FromEmail = fromEmail;
         if (request.ScheduledAt.HasValue && msg.Folder == "scheduled")
             msg.Timestamp = request.ScheduledAt.Value;
-        msg.AttachmentsJson = MailboxService.SerializeAttachments(request.Attachments, msg.AttachmentsJson);
+        msg.AttachmentsJson = attachmentsJson;
 
-        await db.SaveChangesAsync();
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex) when (MailboxContentHelper.IsPacketTooLargeException(ex))
+        {
+            return BadRequest(new { message = MailboxContentHelper.PacketTooLargeUserMessage });
+        }
+
         return Ok(MapMessage(msg));
     }
 
@@ -184,7 +202,17 @@ public class MailboxController(AppDbContext db, MailboxService mailbox) : Contro
     [HttpPost("drafts")]
     public async Task<ActionResult<EmailDto>> SaveDraft([FromBody] SaveDraftRequest request)
     {
-        var preview = request.Body.Length > 100 ? request.Body[..100] : request.Body;
+        var body = MailboxContentHelper.PrepareBodyForStorage(request.Body);
+        var attachmentsJson = MailboxService.SerializeAttachments(request.Attachments);
+        try
+        {
+            MailboxContentHelper.EnsureFitsDatabase(body, attachmentsJson);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+
         var conn = await db.MailboxConnections.FirstOrDefaultAsync(c => c.UserId == GetUserId());
         var fromEmail = conn?.EmailAddress ?? "you@scribecount.com";
 
@@ -197,23 +225,40 @@ public class MailboxController(AppDbContext db, MailboxService mailbox) : Contro
             ToName = string.IsNullOrWhiteSpace(request.To) ? "(no recipient)" : request.To.Split('@')[0],
             ToEmail = request.To,
             Subject = string.IsNullOrWhiteSpace(request.Subject) ? "(no subject)" : request.Subject,
-            Preview = string.IsNullOrWhiteSpace(preview) ? "(empty draft)" : preview,
-            Body = request.Body,
+            Preview = MailboxContentHelper.PreparePreview(body),
+            Body = body,
             Timestamp = DateTime.UtcNow,
             Read = true,
             Starred = false,
             Folder = "drafts",
-            AttachmentsJson = MailboxService.SerializeAttachments(request.Attachments)
+            AttachmentsJson = attachmentsJson
         };
         db.MailboxMessages.Add(msg);
-        await db.SaveChangesAsync();
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex) when (MailboxContentHelper.IsPacketTooLargeException(ex))
+        {
+            return BadRequest(new { message = MailboxContentHelper.PacketTooLargeUserMessage });
+        }
         return Ok(MapMessage(msg));
     }
 
     [HttpPost("schedule")]
     public async Task<ActionResult<EmailDto>> Schedule([FromBody] ScheduleEmailRequest request)
     {
-        var preview = request.Body.Length > 100 ? request.Body[..100] : request.Body;
+        var body = MailboxContentHelper.PrepareBodyForStorage(request.Body);
+        var attachmentsJson = MailboxService.SerializeAttachments(request.Attachments);
+        try
+        {
+            MailboxContentHelper.EnsureFitsDatabase(body, attachmentsJson);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+
         var conn = await db.MailboxConnections.FirstOrDefaultAsync(c => c.UserId == GetUserId());
         var fromEmail = conn?.EmailAddress ?? "you@scribecount.com";
 
@@ -226,16 +271,23 @@ public class MailboxController(AppDbContext db, MailboxService mailbox) : Contro
             ToName = string.IsNullOrWhiteSpace(request.To) ? "(no recipient)" : request.To.Split('@')[0],
             ToEmail = request.To ?? string.Empty,
             Subject = request.Subject,
-            Preview = preview,
-            Body = request.Body,
+            Preview = MailboxContentHelper.PreparePreview(body),
+            Body = body,
             Timestamp = request.ScheduledAt ?? DateTime.UtcNow.AddHours(1),
             Read = true,
             Starred = false,
             Folder = "scheduled",
-            AttachmentsJson = MailboxService.SerializeAttachments(request.Attachments)
+            AttachmentsJson = attachmentsJson
         };
         db.MailboxMessages.Add(msg);
-        await db.SaveChangesAsync();
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex) when (MailboxContentHelper.IsPacketTooLargeException(ex))
+        {
+            return BadRequest(new { message = MailboxContentHelper.PacketTooLargeUserMessage });
+        }
         return Ok(MapMessage(msg));
     }
 

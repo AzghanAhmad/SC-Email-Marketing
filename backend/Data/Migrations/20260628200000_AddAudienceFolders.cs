@@ -55,7 +55,20 @@ namespace ScribeCount.Email.Api.Data.Migrations
                 SET @sql = IF(
                     (SELECT COUNT(*) FROM information_schema.columns
                      WHERE table_schema = DATABASE() AND table_name = 'AudienceSegmentItems' AND column_name = 'RuleConfigJson') = 0,
-                    'ALTER TABLE `AudienceSegmentItems` ADD `RuleConfigJson` longtext CHARACTER SET utf8mb4 NOT NULL DEFAULT ''{}''',
+                    'ALTER TABLE `AudienceSegmentItems` ADD `RuleConfigJson` longtext CHARACTER SET utf8mb4 NULL',
+                    'SELECT 1');
+                PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+                """);
+
+            migrationBuilder.Sql("""
+                UPDATE `AudienceSegmentItems` SET `RuleConfigJson` = '{}' WHERE `RuleConfigJson` IS NULL;
+                """);
+
+            migrationBuilder.Sql("""
+                SET @sql = IF(
+                    (SELECT IS_NULLABLE FROM information_schema.columns
+                     WHERE table_schema = DATABASE() AND table_name = 'AudienceSegmentItems' AND column_name = 'RuleConfigJson') = 'YES',
+                    'ALTER TABLE `AudienceSegmentItems` MODIFY `RuleConfigJson` longtext CHARACTER SET utf8mb4 NOT NULL',
                     'SELECT 1');
                 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
                 """);

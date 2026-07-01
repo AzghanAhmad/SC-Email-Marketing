@@ -17,7 +17,20 @@ namespace ScribeCount.Email.Api.Data.Migrations
                 SET @sql = IF(
                     (SELECT COUNT(*) FROM information_schema.columns
                      WHERE table_schema = DATABASE() AND table_name = 'Subscribers' AND column_name = 'TagsJson') = 0,
-                    'ALTER TABLE `Subscribers` ADD `TagsJson` longtext CHARACTER SET utf8mb4 NOT NULL DEFAULT ''[]''',
+                    'ALTER TABLE `Subscribers` ADD `TagsJson` longtext CHARACTER SET utf8mb4 NULL',
+                    'SELECT 1');
+                PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+                """);
+
+            migrationBuilder.Sql("""
+                UPDATE `Subscribers` SET `TagsJson` = '[]' WHERE `TagsJson` IS NULL;
+                """);
+
+            migrationBuilder.Sql("""
+                SET @sql = IF(
+                    (SELECT IS_NULLABLE FROM information_schema.columns
+                     WHERE table_schema = DATABASE() AND table_name = 'Subscribers' AND column_name = 'TagsJson') = 'YES',
+                    'ALTER TABLE `Subscribers` MODIFY `TagsJson` longtext CHARACTER SET utf8mb4 NOT NULL',
                     'SELECT 1');
                 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
                 """);

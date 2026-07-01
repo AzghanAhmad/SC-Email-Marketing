@@ -20,6 +20,20 @@ export const routes: Routes = [
     loadComponent: () => import('./features/public/campaign-email-view.component').then(m => m.CampaignEmailViewComponent)
   },
   {
+    path: 'p/:slug',
+    loadComponent: () => import('./features/public/landing-page-public.component').then(m => m.LandingPagePublicComponent)
+  },
+  {
+    path: 'website/forms/preview/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/website/sign-up-form-preview.component').then(m => m.SignUpFormPreviewComponent)
+  },
+  {
+    path: 'website/landing-pages/preview/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/website/landing-page-preview.component').then(m => m.LandingPagePreviewComponent)
+  },
+  {
     path: '',
     loadComponent: () => import('./layout/main-layout/main-layout.component').then(m => m.MainLayoutComponent),
     canActivate: [authGuard],

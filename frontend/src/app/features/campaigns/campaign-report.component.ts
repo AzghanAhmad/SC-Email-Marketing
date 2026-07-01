@@ -50,14 +50,14 @@ import {
             <span class="hero-label">Emails Sent</span>
           </div>
           <div class="hero-stat">
-            <span class="hero-val">{{ campaign.openRate }}%</span>
+            <span class="hero-val">{{ displayOpenRate }}%</span>
             <span class="hero-label">Open Rate</span>
-            <div class="hero-bar"><div class="hero-bar-fill blue" [style.width.%]="campaign.openRate"></div></div>
+            <div class="hero-bar"><div class="hero-bar-fill blue" [style.width.%]="displayOpenRate"></div></div>
           </div>
           <div class="hero-stat">
-            <span class="hero-val accent">{{ campaign.clickRate }}%</span>
+            <span class="hero-val accent">{{ displayClickRate }}%</span>
             <span class="hero-label">Click Rate</span>
-            <div class="hero-bar"><div class="hero-bar-fill purple" [style.width.%]="campaign.clickRate * 3"></div></div>
+            <div class="hero-bar"><div class="hero-bar-fill purple" [style.width.%]="displayClickRate * 3"></div></div>
           </div>
         </div>
 
@@ -77,15 +77,15 @@ import {
           </div>
           <div class="stat-card">
             <span class="stat-label">Open Rate</span>
-            <span class="stat-value">{{ campaign.status === 'sent' ? campaign.openRate + '%' : '—' }}</span>
+            <span class="stat-value">{{ campaign.status === 'sent' ? displayOpenRate + '%' : '—' }}</span>
           </div>
           <div class="stat-card">
             <span class="stat-label">Click Rate</span>
-            <span class="stat-value">{{ campaign.status === 'sent' ? campaign.clickRate + '%' : '—' }}</span>
+            <span class="stat-value">{{ campaign.status === 'sent' ? displayClickRate + '%' : '—' }}</span>
           </div>
           <div class="stat-card">
             <span class="stat-label">Date</span>
-            <span class="stat-value">{{ campaign.date }}</span>
+            <span class="stat-value">{{ displayDate }}</span>
           </div>
           <div class="stat-card">
             <span class="stat-label">Unique Opens</span>
@@ -279,6 +279,30 @@ export class CampaignReportComponent implements OnInit {
     return this.sanitizer.bypassSecurityTrustHtml(this.resolvedContent);
   }
 
+  get displayOpenRate(): number {
+    if (!this.campaign || this.campaign.sent <= 0) return 0;
+    const opens = this.campaign.uniqueOpens ?? 0;
+    if (opens > 0) return Math.round(opens * 1000 / this.campaign.sent) / 10;
+    return Number(this.campaign.openRate) || 0;
+  }
+
+  get displayClickRate(): number {
+    if (!this.campaign || this.campaign.sent <= 0) return 0;
+    const clicks = this.campaign.uniqueClicks ?? 0;
+    if (clicks > 0) return Math.round(clicks * 1000 / this.campaign.sent) / 10;
+    return Number(this.campaign.clickRate) || 0;
+  }
+
+  get displayDate(): string {
+    if (!this.campaign) return '—';
+    const raw = this.campaign.sentAt || this.campaign.date;
+    if (!raw) return '—';
+    const d = new Date(raw);
+    return Number.isNaN(d.getTime())
+      ? this.campaign.date
+      : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
   get uniqueOpens(): string {
     if (!this.campaign || this.campaign.sent <= 0) return '—';
     const count = this.campaign.uniqueOpens ?? 0;
@@ -293,8 +317,10 @@ export class CampaignReportComponent implements OnInit {
 
   get conversionRate(): string {
     if (!this.campaign || this.campaign.sent <= 0) return '—';
-    const rate = this.campaign.conversionRate ?? 0;
-    if (this.campaign.uniqueOpens === 0) return '0%';
-    return rate > 0 ? `${rate}%` : '0%';
+    const opens = this.campaign.uniqueOpens ?? 0;
+    const clicks = this.campaign.uniqueClicks ?? 0;
+    if (opens === 0) return '0%';
+    const rate = this.campaign.conversionRate ?? Math.round(clicks * 1000 / opens) / 10;
+    return `${rate}%`;
   }
 }

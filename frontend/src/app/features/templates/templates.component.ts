@@ -3,12 +3,16 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { Router } from '@angular/router';
-import { ContentApiService, EmailTemplate, ContentBlock } from '../../core/services/content-api.service';
+import { ContentApiService, EmailTemplate, ContentBlock, WebsiteTemplate } from '../../core/services/content-api.service';
 import { NAV_ICONS } from '../../core/constants/nav-icons';
 
-type TemplatesTab = 'templates' | 'blocks';
+type TemplatesTab = 'templates' | 'blocks' | 'website';
 
 interface TemplateView extends EmailTemplate {
+  safeHtml: SafeHtml;
+}
+
+interface WebsiteTemplateView extends WebsiteTemplate {
   safeHtml: SafeHtml;
 }
 
@@ -26,7 +30,7 @@ interface BlockView extends ContentBlock {
       <div class="page-header">
         <div>
           <h1 class="page-title">Templates</h1>
-          <p class="page-subtitle">Ready-to-use email templates and reusable content blocks</p>
+          <p class="page-subtitle">Ready-to-use email templates, website pages, and reusable content blocks</p>
         </div>
         <button class="btn-primary" (click)="onHeaderAction()" [attr.data-tooltip]="activeTab() === 'blocks' ? 'Create a new reusable block' : 'Create a custom email template from scratch'">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -40,6 +44,9 @@ interface BlockView extends ContentBlock {
         </button>
         <button class="tab" [class.active]="activeTab() === 'blocks'" (click)="activeTab.set('blocks')">
           Reusable Blocks <span class="tab-count">{{ reusableBlocks().length }}</span>
+        </button>
+        <button class="tab" [class.active]="activeTab() === 'website'" (click)="activeTab.set('website')">
+          Sign-up & Landing <span class="tab-count">{{ websiteTemplates().length }}</span>
         </button>
       </div>
 
@@ -84,6 +91,50 @@ interface BlockView extends ContentBlock {
             <svg viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" stroke-width="1.5" width="48" height="48"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
           </div>
           <h3>No templates found</h3>
+          <p>Try a different category or search term</p>
+        </div>
+      </div>
+
+      <div *ngIf="activeTab() === 'website'">
+        <div class="filter-bar">
+          <button class="filter-btn" [class.active]="websiteCategory() === ''" (click)="websiteCategory.set('')">All</button>
+          <button class="filter-btn" [class.active]="websiteCategory() === 'Sign-up Form'" (click)="websiteCategory.set('Sign-up Form')">Sign-up Forms</button>
+          <button class="filter-btn" [class.active]="websiteCategory() === 'Landing Page'" (click)="websiteCategory.set('Landing Page')">Landing Pages</button>
+          <div class="search-wrap" style="margin-left:auto">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input class="search-input" type="text" placeholder="Search website templates..." [(ngModel)]="websiteSearchQuery" />
+          </div>
+        </div>
+
+        <div class="templates-grid" *ngIf="!loading()">
+          <div class="glass-card template-card" *ngFor="let t of filteredWebsiteTemplates" (click)="openWebsitePreview(t)">
+            <div class="template-preview">
+              <div class="preview-scale-wrap">
+                <div class="preview-html website-preview-html" [innerHTML]="t.safeHtml"></div>
+              </div>
+            </div>
+            <div class="template-body">
+              <div class="template-header-row">
+                <h3 class="template-name">{{ t.name }}</h3>
+                <span class="template-cat">{{ t.category }}</span>
+              </div>
+              <p class="template-subject">{{ t.headline }}</p>
+              <p class="template-desc">{{ t.description }}</p>
+              <div class="template-actions">
+                <button class="btn-primary btn-sm" (click)="useWebsiteTemplate(t, $event)" data-tooltip="Start with this template">
+                  Use Template
+                </button>
+                <button class="btn-ghost btn-sm" (click)="openWebsitePreview(t); $event.stopPropagation()">Preview</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="empty-state" *ngIf="!loading() && filteredWebsiteTemplates.length === 0">
+          <div class="empty-state-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" stroke-width="1.5" width="48" height="48"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          </div>
+          <h3>No website templates found</h3>
           <p>Try a different category or search term</p>
         </div>
       </div>
@@ -230,6 +281,34 @@ interface BlockView extends ContentBlock {
           </div>
         </div>
       </div>
+
+      <div class="modal-overlay" *ngIf="previewWebsite()" (click)="closeWebsitePreview()">
+        <div class="modal-card modal-card-lg" (click)="$event.stopPropagation()">
+          <div class="modal-header">
+            <div>
+              <h2 class="modal-title">{{ previewWebsite()!.name }}</h2>
+              <span class="template-cat">{{ previewWebsite()!.category }}</span>
+            </div>
+            <button class="modal-close" (click)="closeWebsitePreview()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div class="email-meta">
+            <div class="email-meta-row"><span class="email-meta-label">Headline</span><span class="email-meta-value">{{ previewWebsite()!.headline }}</span></div>
+            <div class="email-meta-row"><span class="email-meta-label">Button</span><span class="email-meta-value">{{ previewWebsite()!.buttonText }}</span></div>
+          </div>
+          <div class="modal-preview">
+            <div class="email-frame">
+              <div class="email-frame-inner" [innerHTML]="previewWebsite()!.safeHtml"></div>
+            </div>
+          </div>
+          <p class="modal-desc">{{ previewWebsite()!.description }}</p>
+          <div class="modal-actions">
+            <button class="btn-primary" (click)="useWebsiteTemplate(previewWebsite()!)">Use This Template</button>
+            <button class="btn-secondary" (click)="closeWebsitePreview()">Close</button>
+          </div>
+        </div>
+      </div>
     </div>
   `,
   styles: [`
@@ -247,6 +326,7 @@ interface BlockView extends ContentBlock {
     .template-preview { background:#f8fafc; border-bottom:1.5px solid #f1f5f9; height:200px; overflow:hidden; position:relative; transition:background .2s; }
     .preview-scale-wrap { position:absolute; inset:0; overflow:hidden; }
     .preview-html { transform:scale(0.42); transform-origin:top left; width:238%; pointer-events:none; }
+    .website-preview-html { transform:scale(0.55); transform-origin:top left; width:182%; }
 
     .template-body { padding:1.125rem; }
     .template-header-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:.375rem; gap:.5rem; }
@@ -338,6 +418,10 @@ export class TemplatesComponent implements OnInit {
   searchQuery = '';
   previewTemplate = signal<TemplateView | null>(null);
   categories = signal<string[]>([]);
+  websiteTemplates = signal<WebsiteTemplateView[]>([]);
+  websiteCategory = signal('');
+  websiteSearchQuery = '';
+  previewWebsite = signal<WebsiteTemplateView | null>(null);
   reusableBlocks = signal<BlockView[]>([]);
   blocksEmptyIcon = this.sanitizer.bypassSecurityTrustHtml(NAV_ICONS['blocks']);
   previewBlock = signal<BlockView | null>(null);
@@ -435,6 +519,7 @@ export class TemplatesComponent implements OnInit {
       next: bundle => {
         this.templates.set(bundle.templates.map(t => this.toTemplateView(t)));
         this.categories.set([...new Set(bundle.templates.map(t => t.category))]);
+        this.websiteTemplates.set((bundle.websiteTemplates ?? []).map(t => this.toWebsiteTemplateView(t)));
         this.reusableBlocks.set(bundle.blocks.map(b => this.toBlockView(b)));
         this.loading.set(false);
       },
@@ -452,6 +537,18 @@ export class TemplatesComponent implements OnInit {
         html || '<p style="padding:16px;color:#94a3b8;font-family:sans-serif;">Preview unavailable</p>'
       ),
     };
+  }
+
+  get filteredWebsiteTemplates() {
+    return this.websiteTemplates().filter(t => {
+      const matchCat = !this.websiteCategory() || t.category === this.websiteCategory();
+      const q = this.websiteSearchQuery.toLowerCase();
+      const matchQ = !q
+        || t.name.toLowerCase().includes(q)
+        || t.description.toLowerCase().includes(q)
+        || t.headline.toLowerCase().includes(q);
+      return matchCat && matchQ;
+    });
   }
 
   get filteredTemplates() {
@@ -485,6 +582,32 @@ export class TemplatesComponent implements OnInit {
   closePreview() {
     this.previewTemplate.set(null);
     this.previewLoading.set(false);
+  }
+
+  useWebsiteTemplate(t: WebsiteTemplateView, event?: Event) {
+    event?.stopPropagation();
+    this.closeWebsitePreview();
+    if (t.templateKind === 'signup-form') {
+      this.router.navigate(['/website/sign-up-forms'], { queryParams: { template: t.id } });
+      return;
+    }
+    this.router.navigate(['/website/landing-pages'], { queryParams: { template: t.id } });
+  }
+
+  openWebsitePreview(t: WebsiteTemplateView) {
+    this.previewWebsite.set(t);
+  }
+
+  closeWebsitePreview() {
+    this.previewWebsite.set(null);
+  }
+
+  private toWebsiteTemplateView(t: WebsiteTemplate): WebsiteTemplateView {
+    return {
+      ...t,
+      htmlBody: t.htmlBody ?? '',
+      safeHtml: this.sanitizer.bypassSecurityTrustHtml(t.htmlBody || '<p style="padding:24px;color:#94a3b8;">Preview unavailable</p>'),
+    };
   }
 
   useTemplate(t: TemplateView, event?: Event) {

@@ -43,25 +43,38 @@ public class AnalyticsService(AppDbContext db)
         var prevSent = prevCampaigns.Sum(c => c.SentCount);
         var sentChange = PctChange(prevSent, totalSent);
 
-        var openRate = WeightedRate(periodCampaigns, c => (double)c.OpenRate);
-        var prevOpenRate = WeightedRate(prevCampaigns, c => (double)c.OpenRate);
+        var activities = await db.SubscriberActivities.Where(a => a.UserId == userId).ToListAsync();
+
+        var periodSentActs = CountSends(activities, periodStart, periodEnd);
+        var prevSentActs = CountSends(activities, prevStart, periodStart);
+        var periodOpens = CountUniqueOpens(activities, periodStart, periodEnd);
+        var prevOpens = CountUniqueOpens(activities, prevStart, periodStart);
+
+        var openRate = periodSentActs > 0 ? Math.Round(periodOpens * 100.0 / periodSentActs, 1) : 0;
+        var prevOpenRate = prevSentActs > 0 ? Math.Round(prevOpens * 100.0 / prevSentActs, 1) : 0;
         var openChange = openRate - prevOpenRate;
 
-        var clickRate = WeightedRate(periodCampaigns, c => (double)c.ClickRate);
-        var prevClickRate = WeightedRate(prevCampaigns, c => (double)c.ClickRate);
+        var periodClicks = CountUniqueClicks(activities, periodStart, periodEnd);
+        var prevClicks = CountUniqueClicks(activities, prevStart, periodStart);
+        var clickRate = periodSentActs > 0 ? Math.Round(periodClicks * 100.0 / periodSentActs, 1) : 0;
+        var prevClickRate = prevSentActs > 0 ? Math.Round(prevClicks * 100.0 / prevSentActs, 1) : 0;
         var clickChange = clickRate - prevClickRate;
 
         var clickToOpen = openRate > 0 ? clickRate / openRate * 100 : 0;
         var prevClickToOpen = prevOpenRate > 0 ? prevClickRate / prevOpenRate * 100 : 0;
         var ctoChange = clickToOpen - prevClickToOpen;
 
-        var conversionRate = clickRate * 0.16;
-        var convChange = (clickRate - prevClickRate) * 0.16;
+        var conversionRate = openRate > 0 ? Math.Round(clickRate / openRate * 100, 1) : 0;
+        var convChange = openRate > 0 && prevOpenRate > 0
+            ? Math.Round(clickRate / openRate * 100 - prevClickRate / prevOpenRate * 100, 1)
+            : 0;
 
-        var revenuePerEmail = totalSent > 0 ? (decimal)clickRate * 0.17m : 0;
-        var totalRevenue = totalSent * revenuePerEmail;
-        var prevRevenue = prevSent > 0 ? prevSent * (decimal)prevClickRate * 0.17m : 0;
-        var revenueChange = prevRevenue == 0 ? 0 : (double)((totalRevenue - prevRevenue) / prevRevenue * 100);
+        var totalRevenue = MetricsHelper.SumSaleRevenue(activities, periodStart, periodEnd);
+        var prevRevenue = MetricsHelper.SumSaleRevenue(activities, prevStart, periodStart);
+        var revenueChange = prevRevenue == 0
+            ? (totalRevenue > 0 ? 100.0 : 0)
+            : (double)((totalRevenue - prevRevenue) / prevRevenue * 100);
+        var revenuePerEmail = totalSent > 0 ? totalRevenue / totalSent : 0;
 
         var bounceRate = subscribers.Count == 0 ? 0 : subscribers.Count(s => s.Status == "bounced") / (double)subscribers.Count * 100;
         var unsubRate = subscribers.Count == 0 ? 0 : subscribers.Count(s => s.Status == "unsubscribed") / (double)subscribers.Count * 100;
@@ -79,7 +92,7 @@ public class AnalyticsService(AppDbContext db)
         var volumeData = BuildVolumeData(allCampaigns);
         var engagementTrend = BuildEngagementTrend(allCampaigns);
         var engBreakdown = BuildEngagementBreakdown(openRate, clickRate, unsubRate);
-        var campaignFunnel = BuildCampaignFunnel(periodCampaigns);
+        var campaignFunnel = BuildCampaignFunnel(periodCampaigns, activities);
 
         var metrics = new List<MetricCardDto>
         {
@@ -87,19 +100,19 @@ public class AnalyticsService(AppDbContext db)
             new("Click Rate", $"{clickRate:0.1}%", clickChange, "#8b5cf6", Sparkline(clickRate, prevClickRate)),
             new("Bounce Rate", $"{bounceRate:0.1}%", 0, "#ef4444", "0,8 20,10 40,12 60,15 80,18 100,20"),
             new("Unsubscribe Rate", $"{unsubRate:0.1}%", 0, "#f59e0b", "0,15 20,12 40,14 60,10 80,8 100,6"),
-            new("Revenue/Email", totalSent > 0 ? $"${revenuePerEmail:0.00}" : "$0.00", revenueChange, "#10b981", Sparkline((double)revenuePerEmail, prevSent > 0 ? prevClickRate * 0.17 : 0)),
+            new("Revenue/Email", totalSent > 0 ? $"${revenuePerEmail:0.00}" : "$0.00", revenueChange, "#10b981", Sparkline((double)revenuePerEmail, prevSent > 0 ? (double)(prevRevenue / prevSent) : 0)),
             new("List Growth", $"+{GrowthThisPeriod(subscribers, periodStart)}", 0, "#6366f1", "0,25 20,20 40,22 60,15 80,10 100,8")
         };
 
-        var totalOpens = (int)(totalSent * openRate / 100);
-        var prevOpens = (int)(prevSent * prevOpenRate / 100);
-        var totalClicks = (int)(totalSent * clickRate / 100);
-        var prevClicks = (int)(prevSent * prevClickRate / 100);
+        var totalOpens = periodOpens;
+        var prevOpensCount = prevOpens;
+        var totalClicks = periodClicks;
+        var prevClicksCount = prevClicks;
 
         var metricDetails = new List<MetricDetailRowDto>
         {
-            new("Total Opens", totalOpens.ToString("N0"), prevOpens.ToString("N0"), PctChange(prevOpens, totalOpens), "0,18 15,14 30,16 45,10 60,8"),
-            new("Unique Clicks", totalClicks.ToString("N0"), prevClicks.ToString("N0"), PctChange(prevClicks, totalClicks), "0,16 15,14 30,12 45,10 60,6"),
+            new("Total Opens", totalOpens.ToString("N0"), prevOpensCount.ToString("N0"), PctChange(prevOpensCount, totalOpens), "0,18 15,14 30,16 45,10 60,8"),
+            new("Unique Clicks", totalClicks.ToString("N0"), prevClicksCount.ToString("N0"), PctChange(prevClicksCount, totalClicks), "0,16 15,14 30,12 45,10 60,6"),
             new("Deliverability", $"{100 - bounceRate:0.0}%", "—", 0, "0,10 15,8 30,9 45,6 60,4"),
             new("Spam Complaints", "0.00%", "—", 0, "0,15 15,12 30,14 45,10 60,8"),
             new("Revenue (Total)", totalRevenue > 0 ? $"${totalRevenue:0,0}" : "$0", prevRevenue > 0 ? $"${prevRevenue:0,0}" : "$0", revenueChange, "0,18 15,15 30,12 45,8 60,4")
@@ -233,17 +246,19 @@ public class AnalyticsService(AppDbContext db)
         ];
     }
 
-    private static List<CampaignFunnelRowDto> BuildCampaignFunnel(List<Campaign> campaigns)
+    private static List<CampaignFunnelRowDto> BuildCampaignFunnel(List<Campaign> campaigns, List<SubscriberActivity> activities)
     {
         return campaigns.Take(8).Select(c =>
         {
-            var delivered = (int)(c.SentCount * 0.975);
-            var opens = (int)(c.SentCount * (double)c.OpenRate / 100);
-            var clicks = (int)(c.SentCount * (double)c.ClickRate / 100);
-            var purchases = (int)(clicks * 0.14);
-            var revenue = purchases * 23.5m;
+            var (opens, clicks, delivered) = MetricsHelper.CampaignEngagement(activities, c.Id);
+            var denominator = delivered > 0 ? delivered : c.SentCount;
+            var purchases = activities.Count(a =>
+                a.CampaignId == c.Id && MetricsHelper.IsPurchaseActivity(a));
+            var revenue = activities
+                .Where(a => a.CampaignId == c.Id && MetricsHelper.IsPurchaseActivity(a))
+                .Sum(MetricsHelper.ParseSaleAmount);
             return new CampaignFunnelRowDto(
-                c.Name, c.SentCount, delivered, opens, clicks, purchases,
+                c.Name, c.SentCount, denominator, opens, clicks, purchases,
                 revenue > 0 ? $"${revenue:0,0}" : "$0");
         }).ToList();
     }
@@ -353,4 +368,31 @@ public class AnalyticsService(AppDbContext db)
 
         return (kpis, trend, outcomes, flaggedQueue);
     }
+
+    private static int CountSends(IReadOnlyList<SubscriberActivity> activities, DateTime from, DateTime to) =>
+        activities.Count(a =>
+            a.ActivityType == "campaign_sent"
+            && a.OccurredAt >= from
+            && a.OccurredAt < to);
+
+    private static int CountUniqueOpens(IReadOnlyList<SubscriberActivity> activities, DateTime from, DateTime to) =>
+        activities
+            .Where(a =>
+                (a.ActivityType == "campaign_opened"
+                 || a.ActivityType is "unsubscribed" or "unsubscribe")
+                && a.OccurredAt >= from
+                && a.OccurredAt < to)
+            .Select(a => (a.SubscriberId, a.CampaignId))
+            .Distinct()
+            .Count();
+
+    private static int CountUniqueClicks(IReadOnlyList<SubscriberActivity> activities, DateTime from, DateTime to) =>
+        activities
+            .Where(a =>
+                a.ActivityType == "campaign_clicked"
+                && a.OccurredAt >= from
+                && a.OccurredAt < to)
+            .Select(a => (a.SubscriberId, a.CampaignId))
+            .Distinct()
+            .Count();
 }
