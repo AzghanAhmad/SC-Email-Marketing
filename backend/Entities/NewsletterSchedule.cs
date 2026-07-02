@@ -15,6 +15,8 @@ public class NewsletterSchedule
     public string ReplyQuestion { get; set; } = "";
     public string Content { get; set; } = "";
     public string Status { get; set; } = "draft";
+    public DateTime? NextSendAt { get; set; }
+    public DateTime? LastSentAt { get; set; }
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
     public User User { get; set; } = null!;

@@ -5,6 +5,7 @@ import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { Router } from '@angular/router';
 import { ContentApiService, EmailTemplate, ContentBlock, WebsiteTemplate } from '../../core/services/content-api.service';
 import { NAV_ICONS } from '../../core/constants/nav-icons';
+import { BLOCK_TYPES } from '../../core/constants/block-types';
 
 type TemplatesTab = 'templates' | 'blocks' | 'website';
 
@@ -52,7 +53,11 @@ interface BlockView extends ContentBlock {
 
       <div *ngIf="activeTab() === 'templates'">
         <div class="filter-bar">
-          <button class="filter-btn" [class.active]="activeCategory() === ''" (click)="activeCategory.set('')">All</button>
+          <button class="filter-btn" [class.active]="templateKindFilter() === ''" (click)="templateKindFilter.set('')">All</button>
+          <button class="filter-btn" [class.active]="templateKindFilter() === 'catalog'" (click)="templateKindFilter.set('catalog')">Catalog</button>
+          <button class="filter-btn" [class.active]="templateKindFilter() === 'custom'" (click)="templateKindFilter.set('custom')">Custom</button>
+          <span class="filter-divider"></span>
+          <button class="filter-btn" [class.active]="activeCategory() === ''" (click)="activeCategory.set('')">All Categories</button>
           <button class="filter-btn" *ngFor="let cat of categories()" [class.active]="activeCategory() === cat" (click)="activeCategory.set(cat)">{{ cat }}</button>
           <div class="search-wrap" style="margin-left:auto">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -80,6 +85,7 @@ interface BlockView extends ContentBlock {
                 <button class="btn-primary btn-sm" (click)="useTemplate(t, $event)" [disabled]="usingId() === t.id" data-tooltip="Use this template to create a campaign">
                   {{ usingId() === t.id ? 'Creating…' : 'Use Template' }}
                 </button>
+                <button class="btn-ghost btn-sm" *ngIf="t.isCustom" (click)="openCustomEditor(t, $event)" data-tooltip="Edit custom template body">Edit</button>
                 <button class="btn-ghost btn-sm" (click)="openPreview(t); $event.stopPropagation()" data-tooltip="Preview this template">Preview</button>
               </div>
             </div>
@@ -140,6 +146,12 @@ interface BlockView extends ContentBlock {
       </div>
 
       <div *ngIf="activeTab() === 'blocks'">
+        <div class="filter-bar block-type-filter">
+          <span class="filter-label">Available Block Types</span>
+          <button class="filter-btn" [class.active]="activeBlockTypeFilter() === ''" (click)="activeBlockTypeFilter.set('')">All</button>
+          <button class="filter-btn" *ngFor="let bt of blockTypes" [class.active]="activeBlockTypeFilter() === bt.name" (click)="activeBlockTypeFilter.set(bt.name)">{{ bt.name }}</button>
+        </div>
+
         <div class="blocks-explainer glass-card">
           <div class="be-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
@@ -153,7 +165,7 @@ interface BlockView extends ContentBlock {
         <div class="loading-state" *ngIf="loading()">Loading blocks…</div>
 
         <div class="blocks-grid" *ngIf="!loading()">
-          <div class="glass-card block-card" *ngFor="let block of reusableBlocks()" (click)="openBlockPreview(block)">
+          <div class="glass-card block-card" *ngFor="let block of filteredReusableBlocks" (click)="openBlockPreview(block)">
             <div class="block-preview">
               <div class="preview-scale-wrap block-scale">
                 <div class="preview-html" [innerHTML]="block.safeHtml"></div>
@@ -167,32 +179,21 @@ interface BlockView extends ContentBlock {
               <p class="block-desc">{{ block.description }}</p>
               <div class="block-meta">Used in {{ block.usedIn }} campaign{{ block.usedIn === 1 ? '' : 's' }}</div>
               <div class="block-actions">
-                <button class="btn-primary btn-sm" (click)="insertBlock(block, $event)" [disabled]="usingBlockId() === block.id" data-tooltip="Start a campaign draft with this block">
-                  {{ usingBlockId() === block.id ? 'Opening…' : 'Insert Block' }}
+                <button class="btn-primary btn-sm" (click)="openBlockTemplatePicker(block, $event)" [disabled]="addingBlockId() === block.id" data-tooltip="Add this block to a custom template">
+                  {{ addingBlockId() === block.id ? 'Adding…' : 'Add to Template' }}
                 </button>
                 <button class="btn-ghost btn-sm" (click)="openBlockPreview(block, $event)" data-tooltip="Preview this reusable block">Preview</button>
+                <button class="btn-ghost btn-sm" (click)="insertBlock(block, $event)" data-tooltip="Use in a campaign draft">Use in Campaign</button>
               </div>
             </div>
           </div>
         </div>
 
-        <div class="glass-card empty-card" *ngIf="!loading() && reusableBlocks().length === 0">
+        <div class="glass-card empty-card" *ngIf="!loading() && filteredReusableBlocks.length === 0">
           <span class="nav-icon empty-icon" [innerHTML]="blocksEmptyIcon"></span>
-          <p>No reusable blocks yet. Click <strong>New Block</strong> to create your first one.</p>
-          <button class="btn-primary btn-sm" (click)="openCreateBlock()">Create Block</button>
-        </div>
-
-        <div class="glass-card block-types-guide">
-          <h3 class="btg-title">Available Block Types</h3>
-          <div class="btg-grid">
-            <div class="btg-item" *ngFor="let bt of blockTypes">
-              <span class="nav-icon btg-icon" [innerHTML]="bt.safeIcon"></span>
-              <div>
-                <div class="btg-name">{{ bt.name }}</div>
-                <div class="btg-desc">{{ bt.description }}</div>
-              </div>
-            </div>
-          </div>
+          <p *ngIf="reusableBlocks().length === 0">No reusable blocks yet. Click <strong>New Block</strong> to create your first one.</p>
+          <p *ngIf="reusableBlocks().length > 0">No blocks match this type filter.</p>
+          <button class="btn-primary btn-sm" *ngIf="reusableBlocks().length === 0" (click)="openCreateBlock()">Create Block</button>
         </div>
       </div>
 
@@ -214,9 +215,10 @@ interface BlockView extends ContentBlock {
             </div>
           </div>
           <div class="modal-actions">
-            <button class="btn-primary" (click)="insertBlock(previewBlock()!)" [disabled]="usingBlockId() === previewBlock()!.id">
-              {{ usingBlockId() === previewBlock()!.id ? 'Opening…' : 'Use in Campaign' }}
+            <button class="btn-primary" (click)="openBlockTemplatePicker(previewBlock()!)" [disabled]="addingBlockId() === previewBlock()!.id">
+              {{ addingBlockId() === previewBlock()!.id ? 'Adding…' : 'Add to Template' }}
             </button>
+            <button class="btn-ghost" (click)="insertBlock(previewBlock()!)">Use in Campaign</button>
             <button class="btn-secondary" (click)="closeBlockPreview()">Close</button>
           </div>
         </div>
@@ -309,10 +311,107 @@ interface BlockView extends ContentBlock {
           </div>
         </div>
       </div>
+
+      <div class="modal-overlay" *ngIf="showCreateCustom()" (click)="showCreateCustom.set(false)">
+        <div class="modal-card" (click)="$event.stopPropagation()">
+          <h2 class="modal-title">Create Custom Template</h2>
+          <p class="modal-desc">Build a template from reusable blocks. Only custom templates accept block inserts.</p>
+          <div class="form-group">
+            <label class="form-label">Name <span class="req">*</span></label>
+            <input class="form-input" [(ngModel)]="customDraft.name" placeholder="Monthly newsletter layout" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Subject line</label>
+            <input class="form-input" [(ngModel)]="customDraft.subjectLine" placeholder="From the Author's Desk" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Description</label>
+            <input class="form-input" [(ngModel)]="customDraft.description" placeholder="My go-to newsletter shell" />
+          </div>
+          <div class="modal-actions">
+            <button class="btn-secondary" (click)="showCreateCustom.set(false)">Cancel</button>
+            <button class="btn-primary" (click)="createCustomTemplate()" [disabled]="!customDraft.name.trim() || creatingCustom()">
+              {{ creatingCustom() ? 'Creating…' : 'Create & Edit' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-overlay" *ngIf="editingCustom()" (click)="closeCustomEditor()">
+        <div class="modal-card modal-card-xl" (click)="$event.stopPropagation()">
+          <div class="modal-header">
+            <div>
+              <h2 class="modal-title">Edit Custom Template</h2>
+              <span class="template-cat">Custom</span>
+            </div>
+            <button class="modal-close" (click)="closeCustomEditor()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div class="editor-grid">
+            <div class="editor-main">
+              <div class="form-group">
+                <label class="form-label">Template name</label>
+                <input class="form-input" [(ngModel)]="customEditorDraft.name" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Subject line</label>
+                <input class="form-input" [(ngModel)]="customEditorDraft.subjectLine" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Body HTML</label>
+                <textarea class="form-input html-editor" rows="14" [(ngModel)]="customEditorDraft.htmlBody" (ngModelChange)="refreshCustomPreview()"></textarea>
+              </div>
+            </div>
+            <div class="editor-sidebar">
+              <h4 class="sidebar-title">Insert Reusable Block</h4>
+              <p class="sidebar-desc">Click a block to append it to the template body.</p>
+              <button class="sidebar-block" *ngFor="let block of reusableBlocks()" (click)="appendBlockInEditor(block)">
+                <span class="sidebar-block-name">{{ block.name }}</span>
+                <span class="sidebar-block-type">{{ block.type }}</span>
+              </button>
+            </div>
+          </div>
+          <div class="modal-preview">
+            <div class="email-frame">
+              <div class="email-frame-inner" [innerHTML]="customEditorPreview()"></div>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button class="btn-primary" (click)="saveCustomEditor()" [disabled]="savingCustom()">
+              {{ savingCustom() ? 'Saving…' : 'Save Template' }}
+            </button>
+            <button class="btn-ghost danger-text" (click)="deleteCustomTemplate()">Delete</button>
+            <button class="btn-secondary" (click)="closeCustomEditor()">Close</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-overlay" *ngIf="blockPickerBlock()" (click)="blockPickerBlock.set(null)">
+        <div class="modal-card" (click)="$event.stopPropagation()">
+          <h2 class="modal-title">Add to Custom Template</h2>
+          <p class="modal-desc">Choose a custom template for <strong>{{ blockPickerBlock()!.name }}</strong></p>
+          <div class="picker-list" *ngIf="customTemplates.length > 0">
+            <button class="picker-item" *ngFor="let t of customTemplates" (click)="addBlockToTemplate(t.id)" [disabled]="addingBlockId() === blockPickerBlock()!.id">
+              {{ t.name }}
+            </button>
+          </div>
+          <p class="modal-desc" *ngIf="customTemplates.length === 0">
+            No custom templates yet. Create one first, then add reusable blocks to its body.
+          </p>
+          <div class="modal-actions">
+            <button class="btn-secondary" (click)="blockPickerBlock.set(null)">Cancel</button>
+            <button class="btn-primary" *ngIf="customTemplates.length === 0" (click)="blockPickerBlock.set(null); showCreateCustom.set(true)">Create Custom Template</button>
+          </div>
+        </div>
+      </div>
     </div>
   `,
   styles: [`
     .filter-bar { display:flex; align-items:center; gap:.5rem; margin-bottom:1.5rem; flex-wrap:wrap; }
+    .block-type-filter { margin-bottom:1rem; }
+    .filter-label { font-size:.8125rem; font-weight:700; color:#0f172a; margin-right:.25rem; }
+    .filter-divider { width:1px; height:24px; background:#e2e8f0; margin:0 .25rem; }
     .filter-btn { padding:.5rem 1rem; border-radius:10px; border:1.5px solid #e2e8f0; background:white; color:#64748b; font-size:.8125rem; font-weight:500; font-family:inherit; cursor:pointer; transition:all .2s; }
     .filter-btn:hover { border-color:#93c5fd; color:#0f172a; }
     .filter-btn.active { background:#eff6ff; border-color:#93c5fd; color:#3b82f6; font-weight:600; }
@@ -392,16 +491,24 @@ interface BlockView extends ContentBlock {
     .block-type-badge { font-size:.7rem; font-weight:700; padding:.2rem .55rem; background:rgba(99,102,241,0.08); color:#6366f1; border-radius:6px; text-transform:uppercase; letter-spacing:.04em; white-space:nowrap; }
     .block-desc { font-size:.8rem; color:#94a3b8; margin:0 0 .5rem; line-height:1.5; }
     .block-meta { font-size:.75rem; color:#cbd5e1; margin-bottom:.875rem; }
-    .block-actions { display:flex; gap:.5rem; align-items:center; }
-    .block-types-guide { padding:1.5rem; }
-    .btg-title { font-size:.875rem; font-weight:700; color:#0f172a; margin:0 0 1rem; }
-    .btg-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:.75rem; }
-    .btg-item { display:flex; align-items:flex-start; gap:.75rem; padding:.75rem; background:#f8fafc; border-radius:10px; }
-    .btg-icon { width:32px; height:32px; border-radius:8px; background:#f8fafc; border:1.5px solid #f1f5f9; flex-shrink:0; }
-    .btg-name { font-size:.8125rem; font-weight:600; color:#0f172a; margin-bottom:.15rem; }
-    .btg-desc { font-size:.75rem; color:#94a3b8; line-height:1.4; }
-    @media(max-width:900px) { .blocks-grid { grid-template-columns:repeat(2,1fr); } .btg-grid { grid-template-columns:repeat(2,1fr); } }
-    @media(max-width:600px) { .blocks-grid { grid-template-columns:1fr; } .btg-grid { grid-template-columns:1fr; } }
+    .block-actions { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
+    .modal-card-xl { max-width:960px; }
+    .req { color:#ef4444; }
+    .editor-grid { display:grid; grid-template-columns:1fr 240px; gap:1.25rem; margin-bottom:1rem; }
+    .html-editor { font-family:monospace; font-size:.78rem; resize:vertical; }
+    .editor-sidebar { border:1.5px solid #e2e8f0; border-radius:12px; padding:1rem; max-height:360px; overflow-y:auto; }
+    .sidebar-title { margin:0 0 .35rem; font-size:.875rem; font-weight:700; color:#0f172a; }
+    .sidebar-desc { margin:0 0 .875rem; font-size:.75rem; color:#94a3b8; line-height:1.4; }
+    .sidebar-block { display:flex; flex-direction:column; align-items:flex-start; width:100%; padding:.625rem .75rem; margin-bottom:.5rem; border:1.5px solid #f1f5f9; border-radius:8px; background:#f8fafc; cursor:pointer; text-align:left; font-family:inherit; }
+    .sidebar-block:hover { border-color:#93c5fd; background:#eff6ff; }
+    .sidebar-block-name { font-size:.8125rem; font-weight:600; color:#0f172a; }
+    .sidebar-block-type { font-size:.68rem; color:#64748b; margin-top:.15rem; }
+    .picker-list { display:flex; flex-direction:column; gap:.5rem; margin-bottom:1rem; }
+    .picker-item { padding:.75rem 1rem; border:1.5px solid #e2e8f0; border-radius:10px; background:#fff; text-align:left; cursor:pointer; font-family:inherit; font-size:.875rem; font-weight:500; }
+    .picker-item:hover { border-color:#93c5fd; background:#eff6ff; }
+    .danger-text { color:#ef4444 !important; }
+    @media(max-width:900px) { .editor-grid { grid-template-columns:1fr; } .blocks-grid { grid-template-columns:repeat(2,1fr); } }
+    @media(max-width:600px) { .blocks-grid { grid-template-columns:1fr; } }
   `]
 })
 export class TemplatesComponent implements OnInit {
@@ -414,6 +521,8 @@ export class TemplatesComponent implements OnInit {
   usingId = signal<string | null>(null);
   previewLoading = signal(false);
   activeTab = signal<TemplatesTab>('templates');
+  templateKindFilter = signal('');
+  activeBlockTypeFilter = signal('');
   activeCategory = signal('');
   searchQuery = '';
   previewTemplate = signal<TemplateView | null>(null);
@@ -428,16 +537,18 @@ export class TemplatesComponent implements OnInit {
   showCreateBlock = signal(false);
   creatingBlock = signal(false);
   usingBlockId = signal<string | null>(null);
+  addingBlockId = signal<string | null>(null);
+  blockPickerBlock = signal<BlockView | null>(null);
+  showCreateCustom = signal(false);
+  creatingCustom = signal(false);
+  editingCustom = signal<TemplateView | null>(null);
+  savingCustom = signal(false);
+  customEditorPreview = signal<SafeHtml>('');
+  customDraft = { name: '', subjectLine: '', description: '' };
+  customEditorDraft = { name: '', subjectLine: '', htmlBody: '' };
   blockDraft = { name: '', blockType: 'Book Card', description: '', iconKey: 'book' };
 
-  blockTypes = [
-    { name: 'Book Card', description: 'Cover, title, tagline, and buy button for a single title', iconKey: 'book' },
-    { name: 'Series Reading Order', description: 'Numbered book list with covers for series readers', iconKey: 'blocks' },
-    { name: 'Pull Quote', description: 'Styled reader review or excerpt with accent border', iconKey: 'star' },
-    { name: 'CTA Button', description: 'Centered call-to-action button with custom label and URL', iconKey: 'link' },
-    { name: 'Author Bio', description: 'Headshot, short bio, and social links', iconKey: 'users' },
-    { name: 'Social Follow Row', description: 'Follow icons for Instagram, Facebook, Goodreads, and more', iconKey: 'globe' },
-  ].map(bt => ({
+  blockTypes = BLOCK_TYPES.map(bt => ({
     ...bt,
     safeIcon: this.sanitizer.bypassSecurityTrustHtml(NAV_ICONS[bt.iconKey]),
   }));
@@ -451,7 +562,129 @@ export class TemplatesComponent implements OnInit {
       this.openCreateBlock();
       return;
     }
+    if (this.activeTab() === 'templates') {
+      this.openCreateCustom();
+      return;
+    }
     this.router.navigate(['/campaigns'], { queryParams: { create: '1' } });
+  }
+
+  openCreateCustom() {
+    this.customDraft = { name: '', subjectLine: '', description: '' };
+    this.showCreateCustom.set(true);
+  }
+
+  createCustomTemplate() {
+    if (!this.customDraft.name.trim() || this.creatingCustom()) return;
+    this.creatingCustom.set(true);
+    this.contentApi.createCustomTemplate({
+      name: this.customDraft.name.trim(),
+      subjectLine: this.customDraft.subjectLine.trim(),
+      description: this.customDraft.description.trim(),
+    }).subscribe({
+      next: template => {
+        this.creatingCustom.set(false);
+        this.showCreateCustom.set(false);
+        this.loadContent();
+        this.openCustomEditor(this.toTemplateView(template));
+      },
+      error: () => this.creatingCustom.set(false),
+    });
+  }
+
+  openCustomEditor(t: TemplateView, event?: Event) {
+    event?.stopPropagation();
+    this.editingCustom.set(t);
+    this.customEditorDraft = {
+      name: t.name,
+      subjectLine: t.subjectLine,
+      htmlBody: t.htmlBody,
+    };
+    this.refreshCustomPreview();
+  }
+
+  closeCustomEditor() {
+    this.editingCustom.set(null);
+  }
+
+  refreshCustomPreview() {
+    this.customEditorPreview.set(
+      this.sanitizer.bypassSecurityTrustHtml(
+        this.customEditorDraft.htmlBody || '<p style="padding:24px;color:#94a3b8;">Add reusable blocks to build your template.</p>'
+      )
+    );
+  }
+
+  saveCustomEditor() {
+    const editing = this.editingCustom();
+    if (!editing || this.savingCustom()) return;
+    this.savingCustom.set(true);
+    this.contentApi.updateTemplate(editing.id, {
+      name: this.customEditorDraft.name.trim(),
+      subjectLine: this.customEditorDraft.subjectLine.trim(),
+      htmlBody: this.customEditorDraft.htmlBody,
+    }).subscribe({
+      next: updated => {
+        this.savingCustom.set(false);
+        const view = this.toTemplateView(updated);
+        this.editingCustom.set(view);
+        this.templates.update(list => list.map(item => item.id === view.id ? view : item));
+      },
+      error: () => this.savingCustom.set(false),
+    });
+  }
+
+  deleteCustomTemplate() {
+    const editing = this.editingCustom();
+    if (!editing || !confirm(`Delete custom template "${editing.name}"?`)) return;
+    this.contentApi.deleteTemplate(editing.id).subscribe(() => {
+      this.closeCustomEditor();
+      this.loadContent();
+    });
+  }
+
+  appendBlockInEditor(block: BlockView) {
+    const editing = this.editingCustom();
+    if (!editing) return;
+    this.addingBlockId.set(block.id);
+    this.contentApi.appendBlockToTemplate(editing.id, block.id).subscribe({
+      next: updated => {
+        this.addingBlockId.set(null);
+        const view = this.toTemplateView(updated);
+        this.editingCustom.set(view);
+        this.customEditorDraft.htmlBody = view.htmlBody;
+        this.refreshCustomPreview();
+        this.templates.update(list => list.map(item => item.id === view.id ? view : item));
+        this.reusableBlocks.update(list => list.map(b => b.id === block.id ? { ...b, usedIn: b.usedIn + 1 } : b));
+      },
+      error: () => this.addingBlockId.set(null),
+    });
+  }
+
+  openBlockTemplatePicker(block: BlockView, event?: Event) {
+    event?.stopPropagation();
+    this.blockPickerBlock.set(block);
+  }
+
+  addBlockToTemplate(templateId: string) {
+    const block = this.blockPickerBlock();
+    if (!block || this.addingBlockId()) return;
+    this.addingBlockId.set(block.id);
+    this.contentApi.appendBlockToTemplate(templateId, block.id).subscribe({
+      next: () => {
+        this.addingBlockId.set(null);
+        this.blockPickerBlock.set(null);
+        this.closeBlockPreview();
+        this.loadContent();
+        const template = this.templates().find(t => t.id === templateId);
+        if (template?.isCustom) this.openCustomEditor(template);
+      },
+      error: () => this.addingBlockId.set(null),
+    });
+  }
+
+  get customTemplates() {
+    return this.templates().filter(t => t.isCustom);
   }
 
   openCreateBlock() {
@@ -551,15 +784,25 @@ export class TemplatesComponent implements OnInit {
     });
   }
 
+  get filteredReusableBlocks() {
+    const filter = this.activeBlockTypeFilter();
+    const blocks = this.reusableBlocks();
+    return filter ? blocks.filter(b => b.type === filter) : blocks;
+  }
+
   get filteredTemplates() {
     return this.templates().filter(t => {
+      const kind = this.templateKindFilter();
+      const matchKind = !kind
+        || (kind === 'custom' && t.isCustom)
+        || (kind === 'catalog' && !t.isCustom);
       const matchCat = !this.activeCategory() || t.category === this.activeCategory();
       const q = this.searchQuery.toLowerCase();
       const matchQ = !q
         || t.name.toLowerCase().includes(q)
         || t.description.toLowerCase().includes(q)
         || t.subjectLine.toLowerCase().includes(q);
-      return matchCat && matchQ;
+      return matchKind && matchCat && matchQ;
     });
   }
 
@@ -628,6 +871,7 @@ export class TemplatesComponent implements OnInit {
   private toTemplateView(t: EmailTemplate): TemplateView {
     return {
       ...t,
+      isCustom: t.isCustom ?? false,
       subjectLine: t.subjectLine ?? '',
       previewText: '',
       htmlBody: t.htmlBody ?? '',

@@ -752,6 +752,15 @@ export class ComposeModalComponent implements OnChanges, OnInit, AfterViewInit {
       return;
     }
     if (!this.attachmentsReady(false)) return;
+    if (!this.scheduledAtLocal) {
+      this.sendError = 'Choose a date and time to schedule this email.';
+      return;
+    }
+    const scheduledAt = new Date(this.scheduledAtLocal);
+    if (Number.isNaN(scheduledAt.getTime())) {
+      this.sendError = 'Invalid schedule date.';
+      return;
+    }
     this.actionType = 'schedule';
     this.busyMessage = 'Scheduling email, please wait…';
     this.onSchedule.emit(this.buildPayload());

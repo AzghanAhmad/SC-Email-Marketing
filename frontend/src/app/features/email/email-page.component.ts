@@ -97,6 +97,7 @@ import { switchMap } from 'rxjs/operators';
         (onReply)="replyToEmail()"
         (onForward)="forwardEmail()"
         (onEdit)="editEmail()"
+        (onSendNow)="sendScheduledNow($event)"
         (onDelete)="deleteEmail($event)"
         (onMarkUnread)="markUnread($event)"
       />
@@ -608,7 +609,35 @@ export class EmailPageComponent implements OnInit, OnDestroy {
     const attachments = data.attachments ?? [];
     const draftId = this.editingMessageId;
     const wasDraft = this.editingFolder === 'drafts';
+    const wasScheduled = this.editingFolder === 'scheduled';
     this.composeActionBusy = true;
+
+    if (draftId && wasScheduled) {
+      this.emailService.updateMessage(
+        draftId,
+        data.to,
+        data.subject,
+        data.body,
+        undefined,
+        attachments
+      ).subscribe({
+        next: () => {
+          this.emailService.sendScheduledNow(draftId).subscribe({
+            next: () => this.afterSendSuccess('Email sent successfully'),
+            error: (err) => {
+              this.composeActionBusy = false;
+              this.showNotification(err.message || 'Failed to send scheduled email');
+            },
+          });
+        },
+        error: (err) => {
+          this.composeActionBusy = false;
+          this.showNotification(err.message || 'Failed to update scheduled email');
+        },
+      });
+      return;
+    }
+
     this.emailService.sendEmail(data.to, data.subject, data.body, attachments).subscribe({
       next: () => {
         if (draftId && wasDraft) {
@@ -703,6 +732,27 @@ export class EmailPageComponent implements OnInit, OnDestroy {
       error: (err) => {
         this.composeActionBusy = false;
         this.showNotification(err.message || 'Failed to schedule email');
+      },
+    });
+  }
+
+  sendScheduledNow(id: string) {
+    this.composeActionBusy = true;
+    this.emailService.sendScheduledNow(id).subscribe({
+      next: () => {
+        this.composeActionBusy = false;
+        if (this.currentFolder === 'scheduled') {
+          this.currentEmails = this.emailService.getEmailsByFolder('scheduled');
+          this.selectedEmailId = null;
+          this.selectedEmail = null;
+        } else {
+          this.refreshCurrentFolder();
+        }
+        this.showNotification('Email sent successfully');
+      },
+      error: (err) => {
+        this.composeActionBusy = false;
+        this.showNotification(err.message || 'Failed to send scheduled email');
       },
     });
   }

@@ -14,7 +14,7 @@ import { AnalyticsApiService } from '../../../core/services/analytics-api.servic
           <p class="page-subtitle">Track your key email marketing performance metrics over time</p>
         </div>
         <select class="period-select" [value]="periodDays" (change)="onPeriodChange($event)">
-          <option [value]="7">Last 7 days</option><option [value]="30">Last 30 days</option><option [value]="90">Last 90 days</option>
+          <option [value]="7">Last 7 days</option><option [value]="30">Last 30 days</option><option [value]="90">Last 90 days</option><option [value]="365">Last year</option>
         </select>
       </div>
 
@@ -27,11 +27,6 @@ import { AnalyticsApiService } from '../../../core/services/analytics-api.servic
             </span>
           </div>
           <span class="mc-val">{{ m.value }}</span>
-          <div class="mc-sparkline">
-            <svg viewBox="0 0 100 30" preserveAspectRatio="none">
-              <polyline [attr.points]="m.sparkline" fill="none" [attr.stroke]="m.color" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-            </svg>
-          </div>
           <span class="mc-period">vs previous period</span>
         </div>
       </div>
@@ -39,7 +34,7 @@ import { AnalyticsApiService } from '../../../core/services/analytics-api.servic
       <div class="glass-card detail-card">
         <h3 class="detail-title">Metric Details</h3>
         <table class="data-table">
-          <thead><tr><th>Metric</th><th>Current</th><th>Previous</th><th>Change</th><th>Trend</th></tr></thead>
+          <thead><tr><th>Metric</th><th>Current</th><th>Previous</th><th>Change</th><th>Status</th></tr></thead>
           <tbody>
             <tr *ngFor="let m of detailMetrics">
               <td class="metric-name">{{ m.name }}</td>
@@ -50,13 +45,7 @@ import { AnalyticsApiService } from '../../../core/services/analytics-api.servic
                   {{ m.changeNum > 0 ? '+' : '' }}{{ m.changeNum }}%
                 </span>
               </td>
-              <td>
-                <div class="spark-mini">
-                  <svg viewBox="0 0 60 20" preserveAspectRatio="none">
-                    <polyline [attr.points]="m.spark" fill="none" [attr.stroke]="m.changeNum >= 0 ? '#10b981' : '#ef4444'" stroke-width="1.5" stroke-linejoin="round"/>
-                  </svg>
-                </div>
-              </td>
+              <td><span class="status-pill" [class.good]="m.status === 'Improving' || m.status === 'Healthy'" [class.warn]="m.status === 'Declining'">{{ m.status }}</span></td>
             </tr>
           </tbody>
         </table>
@@ -142,9 +131,7 @@ import { AnalyticsApiService } from '../../../core/services/analytics-api.servic
     .mc-change { font-size:.7rem; font-weight:700; padding:.15rem .4rem; border-radius:5px; }
     .mc-change.up { color:#059669; background:rgba(16,185,129,0.1); }
     .mc-change.down { color:#dc2626; background:rgba(239,68,68,0.1); }
-    .mc-val { font-size:1.75rem; font-weight:800; color:#0f172a; letter-spacing:-.03em; }
-    .mc-sparkline { height:30px; margin:.5rem 0 .25rem; }
-    .mc-sparkline svg { width:100%; height:100%; }
+    .mc-val { font-size:1.75rem; font-weight:800; color:#0f172a; letter-spacing:-.03em; margin:.25rem 0 .375rem; }
     .mc-period { font-size:.7rem; color:#94a3b8; }
 
     .detail-card { padding:1.5rem; margin-bottom:1.25rem; }
@@ -156,8 +143,9 @@ import { AnalyticsApiService } from '../../../core/services/analytics-api.servic
     .change-badge { font-size:.75rem; font-weight:700; padding:.2rem .5rem; border-radius:5px; }
     .change-badge.up { color:#059669; background:rgba(16,185,129,0.1); }
     .change-badge.down { color:#dc2626; background:rgba(239,68,68,0.1); }
-    .spark-mini { width:60px; height:20px; }
-    .spark-mini svg { width:100%; height:100%; }
+    .status-pill { font-size:.75rem; font-weight:600; padding:.2rem .55rem; border-radius:6px; background:#f1f5f9; color:#64748b; }
+    .status-pill.good { background:rgba(16,185,129,0.1); color:#059669; }
+    .status-pill.warn { background:rgba(239,68,68,0.1); color:#dc2626; }
     .rev { color:#059669; font-weight:700; }
     .goal-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:1.25rem; }
     .goal-item { background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:.9rem; display:flex; flex-direction:column; gap:.25rem; }
@@ -173,8 +161,8 @@ import { AnalyticsApiService } from '../../../core/services/analytics-api.servic
 export class MetricsComponent implements OnInit {
   private analyticsApi = inject(AnalyticsApiService);
   periodDays = 30;
-  metrics: { label: string; value: string; change: number; color: string; sparkline: string }[] = [];
-  detailMetrics: { name: string; current: string; previous: string; changeNum: number; spark: string }[] = [];
+  metrics: { label: string; value: string; change: number; color: string }[] = [];
+  detailMetrics: { name: string; current: string; previous: string; changeNum: number; status: string }[] = [];
   flowSteps: { step: string; entered: number; completed: number; delivered: number; opens: number; clicks: number; revenue: string }[] = [];
   goalExitRates: { name: string; rate: number; note: string }[] = [];
   sendAuditRows: { subscriber: string; flow: string; step: string; reason: string; time: string }[] = [];
@@ -188,8 +176,8 @@ export class MetricsComponent implements OnInit {
 
   private loadData() {
     this.analyticsApi.getAnalytics(this.periodDays).subscribe(b => {
-      this.metrics = b.metrics.map(m => ({ label: m.label, value: m.value, change: m.change, color: m.color, sparkline: m.sparkline }));
-      this.detailMetrics = b.metricDetails.map(d => ({ name: d.name, current: d.current, previous: d.previous, changeNum: d.changeNum, spark: d.spark }));
+      this.metrics = b.metrics.map(m => ({ label: m.label, value: m.value, change: m.change, color: m.color }));
+      this.detailMetrics = b.metricDetails.map(d => ({ name: d.name, current: d.current, previous: d.previous, changeNum: d.changeNum, status: d.status }));
       this.flowSteps = b.flowSteps.map(s => ({ step: s.step, entered: s.entered, completed: s.completed, delivered: s.delivered, opens: s.opens, clicks: s.clicks, revenue: s.revenue }));
       this.goalExitRates = b.goalExitRates;
       this.sendAuditRows = b.sendAuditRows;

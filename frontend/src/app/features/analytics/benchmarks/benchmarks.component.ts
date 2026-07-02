@@ -1,6 +1,8 @@
 import { Component, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { AnalyticsApiService } from '../../../core/services/analytics-api.service';
+import { NAV_ICONS } from '../../../core/constants/nav-icons';
 
 @Component({
   selector: 'app-benchmarks',
@@ -11,7 +13,7 @@ import { AnalyticsApiService } from '../../../core/services/analytics-api.servic
       <div class="page-header">
         <div>
           <h1 class="page-title">Benchmarks</h1>
-          <p class="page-subtitle">Compare your performance against industry averages for independent authors</p>
+          <p class="page-subtitle">Compare your performance against industry averages (refreshed daily from 2026 benchmarks)</p>
         </div>
       </div>
 
@@ -31,23 +33,23 @@ import { AnalyticsApiService } from '../../../core/services/analytics-api.servic
           </div>
           <div class="bench-bar-wrap">
             <div class="bench-bar-track">
-              <div class="bench-bar-fill yours" [style.width]="b.yoursNum + '%'" [style.background]="b.yourColor"></div>
+              <div class="bench-bar-fill yours" [style.width]="barWidth(b.yoursNum, b.industryNum) + '%'" [style.background]="b.yourColor"></div>
             </div>
             <div class="bench-bar-track industry">
-              <div class="bench-bar-fill industry" [style.width]="b.industryNum + '%'" style="background:#cbd5e1"></div>
+              <div class="bench-bar-fill industry" [style.width]="barWidth(b.industryNum, b.industryNum) + '%'" style="background:#cbd5e1"></div>
             </div>
           </div>
           <span class="bench-verdict" [class.above]="b.yoursNum >= b.industryNum" [class.below]="b.yoursNum < b.industryNum">
-            {{ b.yoursNum >= b.industryNum ? '✓ Above average' : '↓ Below average' }}
+            {{ b.yoursNum >= b.industryNum ? 'Above average' : 'Below average' }}
           </span>
         </div>
       </div>
 
       <div class="glass-card tips-card">
-        <h3 class="tips-title">💡 Tips to Improve</h3>
+        <h3 class="tips-title">Tips to Improve</h3>
         <div class="tips-list">
           <div class="tip-item" *ngFor="let t of tips">
-            <span class="tip-bullet">{{ t.bullet }}</span>
+            <span class="nav-icon tip-icon" [innerHTML]="t.safeIcon"></span>
             <div class="tip-body">
               <h4 class="tip-name">{{ t.title }}</h4>
               <p class="tip-desc">{{ t.description }}</p>
@@ -68,33 +70,34 @@ import { AnalyticsApiService } from '../../../core/services/analytics-api.servic
     .bench-vs { font-size:.75rem; font-weight:600; color:#94a3b8; }
     .bench-bar-wrap { display:flex; flex-direction:column; gap:.375rem; margin-bottom:.875rem; }
     .bench-bar-track { height:6px; background:#f1f5f9; border-radius:100px; overflow:hidden; }
-    .bench-bar-fill { height:100%; border-radius:100px; transition:width .8s; }
+    .bench-bar-fill { height:100%; border-radius:100px; transition:width .8s; max-width:100%; }
     .bench-verdict { font-size:.78rem; font-weight:600; }
     .bench-verdict.above { color:#059669; }
     .bench-verdict.below { color:#dc2626; }
-
     .tips-card { padding:1.5rem; }
     .tips-title { font-size:1rem; font-weight:700; color:#0f172a; margin:0 0 1.25rem; }
     .tips-list { display:flex; flex-direction:column; gap:.875rem; }
-    .tip-item { display:flex; gap:.875rem; padding:1rem; background:#f8fafc; border-radius:12px; border:1px solid #f1f5f9; }
-    .tip-bullet { font-size:1.25rem; flex-shrink:0; }
+    .tip-item { display:flex; gap:.875rem; padding:1rem; background:#f8fafc; border-radius:12px; border:1px solid #f1f5f9; align-items:flex-start; }
+    .tip-icon { color:#64748b; flex-shrink:0; }
+    .tip-icon svg { width:20px; height:20px; }
     .tip-name { font-size:.875rem; font-weight:600; color:#0f172a; margin:0 0 .25rem; }
     .tip-desc { font-size:.8rem; color:#94a3b8; margin:0; line-height:1.5; }
-
     @media(max-width:900px) { .benchmark-grid { grid-template-columns:repeat(2,1fr); } }
     @media(max-width:600px) { .benchmark-grid { grid-template-columns:1fr; } }
   `]
 })
 export class BenchmarksComponent implements OnInit {
   private analyticsApi = inject(AnalyticsApiService);
+  private sanitizer = inject(DomSanitizer);
+
   benchmarks: { metric: string; yours: string; yoursNum: number; industry: string; industryNum: number; yourColor: string }[] = [];
 
   tips = [
-    { bullet: '🧹', title: 'Clean your list regularly', description: 'Remove inactive subscribers to improve deliverability and engagement rates.' },
-    { bullet: '📝', title: 'Write compelling subject lines', description: 'A/B test subject lines and keep them under 60 characters for better mobile performance.' },
-    { bullet: '⏰', title: 'Optimize send times', description: 'Send emails Tuesday–Thursday between 9–11am for highest open rates.' },
-    { bullet: '🎯', title: 'Segment your audience', description: 'Use targeted segments to send relevant content that drives higher engagement.' },
-  ];
+    { iconKey: 'users', title: 'Clean your list regularly', description: 'Remove inactive subscribers to improve deliverability and engagement rates.' },
+    { iconKey: 'mail', title: 'Write compelling subject lines', description: 'A/B test subject lines and keep them under 60 characters for better mobile performance.' },
+    { iconKey: 'calendar', title: 'Optimize send times', description: 'Send emails Tuesday–Thursday between 9–11am for highest open rates.' },
+    { iconKey: 'blocks', title: 'Segment your audience', description: 'Use targeted segments to send relevant content that drives higher engagement.' },
+  ].map(t => ({ ...t, safeIcon: this.sanitizer.bypassSecurityTrustHtml(NAV_ICONS[t.iconKey] ?? NAV_ICONS['chart']) }));
 
   ngOnInit() {
     this.analyticsApi.getAnalytics(30).subscribe(b => {
@@ -107,5 +110,10 @@ export class BenchmarksComponent implements OnInit {
         yourColor: row.yourColor,
       }));
     });
+  }
+
+  barWidth(value: number, max: number): number {
+    const cap = Math.max(value, max, 1);
+    return Math.min(100, Math.round(value / cap * 100));
   }
 }

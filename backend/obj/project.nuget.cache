@@ -60,6 +60,18 @@
       ]
     },
     {
+      "code": "NU1903",
+      "level": "Warning",
+      "message": "Package 'Microsoft.OpenApi' 2.0.0 has a known high severity vulnerability, https://github.com/advisories/GHSA-v5pm-xwqc-g5wc",
+      "projectPath": "E:\\Projects\\Project 3 (C)\\project\\backend\\ScribeCount.Email.csproj",
+      "warningLevel": 1,
+      "filePath": "E:\\Projects\\Project 3 (C)\\project\\backend\\ScribeCount.Email.csproj",
+      "libraryId": "Microsoft.OpenApi",
+      "targetGraphs": [
+        "net10.0"
+      ]
+    },
+    {
       "code": "NU1902",
       "level": "Warning",
       "message": "Package 'MimeKit' 4.11.0 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-g7hc-96xr-gvvx",

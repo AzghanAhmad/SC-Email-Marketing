@@ -18,6 +18,12 @@ import { formatEmailDetailDate } from './email-datetime.utils';
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
             <span>Edit</span>
           </button>
+          <button class="action-btn primary"
+                  *ngIf="email && isScheduled(email)"
+                  (click)="onSendNow.emit(email.id)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            <span>Send now</span>
+          </button>
           <button class="action-btn"
                   [disabled]="!email"
                   (click)="email && onReply.emit()">
@@ -66,6 +72,10 @@ import { formatEmailDetailDate } from './email-datetime.utils';
       <!-- Email Content -->
       <div class="view-content" *ngIf="email">
         <h1 class="view-subject">{{ email.subject }}</h1>
+
+        <div class="scheduled-banner" *ngIf="isScheduled(email)">
+          Scheduled to send {{ formatDate(email.timestamp) }}
+        </div>
 
         <div class="view-meta">
           <div class="sender-avatar">{{ getInitials(email.from) }}</div>
@@ -274,6 +284,17 @@ import { formatEmailDetailDate } from './email-datetime.utils';
       line-height: 1.3;
     }
 
+    .scheduled-banner {
+      margin: -0.75rem 0 1.25rem;
+      padding: .65rem 1rem;
+      border-radius: 10px;
+      background: rgba(245, 158, 11, 0.1);
+      border: 1px solid rgba(245, 158, 11, 0.25);
+      color: #b45309;
+      font-size: .8125rem;
+      font-weight: 600;
+    }
+
     .view-meta {
       display: flex;
       align-items: flex-start;
@@ -432,8 +453,13 @@ export class EmailViewComponent {
   @Output() onReply = new EventEmitter<void>();
   @Output() onForward = new EventEmitter<void>();
   @Output() onEdit = new EventEmitter<void>();
+  @Output() onSendNow = new EventEmitter<string>();
   @Output() onDelete = new EventEmitter<string>();
   @Output() onMarkUnread = new EventEmitter<string>();
+
+  isScheduled(email: Email): boolean {
+    return email.folder?.toLowerCase() === 'scheduled';
+  }
 
   isEditable(email: Email): boolean {
     const folder = email.folder?.toLowerCase();

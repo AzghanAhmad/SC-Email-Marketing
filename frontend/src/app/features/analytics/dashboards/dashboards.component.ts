@@ -3,11 +3,12 @@ import { CommonModule } from '@angular/common';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { AnalyticsApiService } from '../../../core/services/analytics-api.service';
 import { NAV_ICONS } from '../../../core/constants/nav-icons';
+import { XyChartComponent, ChartSeries } from '../../../shared/components/xy-chart/xy-chart.component';
 
 @Component({
   selector: 'app-analytics-dashboards',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, XyChartComponent],
   template: `
     <div class="page-wrapper">
       <div class="page-header">
@@ -20,6 +21,7 @@ import { NAV_ICONS } from '../../../core/constants/nav-icons';
             <option [value]="7">Last 7 days</option>
             <option [value]="30">Last 30 days</option>
             <option [value]="90">Last 90 days</option>
+            <option [value]="365">Last year</option>
           </select>
         </div>
       </div>
@@ -52,14 +54,8 @@ import { NAV_ICONS } from '../../../core/constants/nav-icons';
               <span class="legend-item"><span class="legend-dot" style="background:#10b981"></span>Delivered</span>
             </div>
           </div>
-          <div class="bar-chart">
-            <div class="bar-group" *ngFor="let d of volumeData">
-              <div class="bars">
-                <div class="bar sent" [style.height]="(d.sent / maxVol * 100) + '%'"></div>
-                <div class="bar delivered" [style.height]="(d.delivered / maxVol * 100) + '%'"></div>
-              </div>
-              <span class="bar-label">{{ d.label }}</span>
-            </div>
+          <div class="chart-container">
+            <app-xy-chart type="bar" [labels]="volumeLabels" [series]="volumeSeries" yAxisLabel="Emails" xAxisLabel="Month" [showLegend]="false"/>
           </div>
         </div>
 
@@ -71,32 +67,19 @@ import { NAV_ICONS } from '../../../core/constants/nav-icons';
               <p class="chart-sub">Open & click rates over time</p>
             </div>
           </div>
-          <div class="line-chart-wrap">
-            <svg class="line-svg" viewBox="0 0 300 120" preserveAspectRatio="none">
-              <defs>
-                <linearGradient id="engGrad1" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.15"/>
-                  <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.01"/>
-                </linearGradient>
-                <linearGradient id="engGrad2" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.15"/>
-                  <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0.01"/>
-                </linearGradient>
-              </defs>
-              <polygon [attr.points]="openAreaPts" fill="url(#engGrad1)"/>
-              <polyline [attr.points]="openLinePts" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-              <polygon [attr.points]="clickAreaPts" fill="url(#engGrad2)"/>
-              <polyline [attr.points]="clickLinePts" fill="none" stroke="#8b5cf6" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-            </svg>
-            <div class="line-labels">
-              <span *ngFor="let d of engagementData">{{ d.label }}</span>
-            </div>
-          </div>
-          <div class="chart-legend" style="margin-top:.75rem">
-            <span class="legend-item"><span class="legend-dot" style="background:#3b82f6"></span>Open Rate</span>
-            <span class="legend-item"><span class="legend-dot" style="background:#8b5cf6"></span>Click Rate</span>
+          <app-xy-chart type="line" [labels]="engagementLabels" [series]="engagementSeries" yAxisLabel="Rate %" xAxisLabel="Month"/>
+        </div>
+      </div>
+
+      <!-- Subscriber Growth -->
+      <div class="glass-card chart-card">
+        <div class="chart-header">
+          <div>
+            <h3 class="chart-title">Subscriber Growth</h3>
+            <p class="chart-sub">Total active subscribers over the past 6 months</p>
           </div>
         </div>
+        <app-xy-chart type="line" [labels]="growthLabels" [series]="growthSeries" yAxisLabel="Subscribers" xAxisLabel="Month"/>
       </div>
 
       <!-- Engagement Donuts -->
@@ -190,7 +173,7 @@ import { NAV_ICONS } from '../../../core/constants/nav-icons';
     .legend-item { display:flex; align-items:center; gap:.375rem; font-size:.75rem; color:#64748b; font-weight:500; }
     .legend-dot { width:8px; height:8px; border-radius:50%; }
 
-    .bar-chart { display:flex; align-items:flex-end; gap:.75rem; height:140px; padding-bottom:1.5rem; }
+    .chart-container { width:100%; }
     .bar-group { display:flex; flex-direction:column; align-items:center; gap:.5rem; flex:1; height:100%; }
     .bars { display:flex; align-items:flex-end; gap:3px; flex:1; width:100%; }
     .bar { flex:1; border-radius:5px 5px 0 0; transition:height .8s cubic-bezier(.4,0,.2,1); min-height:4px; }
@@ -231,13 +214,13 @@ export class AnalyticsDashboardsComponent implements OnInit {
   periodDays = 30;
   kpis: { label: string; value: string; change: number; safeIcon: SafeHtml }[] = [];
   volumeData: { label: string; sent: number; delivered: number }[] = [];
-  maxVol = 1;
-  engagementData: { label: string; open: number; click: number }[] = [];
-  openLinePts = '';
-  openAreaPts = '';
-  clickLinePts = '';
-  clickAreaPts = '';
+  volumeLabels: string[] = [];
+  volumeSeries: ChartSeries[] = [];
+  engagementLabels: string[] = [];
+  engagementSeries: ChartSeries[] = [];
   engBreakdown: { label: string; value: number; color: string }[] = [];
+  growthLabels: string[] = [];
+  growthSeries: ChartSeries[] = [];
   campaignFunnel: { name: string; sent: number; delivered: number; opens: number; clicks: number; purchases: number; revenue: string }[] = [];
 
   ngOnInit() { this.loadData(); }
@@ -256,40 +239,20 @@ export class AnalyticsDashboardsComponent implements OnInit {
         safeIcon: this.sanitizer.bypassSecurityTrustHtml(NAV_ICONS[k.iconKey] ?? NAV_ICONS['chart']),
       }));
       this.volumeData = bundle.volumeData;
-      this.maxVol = Math.max(1, ...this.volumeData.map(d => d.sent));
-      this.engagementData = bundle.engagementTrend.map(e => ({ label: e.label, open: e.open, click: e.click }));
+      this.volumeLabels = bundle.volumeData.map(d => d.label);
+      this.volumeSeries = [
+        { name: 'Sent', color: '#3b82f6', values: bundle.volumeData.map(d => d.sent) },
+        { name: 'Delivered', color: '#10b981', values: bundle.volumeData.map(d => d.delivered) },
+      ];
+      this.engagementLabels = bundle.engagementTrend.map(e => e.label);
+      this.engagementSeries = [
+        { name: 'Open Rate', color: '#3b82f6', values: bundle.engagementTrend.map(e => e.open) },
+        { name: 'Click Rate', color: '#8b5cf6', values: bundle.engagementTrend.map(e => e.click) },
+      ];
       this.engBreakdown = bundle.engagementBreakdown;
+      this.growthLabels = bundle.subscriberGrowth.map(d => d.label);
+      this.growthSeries = [{ name: 'Subscribers', color: '#1e3a5f', values: bundle.subscriberGrowth.map(d => d.count) }];
       this.campaignFunnel = bundle.campaignFunnel;
-      this.buildCharts();
     });
-  }
-
-  buildCharts() {
-    if (this.engagementData.length < 2) {
-      this.openLinePts = this.openAreaPts = this.clickLinePts = this.clickAreaPts = '';
-      return;
-    }
-    const W = 300, H = 120, PAD = 10;
-    const buildLine = (data: number[], maxVal: number) => {
-      const pts = data.map((v, i) => ({
-        x: PAD + (i / (data.length - 1)) * (W - PAD * 2),
-        y: H - PAD - (maxVal > 0 ? (v / maxVal) * (H - PAD * 2) : 0)
-      }));
-      const line = pts.map(p => `${p.x},${p.y}`).join(' ');
-      const area = `${pts[0].x},${H} ${line} ${pts[pts.length - 1].x},${H}`;
-      return { line, area };
-    };
-
-    const openData = this.engagementData.map(d => d.open);
-    const clickData = this.engagementData.map(d => d.click);
-    const maxE = Math.max(1, ...openData, ...clickData);
-
-    const openRes = buildLine(openData, maxE);
-    this.openLinePts = openRes.line;
-    this.openAreaPts = openRes.area;
-
-    const clickRes = buildLine(clickData, maxE);
-    this.clickLinePts = clickRes.line;
-    this.clickAreaPts = clickRes.area;
   }
 }

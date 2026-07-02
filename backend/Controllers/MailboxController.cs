@@ -210,6 +210,20 @@ public class MailboxController(AppDbContext db, MailboxService mailbox) : Contro
         }
     }
 
+    [HttpPost("messages/{id:guid}/send-now")]
+    public async Task<ActionResult<EmailDto>> SendScheduledNow(Guid id)
+    {
+        try
+        {
+            var msg = await mailbox.SendScheduledMessageAsync(GetUserId(), id);
+            return Ok(MapMessage(msg));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     [HttpPost("drafts")]
     public async Task<ActionResult<EmailDto>> SaveDraft([FromBody] SaveDraftRequest request)
     {
@@ -259,6 +273,13 @@ public class MailboxController(AppDbContext db, MailboxService mailbox) : Contro
     [HttpPost("schedule")]
     public async Task<ActionResult<EmailDto>> Schedule([FromBody] ScheduleEmailRequest request)
     {
+        if (string.IsNullOrWhiteSpace(request.To))
+            return BadRequest(new { message = "Recipient is required." });
+        if (string.IsNullOrWhiteSpace(request.Subject))
+            return BadRequest(new { message = "Subject is required." });
+        if (string.IsNullOrWhiteSpace(request.Body))
+            return BadRequest(new { message = "Message body is required." });
+
         var body = MailboxContentHelper.PrepareBodyForStorage(request.Body);
         var attachmentsJson = MailboxService.SerializeAttachments(request.Attachments);
         try

@@ -7,7 +7,7 @@ namespace ScribeCount.Email.Api.Services;
 
 public class DashboardService(AppDbContext db)
 {
-    public async Task<DashboardDto> GetDashboardAsync(Guid userId, string? userName)
+    public async Task<DashboardDto> GetDashboardAsync(Guid userId, string? userName, int periodDays = 30)
     {
         var subscribers = await db.Subscribers.Where(s => s.UserId == userId).ToListAsync();
         var campaigns = await db.Campaigns
@@ -18,8 +18,8 @@ public class DashboardService(AppDbContext db)
 
         var sentCampaigns = campaigns.Where(c => c.Status == "sent").ToList();
         var periodEnd = DateTime.UtcNow;
-        var periodStart = periodEnd.AddDays(-30);
-        var prevPeriodStart = periodStart.AddDays(-30);
+        var periodStart = periodEnd.AddDays(-periodDays);
+        var prevPeriodStart = periodStart.AddDays(-periodDays);
 
         var activeCount = subscribers.Count(s => s.Status == "active");
         var prevActiveCount = MetricsHelper.ActiveSubscribersAt(subscribers, activities, periodStart);
@@ -37,6 +37,20 @@ public class DashboardService(AppDbContext db)
         var prevOpenRate = prevSent > 0 ? Math.Round(prevOpens * 100.0 / prevSent, 1) : 0;
         var openRateGrowth = Math.Round(openRate - prevOpenRate, 1);
 
+        var periodClicks = CountUniqueClicks(activities, periodStart, periodEnd);
+        var prevClicks = CountUniqueClicks(activities, prevPeriodStart, periodStart);
+        var clickRate = periodSent > 0 ? Math.Round(periodClicks * 100.0 / periodSent, 1) : 0;
+        var prevClickRate = prevSent > 0 ? Math.Round(prevClicks * 100.0 / prevSent, 1) : 0;
+        var clickRateGrowth = Math.Round(clickRate - prevClickRate, 1);
+
+        var ordersPlaced = activities.Count(a =>
+            MetricsHelper.IsPurchaseActivity(a) && a.OccurredAt >= periodStart && a.OccurredAt <= periodEnd);
+        var prevOrders = activities.Count(a =>
+            MetricsHelper.IsPurchaseActivity(a) && a.OccurredAt >= prevPeriodStart && a.OccurredAt < periodStart);
+        var ordersGrowth = prevOrders == 0
+            ? (ordersPlaced > 0 ? 100.0 : 0)
+            : Math.Round((ordersPlaced - prevOrders) / (double)prevOrders * 100, 1);
+
         var revenue = MetricsHelper.SumSaleRevenue(activities, periodStart, periodEnd);
         var prevRevenue = MetricsHelper.SumSaleRevenue(activities, prevPeriodStart, periodStart);
         var revenueGrowth = prevRevenue == 0
@@ -45,10 +59,19 @@ public class DashboardService(AppDbContext db)
 
         var campaignChart = BuildCampaignChart(activities);
         var growthChart = BuildGrowthChart(subscribers, activities);
+        var campaignFunnel = BuildCampaignFunnel(sentCampaigns.Where(c => c.SentAt >= periodStart).ToList(), activities);
 
         var stats = new DashboardStatsDto(
             activeCount, subscriberGrowth, periodSent, emailsGrowth,
-            openRate, openRateGrowth, revenue, revenueGrowth);
+            openRate, openRateGrowth, clickRate, clickRateGrowth,
+            ordersPlaced, ordersGrowth, revenue, revenueGrowth);
+
+        var conversionMetrics = new List<ConversionMetricDto>
+        {
+            new("placed_order", "Placed Order", ordersPlaced.ToString("N0"), ordersGrowth, "Total purchases attributed to email in this period"),
+            new("clicked_link", "Clicked Link", $"{clickRate:0.1}%", clickRateGrowth, "Unique click rate across emails sent in this period"),
+            new("opened_email", "Opened Email", $"{openRate:0.1}%", openRateGrowth, "Unique open rate across emails sent in this period"),
+        };
 
         var attributedRevenue = activities
             .Where(a => MetricsHelper.IsPurchaseActivity(a)
@@ -77,8 +100,24 @@ public class DashboardService(AppDbContext db)
         var firstName = string.IsNullOrWhiteSpace(userName) ? "there" : userName.Split(' ')[0];
 
         return new DashboardDto(
-            stats, performance, attribution, campaignChart, growthChart, recentActivity,
+            stats, performance, attribution, campaignChart, growthChart, recentActivity, campaignFunnel, conversionMetrics,
             periodStart.ToString("MMM d, yyyy"), periodEnd.ToString("MMM d, yyyy"), firstName);
+    }
+
+    private static List<CampaignFunnelRowDto> BuildCampaignFunnel(List<Campaign> campaigns, List<SubscriberActivity> activities)
+    {
+        return campaigns.OrderByDescending(c => c.SentAt).Take(8).Select(c =>
+        {
+            var (opens, clicks, delivered) = MetricsHelper.CampaignEngagement(activities, c.Id);
+            var denominator = delivered > 0 ? delivered : c.SentCount;
+            var purchases = activities.Count(a => a.CampaignId == c.Id && MetricsHelper.IsPurchaseActivity(a));
+            var revenue = activities
+                .Where(a => a.CampaignId == c.Id && MetricsHelper.IsPurchaseActivity(a))
+                .Sum(MetricsHelper.ParseSaleAmount);
+            return new CampaignFunnelRowDto(
+                c.Name, c.SentCount, denominator, opens, clicks, purchases,
+                revenue > 0 ? $"${revenue:0,0}" : "$0");
+        }).ToList();
     }
 
     private static int CountSends(IReadOnlyList<SubscriberActivity> activities, DateTime from, DateTime to) =>
@@ -98,12 +137,21 @@ public class DashboardService(AppDbContext db)
             .Distinct()
             .Count();
 
+    private static int CountUniqueClicks(IReadOnlyList<SubscriberActivity> activities, DateTime from, DateTime to) =>
+        activities
+            .Where(a =>
+                a.ActivityType == "campaign_clicked"
+                && a.OccurredAt >= from
+                && a.OccurredAt < to)
+            .Select(a => (a.SubscriberId, a.CampaignId))
+            .Distinct()
+            .Count();
+
     private static List<CampaignChartPointDto> BuildCampaignChart(IReadOnlyList<SubscriberActivity> activities)
     {
-        var months = Enumerable.Range(0, 4).Select(i => DateTime.UtcNow.AddMonths(-3 + i)).ToList();
-        return months.Select(m =>
+        return ChartMonthHelper.LastMonths(6).Select(m =>
         {
-            var monthStart = new DateTime(m.Year, m.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+            var monthStart = m;
             var monthEnd = monthStart.AddMonths(1);
             var sent = activities.Count(a =>
                 a.ActivityType == "campaign_sent"
@@ -118,19 +166,18 @@ public class DashboardService(AppDbContext db)
                 .Select(a => (a.SubscriberId, a.CampaignId))
                 .Distinct()
                 .Count();
-            return new CampaignChartPointDto(m.ToString("MMM"), sent, opened);
+            return new CampaignChartPointDto(ChartMonthHelper.Label(m), sent, opened);
         }).ToList();
     }
 
     private static List<SubscriberGrowthPointDto> BuildGrowthChart(
         IReadOnlyList<Subscriber> subscribers, IReadOnlyList<SubscriberActivity> activities)
     {
-        var months = Enumerable.Range(0, 6).Select(i => DateTime.UtcNow.AddMonths(-5 + i)).ToList();
-        return months.Select(m =>
+        return ChartMonthHelper.LastMonths(6).Select(m =>
         {
             var monthEnd = new DateTime(m.Year, m.Month, DateTime.DaysInMonth(m.Year, m.Month), 23, 59, 59, DateTimeKind.Utc);
             var count = MetricsHelper.ActiveSubscribersAt(subscribers, activities, monthEnd);
-            return new SubscriberGrowthPointDto(m.ToString("MMM"), count);
+            return new SubscriberGrowthPointDto(ChartMonthHelper.Label(m), count);
         }).ToList();
     }
 

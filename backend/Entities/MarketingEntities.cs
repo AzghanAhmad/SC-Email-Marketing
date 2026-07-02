@@ -56,6 +56,7 @@ public class EmailTemplate
     public string HtmlBody { get; set; } = "";
     public string IconKey { get; set; } = "mail";
     public string SuggestedCampaignType { get; set; } = "newsletter";
+    public bool IsCustom { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public User User { get; set; } = null!;
 }
@@ -68,6 +69,7 @@ public class ContentBlock
     public string BlockType { get; set; } = "";
     public string Description { get; set; } = "";
     public string IconKey { get; set; } = "book";
+    public string? HtmlBody { get; set; }
     public int UsedInCount { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public User User { get; set; } = null!;
@@ -89,6 +91,8 @@ public class BrandAsset
     public string FileType { get; set; } = "";
     public long SizeBytes { get; set; }
     public string IconKey { get; set; } = "image";
+    public string? StoragePath { get; set; }
+    public string? MimeType { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public User User { get; set; } = null!;
 }

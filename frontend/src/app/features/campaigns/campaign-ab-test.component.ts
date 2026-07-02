@@ -76,20 +76,22 @@ import { AbTest } from '../../core/models/campaign.models';
               <span class="ab-pill b">B: {{ test.subjectB }}</span>
             </div>
           </div>
-          <div class="ab-test-results" *ngIf="test.status === 'complete'">
+          <div class="ab-test-results" *ngIf="test.status === 'complete' || test.status === 'running'">
             <div class="ab-result" [class.ab-winner]="test.winner === 'A'">
               <span class="ab-result-label">A</span>
-              <span class="ab-result-rate">{{ test.openRateA }}%</span>
+              <span class="ab-result-rate">{{ test.votesA ?? 0 }} votes</span>
               <span class="ab-winner-badge" *ngIf="test.winner === 'A'">Winner</span>
             </div>
             <div class="ab-result" [class.ab-winner]="test.winner === 'B'">
               <span class="ab-result-label">B</span>
-              <span class="ab-result-rate">{{ test.openRateB }}%</span>
+              <span class="ab-result-rate">{{ test.votesB ?? 0 }} votes</span>
               <span class="ab-winner-badge" *ngIf="test.winner === 'B'">Winner</span>
             </div>
           </div>
           <div class="ab-test-status">
             <span class="badge" [ngClass]="'badge-' + (test.status === 'complete' ? 'sent' : test.status === 'running' ? 'active' : 'draft')">{{ test.status }}</span>
+            <button type="button" class="ab-launch-btn" *ngIf="test.status === 'draft'" (click)="onLaunchAbTest.emit(test.id)">Launch</button>
+            <button type="button" class="ab-share-btn" *ngIf="test.status === 'running'" (click)="copyVoteLink(test)">Copy vote link</button>
             <button type="button" class="ab-delete-btn" (click)="onDeleteAbTest.emit(test.id)">Delete</button>
           </div>
         </div>
@@ -149,6 +151,8 @@ import { AbTest } from '../../core/models/campaign.models';
     .ab-winner-badge { font-size:.7rem; font-weight:700; padding:.15rem .45rem; background:#10b981; color:#fff; border-radius:100px; }
     .ab-test-status { flex-shrink:0; display:flex; flex-direction:column; align-items:flex-end; gap:.5rem; }
     .ab-delete-btn { background:none; border:none; color:#dc2626; font-size:.75rem; font-weight:600; cursor:pointer; padding:0; }
+    .ab-launch-btn, .ab-share-btn { background:none; border:none; color:#2563eb; font-size:.75rem; font-weight:600; cursor:pointer; padding:0; }
+    .ab-launch-btn:hover, .ab-share-btn:hover { text-decoration:underline; }
     .ab-delete-btn:hover { text-decoration:underline; }
     .ab-empty { display:flex; flex-direction:column; align-items:center; gap:.75rem; padding:2rem; color:#94a3b8; font-size:.875rem; text-align:center; }
     .ab-how-it-works { margin-top:1.25rem; }
@@ -174,6 +178,7 @@ export class CampaignAbTestComponent implements OnChanges {
   @Output() onCreateAbTest = new EventEmitter<{
     subjectA: string; subjectB: string; testSize: number; winnerMetric: string; waitHours: number;
   }>();
+  @Output() onLaunchAbTest = new EventEmitter<string>();
   @Output() onDeleteAbTest = new EventEmitter<string>();
 
   ngOnChanges(changes: SimpleChanges) {
@@ -208,5 +213,14 @@ export class CampaignAbTestComponent implements OnChanges {
       waitHours: this.abDraft.waitHours,
     });
     this.showABForm = false;
+  }
+
+  copyVoteLink(test: AbTest) {
+    const path = test.publicUrl || `/ab-test/${test.id}`;
+    const url = `${window.location.origin}${path.startsWith('/') ? path : `/${path}`}`;
+    navigator.clipboard.writeText(url).then(
+      () => this.onToast.emit({ message: 'Vote link copied to clipboard', type: 'success' }),
+      () => this.onToast.emit({ message: url, type: 'success' }),
+    );
   }
 }

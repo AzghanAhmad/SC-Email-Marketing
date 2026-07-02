@@ -9,8 +9,20 @@ export interface DashboardStats {
   emailsGrowth: number;
   openRate: number;
   openRateGrowth: number;
+  clickRate: number;
+  clickRateGrowth: number;
+  ordersPlaced: number;
+  ordersGrowth: number;
   revenue: number;
   revenueGrowth: number;
+}
+
+export interface ConversionMetric {
+  key: string;
+  label: string;
+  value: string;
+  change: number;
+  description: string;
 }
 
 export interface PerformanceSummary {
@@ -47,6 +59,16 @@ export interface DashboardActivity {
   icon: string;
 }
 
+export interface CampaignFunnelRow {
+  name: string;
+  sent: number;
+  delivered: number;
+  opens: number;
+  clicks: number;
+  purchases: number;
+  revenue: string;
+}
+
 export interface DashboardData {
   stats: DashboardStats;
   performance: PerformanceSummary;
@@ -54,6 +76,8 @@ export interface DashboardData {
   campaignChart: CampaignChartPoint[];
   growthChart: SubscriberGrowthPoint[];
   recentActivity: DashboardActivity[];
+  campaignFunnel: CampaignFunnelRow[];
+  conversionMetrics: ConversionMetric[];
   periodStart: string;
   periodEnd: string;
   welcomeName: string;
@@ -63,7 +87,7 @@ export interface DashboardData {
 export class DashboardApiService {
   constructor(private api: ApiService) {}
 
-  getDashboard(): Observable<DashboardData> {
-    return this.api.get<DashboardData>('/dashboard');
+  getDashboard(days = 30): Observable<DashboardData> {
+    return this.api.get<DashboardData>(`/dashboard?days=${days}`);
   }
 }

@@ -71,7 +71,8 @@ import { FlowConnectedBusinessComponent } from './flow-connected-business.compon
       <app-flow-builder
         *ngIf="selectedFlow()"
         [flow]="selectedFlow()!"
-        (onBack)="selectedFlow.set(null)">
+        (onBack)="selectedFlow.set(null)"
+        (onFlowUpdated)="onFlowUpdated($event)">
       </app-flow-builder>
 
     </div>
@@ -145,5 +146,11 @@ export class FlowsComponent implements OnInit {
         this.cdr.detectChanges();
       }
     });
+  }
+
+  onFlowUpdated(flow: Flow) {
+    this.flows = this.flows.map(f => f.id === flow.id ? flow : f);
+    this.selectedFlow.set(flow);
+    this.cdr.detectChanges();
   }
 }

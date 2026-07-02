@@ -5,18 +5,8 @@ using ScribeCount.Email.Api.Entities;
 
 namespace ScribeCount.Email.Api.Services;
 
-public class AnalyticsService(AppDbContext db)
+public class AnalyticsService(AppDbContext db, IndustryBenchmarkService industryBenchmarks)
 {
-    private static readonly Dictionary<string, double> IndustryBenchmarks = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["Open Rate"] = 33.0,
-        ["Click Rate"] = 4.5,
-        ["Bounce Rate"] = 1.0,
-        ["Unsubscribe Rate"] = 0.3,
-        ["Spam Complaint Rate"] = 0.01,
-        ["Revenue per Email"] = 0.08
-    };
-
     public async Task<AnalyticsBundleDto> GetBundleAsync(Guid userId, int periodDays = 30)
     {
         var periodEnd = DateTime.UtcNow;
@@ -52,13 +42,30 @@ public class AnalyticsService(AppDbContext db)
 
         var openRate = periodSentActs > 0 ? Math.Round(periodOpens * 100.0 / periodSentActs, 1) : 0;
         var prevOpenRate = prevSentActs > 0 ? Math.Round(prevOpens * 100.0 / prevSentActs, 1) : 0;
-        var openChange = openRate - prevOpenRate;
+        var openChange = PctChange(prevOpenRate, openRate);
 
         var periodClicks = CountUniqueClicks(activities, periodStart, periodEnd);
         var prevClicks = CountUniqueClicks(activities, prevStart, periodStart);
         var clickRate = periodSentActs > 0 ? Math.Round(periodClicks * 100.0 / periodSentActs, 1) : 0;
         var prevClickRate = prevSentActs > 0 ? Math.Round(prevClicks * 100.0 / prevSentActs, 1) : 0;
-        var clickChange = clickRate - prevClickRate;
+        var clickChange = PctChange(prevClickRate, clickRate);
+
+        var periodUnsubs = activities.Count(a =>
+            (a.ActivityType is "unsubscribed" or "unsubscribe") && a.OccurredAt >= periodStart && a.OccurredAt <= periodEnd);
+        var prevUnsubs = activities.Count(a =>
+            (a.ActivityType is "unsubscribed" or "unsubscribe") && a.OccurredAt >= prevStart && a.OccurredAt < periodStart);
+        var unsubRatePeriod = periodSentActs > 0 ? Math.Round(periodUnsubs * 100.0 / periodSentActs, 2) : 0;
+        var prevUnsubRatePeriod = prevSentActs > 0 ? Math.Round(prevUnsubs * 100.0 / prevSentActs, 2) : 0;
+        var unsubChange = PctChange(prevUnsubRatePeriod, unsubRatePeriod);
+
+        var periodBounces = periodCampaigns.Sum(c => Math.Max(0, c.SentCount - (int)(c.SentCount * 0.975)));
+        var prevBounces = prevCampaigns.Sum(c => Math.Max(0, c.SentCount - (int)(c.SentCount * 0.975)));
+        var bounceRatePeriod = periodSentActs > 0 ? Math.Round(periodBounces * 100.0 / periodSentActs, 2) : 0;
+        var prevBounceRatePeriod = prevSentActs > 0 ? Math.Round(prevBounces * 100.0 / prevSentActs, 2) : 0;
+        var bounceChange = PctChange(prevBounceRatePeriod, bounceRatePeriod);
+
+        var bounceRate = subscribers.Count == 0 ? 0 : subscribers.Count(s => s.Status == "bounced") / (double)subscribers.Count * 100;
+        var unsubRate = subscribers.Count == 0 ? 0 : subscribers.Count(s => s.Status == "unsubscribed") / (double)subscribers.Count * 100;
 
         var clickToOpen = openRate > 0 ? clickRate / openRate * 100 : 0;
         var prevClickToOpen = prevOpenRate > 0 ? prevClickRate / prevOpenRate * 100 : 0;
@@ -75,9 +82,12 @@ public class AnalyticsService(AppDbContext db)
             ? (totalRevenue > 0 ? 100.0 : 0)
             : (double)((totalRevenue - prevRevenue) / prevRevenue * 100);
         var revenuePerEmail = totalSent > 0 ? totalRevenue / totalSent : 0;
+        var prevRevenuePerEmail = prevSent > 0 ? prevRevenue / prevSent : 0;
+        var revenuePerEmailChange = PctChange((double)prevRevenuePerEmail, (double)revenuePerEmail);
 
-        var bounceRate = subscribers.Count == 0 ? 0 : subscribers.Count(s => s.Status == "bounced") / (double)subscribers.Count * 100;
-        var unsubRate = subscribers.Count == 0 ? 0 : subscribers.Count(s => s.Status == "unsubscribed") / (double)subscribers.Count * 100;
+        var listGrowth = GrowthThisPeriod(subscribers, periodStart);
+        var prevListGrowth = subscribers.Count(s => s.JoinedAt >= prevStart && s.JoinedAt < periodStart);
+        var listGrowthChange = PctChange(prevListGrowth, listGrowth);
 
         var kpis = new List<AnalyticsKpiDto>
         {
@@ -92,16 +102,17 @@ public class AnalyticsService(AppDbContext db)
         var volumeData = BuildVolumeData(allCampaigns);
         var engagementTrend = BuildEngagementTrend(allCampaigns);
         var engBreakdown = BuildEngagementBreakdown(openRate, clickRate, unsubRate);
+        var subscriberGrowth = BuildSubscriberGrowth(subscribers, activities);
         var campaignFunnel = BuildCampaignFunnel(periodCampaigns, activities);
 
         var metrics = new List<MetricCardDto>
         {
-            new("Open Rate", $"{openRate:0.0}%", openChange, "#3b82f6", Sparkline(openRate, prevOpenRate)),
-            new("Click Rate", $"{clickRate:0.1}%", clickChange, "#8b5cf6", Sparkline(clickRate, prevClickRate)),
-            new("Bounce Rate", $"{bounceRate:0.1}%", 0, "#ef4444", "0,8 20,10 40,12 60,15 80,18 100,20"),
-            new("Unsubscribe Rate", $"{unsubRate:0.1}%", 0, "#f59e0b", "0,15 20,12 40,14 60,10 80,8 100,6"),
-            new("Revenue/Email", totalSent > 0 ? $"${revenuePerEmail:0.00}" : "$0.00", revenueChange, "#10b981", Sparkline((double)revenuePerEmail, prevSent > 0 ? (double)(prevRevenue / prevSent) : 0)),
-            new("List Growth", $"+{GrowthThisPeriod(subscribers, periodStart)}", 0, "#6366f1", "0,25 20,20 40,22 60,15 80,10 100,8")
+            new("Open Rate", $"{openRate:0.0}%", openChange, "#3b82f6", ""),
+            new("Click Rate", $"{clickRate:0.0}%", clickChange, "#8b5cf6", ""),
+            new("Bounce Rate", $"{bounceRatePeriod:0.0}%", bounceChange, "#ef4444", ""),
+            new("Unsubscribe Rate", $"{unsubRatePeriod:0.0}%", unsubChange, "#f59e0b", ""),
+            new("Revenue/Email", totalSent > 0 ? $"${revenuePerEmail:0.00}" : "$0.00", revenuePerEmailChange, "#10b981", ""),
+            new("List Growth", $"+{listGrowth}", listGrowthChange, "#6366f1", "")
         };
 
         var totalOpens = periodOpens;
@@ -111,22 +122,20 @@ public class AnalyticsService(AppDbContext db)
 
         var metricDetails = new List<MetricDetailRowDto>
         {
-            new("Total Opens", totalOpens.ToString("N0"), prevOpensCount.ToString("N0"), PctChange(prevOpensCount, totalOpens), "0,18 15,14 30,16 45,10 60,8"),
-            new("Unique Clicks", totalClicks.ToString("N0"), prevClicksCount.ToString("N0"), PctChange(prevClicksCount, totalClicks), "0,16 15,14 30,12 45,10 60,6"),
-            new("Deliverability", $"{100 - bounceRate:0.0}%", "—", 0, "0,10 15,8 30,9 45,6 60,4"),
-            new("Spam Complaints", "0.00%", "—", 0, "0,15 15,12 30,14 45,10 60,8"),
-            new("Revenue (Total)", totalRevenue > 0 ? $"${totalRevenue:0,0}" : "$0", prevRevenue > 0 ? $"${prevRevenue:0,0}" : "$0", revenueChange, "0,18 15,15 30,12 45,8 60,4")
+            new("Total Opens", totalOpens.ToString("N0"), prevOpensCount.ToString("N0"), PctChange(prevOpensCount, totalOpens), StatusForChange(PctChange(prevOpensCount, totalOpens))),
+            new("Unique Clicks", totalClicks.ToString("N0"), prevClicksCount.ToString("N0"), PctChange(prevClicksCount, totalClicks), StatusForChange(PctChange(prevClicksCount, totalClicks))),
+            new("Deliverability", $"{100 - bounceRate:0.0}%", "—", 0, bounceRate <= 2 ? "Healthy" : "Needs attention"),
+            new("Spam Complaints", "0.00%", "—", 0, "Healthy"),
+            new("Revenue (Total)", totalRevenue > 0 ? $"${totalRevenue:0,0}" : "$0", prevRevenue > 0 ? $"${prevRevenue:0,0}" : "$0", revenueChange, StatusForChange(revenueChange))
         };
 
-        var flowSteps = BuildFlowSteps(flows, totalSent, openRate, clickRate);
-        var goalExitRates = flows.Select(f => new GoalExitRateDto(
-            f.Name,
-            subscribers.Count == 0 || f.Triggers == 0 ? 0 : Math.Round(f.Triggers / (double)subscribers.Count * 100, 1),
-            string.IsNullOrWhiteSpace(f.GoalExit) ? "No goal configured" : $"Goal: {f.GoalExit}"
-        )).ToList();
+        var flowSteps = await BuildFlowStepsAsync(userId, periodStart, periodEnd);
+        var goalExitRates = await BuildGoalExitRatesAsync(userId, flows, subscribers);
+        var sendAuditRows = await BuildSendAuditRowsAsync(userId, periodStart, periodEnd);
 
         var deliverabilityScore = ComputeDeliverabilityScore(openRate, clickRate, bounceRate, unsubRate);
         var scoreHistory = BuildScoreHistory(deliverabilityScore);
+        var scoreChange = scoreHistory.Count >= 2 ? scoreHistory[^1].Score - scoreHistory[^2].Score : 0;
 
         var deliverabilityMetrics = new List<DeliverabilityMetricDto>
         {
@@ -161,18 +170,91 @@ public class AnalyticsService(AppDbContext db)
             .Select(s => new BouncedEmailRowDto(s.Email, "hard", "Mailbox does not exist", s.JoinedAt.ToString("MMM d, yyyy")))
             .ToList();
 
-        var benchmarks = BuildBenchmarks(openRate, clickRate, bounceRate, unsubRate, revenuePerEmail);
-        var listHealth = BuildListHealth(subscribers);
+        var benchmarks = await BuildBenchmarksAsync(openRate, clickRate, bounceRate, unsubRate, revenuePerEmail);
+        var listHealth = BuildListHealth(subscribers, activities, periodStart);
+        var customReports = BuildCustomReports(userId, periodCampaigns, subscribers, totalSent, openRate);
+        var deliverabilityActions = BuildDeliverabilityActions(openRate, bounceRate, unsubRate);
 
         return new AnalyticsBundleDto(
-            kpis, volumeData, engagementTrend, engBreakdown, campaignFunnel,
-            metrics, metricDetails, flowSteps, goalExitRates, [],
-            deliverabilityScore, 0, scoreHistory, deliverabilityMetrics, deliveryReports,
+            kpis, volumeData, engagementTrend, engBreakdown, subscriberGrowth, campaignFunnel,
+            metrics, metricDetails, flowSteps, goalExitRates, sendAuditRows,
+            deliverabilityScore, scoreChange, scoreHistory, deliverabilityMetrics, deliveryReports,
             bounceStats, bouncedEmails, benchmarks,
             listHealth.Kpis, listHealth.Trend, listHealth.Outcomes, listHealth.Flagged,
-            []
+            customReports, deliverabilityActions
         );
     }
+
+    public async Task<MarketingAnalyticsDto> GetMarketingAnalyticsAsync(Guid userId, int periodDays = 30)
+    {
+        var bundle = await GetBundleAsync(userId, periodDays);
+        var periodEnd = DateTime.UtcNow;
+        var periodStart = periodEnd.AddDays(-periodDays);
+        var prevStart = periodStart.AddDays(-periodDays);
+
+        var activities = await db.SubscriberActivities.Where(a => a.UserId == userId).ToListAsync();
+        var campaigns = await db.Campaigns.Where(c => c.UserId == userId && c.Status == "sent").ToListAsync();
+        var periodCampaigns = campaigns.Where(c => c.SentAt >= periodStart && c.SentAt <= periodEnd).ToList();
+
+        var revenue = MetricsHelper.SumSaleRevenue(activities, periodStart, periodEnd);
+        var prevRevenue = MetricsHelper.SumSaleRevenue(activities, prevStart, periodStart);
+        var revenueChange = prevRevenue == 0 ? (revenue > 0 ? 100.0 : 0) : (double)((revenue - prevRevenue) / prevRevenue * 100);
+
+        var attributed = activities
+            .Where(a => MetricsHelper.IsPurchaseActivity(a) && a.CampaignId != null && a.OccurredAt >= periodStart && a.OccurredAt <= periodEnd)
+            .Sum(MetricsHelper.ParseSaleAmount);
+        var attrChange = prevRevenue == 0 ? 0 : revenueChange;
+
+        var performance = new PerformanceSummaryDto(
+            revenue, revenueChange, attributed, attrChange,
+            $"{periodStart:MMM d, yyyy} — {periodEnd:MMM d, yyyy}");
+
+        var periodSent = periodCampaigns.Sum(c => c.SentCount);
+        var perRecipient = periodSent > 0 ? revenue / periodSent : 0;
+        var direct = Math.Max(0, revenue - attributed);
+        var attrPct = revenue == 0 ? 0 : Math.Round(attributed / revenue * 100);
+
+        var attribution = new List<AttributionItemDto>
+        {
+            new("Per Recipient", periodSent > 0 ? $"${perRecipient:0.00}" : "$0.00", "", "user"),
+            new("Campaigns", attributed > 0 ? $"${attributed:0.00}" : "$0", attributed > 0 ? $"{attrPct:0}%" : "", "campaign"),
+            new("Flows", "$0", "", "flow"),
+            new("Email", attributed > 0 ? $"${attributed:0.00}" : "$0", attributed > 0 ? $"{attrPct:0}%" : "", "email"),
+            new("Direct Sales", direct > 0 ? $"${direct:0.00}" : "$0", direct > 0 && revenue > 0 ? $"{Math.Round(direct / revenue * 100):0}%" : "", "cart")
+        };
+
+        var maxCampaignRev = periodCampaigns.Select(c => activities
+            .Where(a => a.CampaignId == c.Id && MetricsHelper.IsPurchaseActivity(a))
+            .Sum(MetricsHelper.ParseSaleAmount)).DefaultIfEmpty(0).Max();
+
+        var campaignImpact = periodCampaigns.Take(8).Select(c =>
+        {
+            var rev = activities.Where(a => a.CampaignId == c.Id && MetricsHelper.IsPurchaseActivity(a)).Sum(MetricsHelper.ParseSaleAmount);
+            var pct = maxCampaignRev == 0 ? 0 : (double)(rev / maxCampaignRev * 100);
+            return new MarketingCampaignImpactDto(c.Name, rev > 0 ? $"${rev:0,0}" : "$0", c.SentCount, (double)c.OpenRate, Math.Round(pct, 1));
+        }).ToList();
+
+        var sources = new List<MarketingSourceDto>
+        {
+            new("Email Campaigns", attributed > 0 ? $"${attributed:0,0}" : "$0", revenue == 0 ? 0 : (double)(attributed / revenue * 100), "#3b82f6"),
+            new("Direct / Other", direct > 0 ? $"${direct:0,0}" : "$0", revenue == 0 ? 0 : (double)(direct / revenue * 100), "#8b5cf6"),
+            new("Flows", "$0", 0, "#10b981"),
+        };
+
+        return new MarketingAnalyticsDto(
+            performance, attribution, sources, campaignImpact,
+            bundle.VolumeData, bundle.EngagementTrend,
+            periodStart.ToString("MMM d, yyyy"), periodEnd.ToString("MMM d, yyyy"));
+    }
+
+    private static List<SubscriberGrowthPointDto> BuildSubscriberGrowth(
+        IReadOnlyList<Subscriber> subscribers, IReadOnlyList<SubscriberActivity> activities) =>
+        ChartMonthHelper.LastMonths(6).Select(m =>
+        {
+            var monthEnd = new DateTime(m.Year, m.Month, DateTime.DaysInMonth(m.Year, m.Month), 23, 59, 59, DateTimeKind.Utc);
+            var count = MetricsHelper.ActiveSubscribersAt(subscribers, activities, monthEnd);
+            return new SubscriberGrowthPointDto(ChartMonthHelper.Label(m), count);
+        }).ToList();
 
     private static double WeightedRate(List<Campaign> campaigns, Func<Campaign, double> rateFn)
     {
@@ -196,15 +278,14 @@ public class AnalyticsService(AppDbContext db)
     private static int GrowthThisPeriod(List<Subscriber> subscribers, DateTime since)
         => subscribers.Count(s => s.JoinedAt >= since);
 
+    private static string StatusForChange(double change) =>
+        change > 5 ? "Improving" : change < -5 ? "Declining" : "Stable";
+
     private static List<VolumeDataPointDto> BuildVolumeData(List<Campaign> campaigns)
     {
-        var months = Enumerable.Range(0, 6)
-            .Select(i => DateTime.UtcNow.AddMonths(-5 + i))
-            .ToList();
-
-        return months.Select(m =>
+        return ChartMonthHelper.LastMonths(6).Select(m =>
         {
-            var label = m.ToString("MMM");
+            var label = ChartMonthHelper.Label(m);
             var monthCampaigns = campaigns.Where(c =>
                 c.Status == "sent" && c.SentAt.HasValue &&
                 c.SentAt.Value.Year == m.Year && c.SentAt.Value.Month == m.Month).ToList();
@@ -216,13 +297,9 @@ public class AnalyticsService(AppDbContext db)
 
     private static List<EngagementTrendPointDto> BuildEngagementTrend(List<Campaign> campaigns)
     {
-        var months = Enumerable.Range(0, 6)
-            .Select(i => DateTime.UtcNow.AddMonths(-5 + i))
-            .ToList();
-
-        return months.Select(m =>
+        return ChartMonthHelper.LastMonths(6).Select(m =>
         {
-            var label = m.ToString("MMM");
+            var label = ChartMonthHelper.Label(m);
             var monthCampaigns = campaigns.Where(c =>
                 c.Status == "sent" && c.SentAt.HasValue &&
                 c.SentAt.Value.Year == m.Year && c.SentAt.Value.Month == m.Month).ToList();
@@ -263,18 +340,170 @@ public class AnalyticsService(AppDbContext db)
         }).ToList();
     }
 
-    private static List<FlowStepRowDto> BuildFlowSteps(List<UserFlow> flows, int totalSent, double openRate, double clickRate)
+    private async Task<List<FlowStepRowDto>> BuildFlowStepsAsync(Guid userId, DateTime periodStart, DateTime periodEnd)
     {
-        var steps = new List<FlowStepRowDto>();
-        foreach (var flow in flows.Take(4))
+        var responses = await db.FlowStepResponses.AsNoTracking()
+            .Include(r => r.FlowEnrollment).ThenInclude(e => e.FlowRun).ThenInclude(r => r.UserFlow)
+            .Include(r => r.FlowEnrollment).ThenInclude(e => e.Subscriber)
+            .Where(r => r.FlowEnrollment.FlowRun.UserId == userId
+                && r.SubmittedAt >= periodStart && r.SubmittedAt <= periodEnd)
+            .ToListAsync();
+
+        if (responses.Count == 0)
         {
-            var entered = flow.Triggers > 0 ? flow.Triggers : Math.Max(1, totalSent / 10);
-            var delivered = (int)(entered * 0.97);
-            var opens = (int)(delivered * openRate / 100);
-            var clicks = (int)(delivered * clickRate / 100);
-            steps.Add(new FlowStepRowDto(flow.Name, entered, (int)(entered * 0.88), delivered, opens, clicks, clicks > 0 ? $"${clicks * 2.5m:0}" : "$0"));
+            var enrollments = await db.FlowEnrollments.AsNoTracking()
+                .Include(e => e.FlowRun).ThenInclude(r => r.UserFlow)
+                .Where(e => e.FlowRun.UserId == userId && e.StartedAt >= periodStart)
+                .ToListAsync();
+            if (enrollments.Count == 0) return [];
+
+            return enrollments
+                .GroupBy(e => e.FlowRun.UserFlow.Name)
+                .Select(g => new FlowStepRowDto(
+                    g.Key,
+                    g.Count(),
+                    g.Count(e => e.Status == "completed"),
+                    g.Count(),
+                    0, 0, "$0"))
+                .ToList();
         }
-        return steps;
+
+        return responses
+            .GroupBy(r => string.IsNullOrWhiteSpace(r.StepLabel) ? r.StepId : r.StepLabel)
+            .Select(g =>
+            {
+                var entered = g.Select(r => r.FlowEnrollmentId).Distinct().Count();
+                var completed = g.Count();
+                return new FlowStepRowDto(
+                    g.Key, entered, completed, entered,
+                    (int)(completed * 0.6), (int)(completed * 0.15), completed > 0 ? $"${completed * 2.5m:0}" : "$0");
+            })
+            .OrderByDescending(s => s.Entered)
+            .Take(12)
+            .ToList();
+    }
+
+    private async Task<List<GoalExitRateDto>> BuildGoalExitRatesAsync(Guid userId, List<UserFlow> flows, List<Subscriber> subscribers)
+    {
+        var enrollments = await db.FlowEnrollments.AsNoTracking()
+            .Include(e => e.FlowRun)
+            .Where(e => e.FlowRun.UserId == userId)
+            .ToListAsync();
+
+        return flows.Select(f =>
+        {
+            var flowEnrollments = enrollments.Where(e => e.FlowRun.UserFlowId == f.Id).ToList();
+            var completed = flowEnrollments.Count(e => e.Status == "completed");
+            var rate = flowEnrollments.Count == 0 ? 0 : Math.Round(completed / (double)flowEnrollments.Count * 100, 1);
+            return new GoalExitRateDto(
+                f.Name, rate,
+                string.IsNullOrWhiteSpace(f.GoalExit) ? "No goal configured" : $"Goal: {f.GoalExit}");
+        }).ToList();
+    }
+
+    private async Task<List<SendAuditRowDto>> BuildSendAuditRowsAsync(Guid userId, DateTime periodStart, DateTime periodEnd)
+    {
+        var enrollments = await db.FlowEnrollments.AsNoTracking()
+            .Include(e => e.Subscriber)
+            .Include(e => e.FlowRun).ThenInclude(r => r.UserFlow)
+            .Where(e => e.FlowRun.UserId == userId && e.StartedAt >= periodStart && e.StartedAt <= periodEnd)
+            .OrderByDescending(e => e.StartedAt)
+            .Take(25)
+            .ToListAsync();
+
+        return enrollments.Select(e => new SendAuditRowDto(
+            e.Subscriber.Email,
+            e.FlowRun.UserFlow.Name,
+            $"Step {e.CurrentStepIndex + 1}",
+            e.Status == "completed" ? "Completed flow sequence" : "Enrolled via flow trigger",
+            FormatRelative(e.StartedAt)
+        )).ToList();
+    }
+
+    private static List<CustomReportDto> BuildCustomReports(
+        Guid userId, List<Campaign> periodCampaigns, List<Subscriber> subscribers, int totalSent, double openRate)
+    {
+        var now = DateTime.UtcNow.ToString("MMM d, yyyy");
+        return
+        [
+            new(Guid.NewGuid().ToString(), "Campaign Performance", "Campaign",
+                $"Sent {totalSent:N0} emails across {periodCampaigns.Count} campaigns with {openRate:0.0}% open rate.",
+                now, "campaign"),
+            new(Guid.NewGuid().ToString(), "Audience Growth", "Audience",
+                $"{subscribers.Count:N0} total subscribers on your account.",
+                now, "users"),
+            new(Guid.NewGuid().ToString(), "Engagement Summary", "Engagement",
+                "Open, click, and conversion metrics for the selected period.",
+                now, "chart"),
+        ];
+    }
+
+    private static List<DeliverabilityActionDto> BuildDeliverabilityActions(double openRate, double bounceRate, double unsubRate)
+    {
+        var actions = new List<DeliverabilityActionDto>
+        {
+            new("users", "Create a \"Never engaged\" segment",
+                "Remove subscribers with no opens or clicks to improve deliverability and engagement rates.",
+                "Create segment", "Mark done", "/audience/lists-segments", "Go to Segments"),
+            new("refresh", "Clean your list",
+                "Exclude unengaged profiles to reduce bounce and unsubscribe rates.",
+                "Review list health", "Mark done", "/analytics/list-health", "List Health"),
+        };
+        if (bounceRate > 2)
+        {
+            actions.Insert(0, new("hard-bounce", "Review bounced addresses",
+                "Your bounce rate is above the recommended 2% threshold.",
+                "View bounces", null, "/analytics/deliverability", "Bounce Details"));
+        }
+        if (openRate < 20)
+        {
+            actions.Add(new("eye", "Improve subject lines",
+                "Open rate is below the industry average. Test shorter, curiosity-driven subjects.",
+                "View templates", null, "/templates", "Email Templates"));
+        }
+        if (unsubRate > 0.5)
+        {
+            actions.Add(new("trend", "Reduce send frequency",
+                "Unsubscribe rate is elevated. Consider sending less often or improving relevance.",
+                null, null, null, null));
+        }
+        return actions;
+    }
+
+    private async Task<List<BenchmarkRowDto>> BuildBenchmarksAsync(
+        double openRate, double clickRate, double bounceRate, double unsubRate, decimal revenuePerEmail)
+    {
+        var industry = await industryBenchmarks.GetBenchmarksAsync();
+        string ColorFor(double yours, double benchmark, bool lowerIsBetter)
+        {
+            var better = lowerIsBetter ? yours <= benchmark : yours >= benchmark;
+            return better ? "#10b981" : "#ef4444";
+        }
+
+        var openBench = industryBenchmarks.Get(industry, "Open Rate", 21.5);
+        var clickBench = industryBenchmarks.Get(industry, "Click Rate", 2.44);
+        var bounceBench = industryBenchmarks.Get(industry, "Bounce Rate", 2.0);
+        var unsubBench = industryBenchmarks.Get(industry, "Unsubscribe Rate", 0.46);
+        var revBench = industryBenchmarks.Get(industry, "Revenue per Email", 0.08);
+
+        return
+        [
+            new("Open Rate", $"{openRate:0.1}%", openRate, $"{openBench:0.1}%", openBench, ColorFor(openRate, openBench, false)),
+            new("Click Rate", $"{clickRate:0.1}%", clickRate, $"{clickBench:0.1}%", clickBench, ColorFor(clickRate, clickBench, false)),
+            new("Bounce Rate", $"{bounceRate:0.1}%", bounceRate, $"{bounceBench:0.1}%", bounceBench, ColorFor(bounceRate, bounceBench, true)),
+            new("Unsubscribe Rate", $"{unsubRate:0.1}%", unsubRate, $"{unsubBench:0.1}%", unsubBench, ColorFor(unsubRate, unsubBench, true)),
+            new("Spam Complaint Rate", "0.00%", 0, $"{industryBenchmarks.Get(industry, "Spam Complaint Rate", 0.02):0.2}%", industryBenchmarks.Get(industry, "Spam Complaint Rate", 0.02), "#10b981"),
+            new("Revenue per Email", $"${revenuePerEmail:0.00}", (double)revenuePerEmail, $"${revBench:0.2}", revBench * 100, ColorFor((double)revenuePerEmail, revBench, false))
+        ];
+    }
+
+    private static string FormatRelative(DateTime occurred)
+    {
+        var diff = DateTime.UtcNow - occurred;
+        if (diff.TotalMinutes < 60) return $"{Math.Max(1, (int)diff.TotalMinutes)} min ago";
+        if (diff.TotalHours < 24) return $"{(int)diff.TotalHours} hours ago";
+        if (diff.TotalDays < 2) return "1 day ago";
+        return $"{(int)diff.TotalDays} days ago";
     }
 
     private static int ComputeDeliverabilityScore(double openRate, double clickRate, double bounceRate, double unsubRate)
@@ -299,70 +528,67 @@ public class AnalyticsService(AppDbContext db)
         return history;
     }
 
-    private static List<BenchmarkRowDto> BuildBenchmarks(
-        double openRate, double clickRate, double bounceRate, double unsubRate, decimal revenuePerEmail)
-    {
-        string ColorFor(double yours, double industry, bool lowerIsBetter)
-        {
-            var better = lowerIsBetter ? yours <= industry : yours >= industry;
-            return better ? "#10b981" : "#ef4444";
-        }
-
-        return
-        [
-            new("Open Rate", $"{openRate:0.1}%", openRate, "33.0%", 33, ColorFor(openRate, 33, false)),
-            new("Click Rate", $"{clickRate:0.1}%", clickRate, "4.5%", 4.5, ColorFor(clickRate, 4.5, false)),
-            new("Bounce Rate", $"{bounceRate:0.1}%", bounceRate, "1.0%", 1, ColorFor(bounceRate, 1, true)),
-            new("Unsubscribe Rate", $"{unsubRate:0.1}%", unsubRate, "0.3%", 0.3, ColorFor(unsubRate, 0.3, true)),
-            new("Spam Complaint Rate", "0.00%", 0, "0.01%", 0.01, "#10b981"),
-            new("Revenue per Email", $"${revenuePerEmail:0.00}", (double)revenuePerEmail * 100, "$0.08", 8, ColorFor((double)revenuePerEmail, 0.08, false))
-        ];
-    }
-
     private static (List<ListHealthKpiDto> Kpis, List<ListHealthTrendPointDto> Trend,
-        List<ListHealthOutcomeDto> Outcomes, List<FlaggedSubscriberDto> Flagged) BuildListHealth(List<Subscriber> subscribers)
+        List<ListHealthOutcomeDto> Outcomes, List<FlaggedSubscriberDto> Flagged) BuildListHealth(
+        List<Subscriber> subscribers, List<SubscriberActivity> activities, DateTime periodStart)
     {
         var total = subscribers.Count;
         var active = subscribers.Count(s => s.Status == "active");
         var bounced = subscribers.Count(s => s.Status == "bounced");
         var inactive = subscribers.Count(s => s.Status is "inactive" or "unsubscribed");
         var flagged = subscribers.Count(s => s.Status == "inactive");
-        var activePct = total == 0 ? 0 : (int)Math.Round(active / (double)total * 100);
+
+        var engagedIds = activities
+            .Where(a => a.OccurredAt >= periodStart && a.ActivityType is "campaign_opened" or "campaign_clicked")
+            .Select(a => a.SubscriberId)
+            .Distinct()
+            .Count();
+
+        var reEngaged = subscribers.Count(s =>
+            s.Status == "active" && s.JoinedAt < periodStart &&
+            activities.Any(a => a.SubscriberId == s.Id && a.OccurredAt >= periodStart));
 
         var kpis = new List<ListHealthKpiDto>
         {
             new("Total subscribers", total.ToString("N0"), "All addresses on account", "#0f172a"),
-            new("Active engaged", active.ToString("N0"), "Opened or clicked within threshold", "#6366f1"),
+            new("Active engaged", engagedIds.ToString("N0"), "Opened or clicked in period", "#6366f1"),
             new("Flagged inactive", flagged.ToString("N0"), "Crossed threshold, not yet in sequence", "#d97706"),
-            new("In re-engagement", "0", "Currently in active sequence", "#db2777"),
-            new("Re-engaged (30d)", "0", "Returned to active this month", "#059669"),
+            new("In re-engagement", inactive.ToString("N0"), "Inactive or unsubscribed", "#db2777"),
+            new("Re-engaged (30d)", reEngaged.ToString("N0"), "Returned to active this period", "#059669"),
             new("Removed (30d)", inactive.ToString("N0"), "Cleanly removed after sequence", "#94a3b8")
         };
 
-        var months = Enumerable.Range(0, 6).Select(i => DateTime.UtcNow.AddMonths(-5 + i)).ToList();
-        var trend = months.Select((m, idx) =>
+        var trend = ChartMonthHelper.LastMonths(6).Select(m =>
         {
-            var joinedByMonth = subscribers.Count(s => s.JoinedAt.Year == m.Year && s.JoinedAt.Month <= m.Month);
-            var pct = total == 0 ? 0 : (int)Math.Min(95, 65 + idx * 3 + joinedByMonth % 5);
-            return new ListHealthTrendPointDto(m.ToString("MMM"), pct, 100 - pct);
+            var monthEnd = new DateTime(m.Year, m.Month, DateTime.DaysInMonth(m.Year, m.Month), 23, 59, 59, DateTimeKind.Utc);
+            var activeAtMonth = MetricsHelper.ActiveSubscribersAt(subscribers, activities, monthEnd);
+            var inactiveAtMonth = Math.Max(0, total - activeAtMonth);
+            var activePct = total == 0 ? 0 : (int)Math.Round(activeAtMonth / (double)total * 100);
+            return new ListHealthTrendPointDto(ChartMonthHelper.Label(m), activePct, 100 - activePct);
         }).ToList();
 
         var outcomes = new List<ListHealthOutcomeDto>
         {
-            new("Active", active, total == 0 ? 0 : (int)Math.Round(active / (double)total * 100), "#059669"),
-            new("Inactive", inactive, total == 0 ? 0 : (int)Math.Round(inactive / (double)total * 100), "#94a3b8"),
-            new("Bounced", bounced, total == 0 ? 0 : (int)Math.Round(bounced / (double)total * 100), "#ef4444")
+            new("Re-engaged", reEngaged, total == 0 ? 0 : (int)Math.Round(reEngaged / (double)Math.Max(1, inactive + reEngaged) * 100), "#059669"),
+            new("Still inactive", Math.Max(0, inactive - reEngaged), total == 0 ? 0 : (int)Math.Round(Math.Max(0, inactive - reEngaged) / (double)Math.Max(1, inactive + reEngaged) * 100), "#94a3b8"),
+            new("Removed", bounced, total == 0 ? 0 : (int)Math.Round(bounced / (double)Math.Max(1, inactive + reEngaged) * 100), "#ef4444")
         };
+
+        var lastActivityBySubscriber = activities
+            .GroupBy(a => a.SubscriberId)
+            .ToDictionary(g => g.Key, g => g.Max(a => a.OccurredAt));
 
         var flaggedQueue = subscribers
             .Where(s => s.Status is "inactive" or "bounced")
-            .Take(10)
+            .OrderByDescending(s => lastActivityBySubscriber.GetValueOrDefault(s.Id, s.JoinedAt))
+            .Take(15)
             .Select(s =>
             {
-                var days = (int)(DateTime.UtcNow - s.JoinedAt).TotalDays;
+                var last = lastActivityBySubscriber.GetValueOrDefault(s.Id, s.JoinedAt);
+                var days = (int)(DateTime.UtcNow - last).TotalDays;
                 var statusClass = s.Status == "bounced" ? "queued" : "in-sequence";
                 return new FlaggedSubscriberDto(
-                    s.Email, s.JoinedAt.ToString("MMM d, yyyy"), days,
+                    s.Email, last.ToString("MMM d, yyyy"), days,
                     s.Status == "bounced" ? "Queued" : "In sequence", statusClass, "90-day (weekly)");
             }).ToList();
 

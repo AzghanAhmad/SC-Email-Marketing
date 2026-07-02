@@ -1,7 +1,10 @@
-import { Component, signal } from '@angular/core';
+import { Component, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { StoreConnectionGuideComponent } from './store-connection/store-connection-guide.component';
+import { SettingsApiService, IntegrationItem } from '../../core/services/settings-api.service';
+import { NAV_ICONS } from '../../core/constants/nav-icons';
 
 @Component({
   selector: 'app-integrations',
@@ -483,6 +486,11 @@ import { StoreConnectionGuideComponent } from './store-connection/store-connecti
 
       <!-- INTEGRATIONS LIST -->
       <div *ngIf="!shopifyView() && !wooView()">
+        <div class="shop-toast" *ngIf="toastMsg()" [class.toast-ok]="toastType() === 'ok'" [class.toast-info]="toastType() === 'info'">
+          <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd"/></svg>
+          {{ toastMsg() }}
+        </div>
+
         <div class="page-header">
           <div>
             <h1 class="page-title">Integrations</h1>
@@ -496,11 +504,11 @@ import { StoreConnectionGuideComponent } from './store-connection/store-connecti
           <h2 class="section-heading">{{ section.title }}</h2>
           <div class="int-grid">
             <div class="glass-card int-card" *ngFor="let int of section.items">
-              <div class="int-icon-wrap" [style.background]="int.iconBg" [innerHTML]="int.icon"></div>
+              <span class="nav-icon" [innerHTML]="int.safeIcon"></span>
               <div class="int-body">
                 <div class="int-name-row">
                   <h3 class="int-name">{{ int.name }}</h3>
-                  <span class="int-connected-badge" *ngIf="int.connected">
+                  <span class="int-connected-badge" *ngIf="int.connected && !int.comingSoon">
                     <svg viewBox="0 0 20 20" fill="#059669" width="12" height="12"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd"/></svg>
                     Connected
                   </span>
@@ -508,10 +516,10 @@ import { StoreConnectionGuideComponent } from './store-connection/store-connecti
                 <p class="int-desc">{{ int.description }}</p>
               </div>
               <button class="int-action-btn"
-                [class.connected]="int.connected"
-                [class.disconnected]="!int.connected"
-                (click)="int.name === 'Shopify' ? shopifyView.set(true) : int.name === 'WooCommerce' ? wooView.set(true) : null">
-                {{ int.connected ? 'Manage' : 'Connect' }}
+                [class.connected]="int.connected && !int.comingSoon"
+                [class.disconnected]="!int.connected || int.comingSoon"
+                (click)="handleIntegrationClick(int)">
+                {{ int.connected && !int.comingSoon ? 'Manage' : 'Connect' }}
               </button>
             </div>
           </div>
@@ -526,7 +534,8 @@ import { StoreConnectionGuideComponent } from './store-connection/store-connecti
     .section-heading { font-size:.8rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:#94a3b8; margin:0 0 .875rem; }
     .int-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:1rem; }
     .int-card { padding:1.25rem; display:flex; align-items:center; gap:1rem; }
-    .int-icon-wrap { width:44px; height:44px; border-radius:12px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .nav-icon { display:flex; align-items:center; justify-content:center; flex-shrink:0; color:#64748b; width:24px; }
+    .nav-icon :global(svg) { width:22px; height:22px; display:block; }
     .int-body { flex:1; }
     .int-name-row { display:flex; align-items:center; gap:.5rem; margin-bottom:.25rem; }
     .int-name { font-size:.9375rem; font-weight:700; color:#0f172a; margin:0; }
@@ -551,6 +560,7 @@ import { StoreConnectionGuideComponent } from './store-connection/store-connecti
 
     .shop-toast { position:fixed; top:1.5rem; right:1.5rem; z-index:9999; display:flex; align-items:center; gap:.625rem; padding:.875rem 1.25rem; border-radius:12px; font-size:.875rem; font-weight:500; box-shadow:0 8px 24px rgba(0,0,0,0.12); animation:toastIn .25s ease; }
     .toast-ok { background:#059669; color:#fff; }
+    .toast-info { background:#1e293b; color:#fff; }
     @keyframes toastIn { from{transform:translateX(120%);opacity:0} to{transform:translateX(0);opacity:1} }
 
     .shop-card { padding:1.75rem; margin-bottom:1.25rem; }
@@ -686,7 +696,10 @@ import { StoreConnectionGuideComponent } from './store-connection/store-connecti
     @media(max-width:700px) { .req-grid { grid-template-columns:1fr; } .cred-grid { grid-template-columns:1fr; } .pm-row { grid-template-columns:1fr 1fr; } }
   `]
 })
-export class IntegrationsComponent {
+export class IntegrationsComponent implements OnInit {
+  private sanitizer = inject(DomSanitizer);
+  private settingsApi = inject(SettingsApiService);
+
   shopifyView = signal(false);
   wooView = signal(false);
   toastMsg = signal('');
@@ -705,7 +718,7 @@ export class IntegrationsComponent {
   connectShopify() {
     if (!this.shopify.storeUrl.trim()) return;
     this.shopify.connected = true;
-    const item = this.sections.flatMap(s => s.items).find(i => i.name === 'Shopify');
+    const item = this.sections.flatMap(s => s.items).find(i => i.id === 'shopify');
     if (item) item.connected = true;
     this.showToast('Shopify store connected successfully!', 'ok');
   }
@@ -713,21 +726,21 @@ export class IntegrationsComponent {
   disconnectShopify() {
     this.shopify.connected = false;
     this.shopify.storeUrl = '';
-    const item = this.sections.flatMap(s => s.items).find(i => i.name === 'Shopify');
+    const item = this.sections.flatMap(s => s.items).find(i => i.id === 'shopify');
     if (item) item.connected = false;
     this.shopifyView.set(false);
   }
 
   connectWoo() {
     this.woo.connected = true;
-    const item = this.sections.flatMap(s => s.items).find(i => i.name === 'WooCommerce');
+    const item = this.sections.flatMap(s => s.items).find(i => i.id === 'woocommerce');
     if (item) item.connected = true;
     this.showToast('WooCommerce store connected successfully!', 'ok');
   }
 
   disconnectWoo() {
     this.woo.connected = false;
-    const item = this.sections.flatMap(s => s.items).find(i => i.name === 'WooCommerce');
+    const item = this.sections.flatMap(s => s.items).find(i => i.id === 'woocommerce');
     if (item) item.connected = false;
     this.wooView.set(false);
   }
@@ -741,7 +754,7 @@ export class IntegrationsComponent {
     this.toastMsg.set(msg);
     this.toastType.set(type);
     if (this.toastTimer) clearTimeout(this.toastTimer);
-    this.toastTimer = setTimeout(() => this.toastMsg.set(''), 3000);
+    this.toastTimer = setTimeout(() => this.toastMsg.set(''), type === 'info' ? 5000 : 3000);
   }
 
   wooRequirements = [
@@ -902,33 +915,71 @@ export class IntegrationsComponent {
     { time: 'May 7, 14:11', eventLabel: 'order.completed', type: 'purchase', email: 'ja***@icloud.com', flow: 'Post-Purchase Thank You', status: 'warn' },
   ];
 
-  sections = [
-    {
-      title: 'Store Platforms',
-      items: [
-        { name: 'Shopify', description: 'Connect your store for purchase flows, abandoned cart recovery, and subscriber capture', connected: false, iconBg: 'rgba(5,150,105,0.08)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="1.75" width="24" height="24"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>' },
-        { name: 'WooCommerce', description: 'Connect your WooCommerce store for the same automation flows as Shopify', connected: false, iconBg: 'rgba(99,102,241,0.08)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="1.75" width="24" height="24"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>' },
-      ]
-    },
-    {
-      title: 'Reader Delivery',
-      items: [
-        { name: 'BookFunnel', description: 'Sync reader magnet downloads and trigger welcome sequences automatically', connected: true, iconBg: 'rgba(59,130,246,0.08)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="1.75" width="24" height="24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>' },
-        { name: 'StoryOrigin', description: 'Import subscribers from newsletter swaps and group promotions', connected: true, iconBg: 'rgba(139,92,246,0.08)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="1.75" width="24" height="24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>' },
-      ]
-    },
-    {
-      title: 'Analytics & Advertising',
-      items: [
-        { name: 'Google Analytics', description: 'Track email campaign traffic and conversions in GA4', connected: false, iconBg: 'rgba(245,158,11,0.08)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="1.75" width="24" height="24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>' },
-        { name: 'Facebook Pixel', description: 'Retarget email subscribers with Facebook and Instagram ads', connected: false, iconBg: 'rgba(59,130,246,0.08)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="1.75" width="24" height="24"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>' },
-      ]
-    },
-    {
-      title: 'Automation',
-      items: [
-        { name: 'Zapier', description: 'Connect ScribeCount Email with 5,000+ apps via Zapier', connected: false, iconBg: 'rgba(239,68,68,0.08)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="1.75" width="24" height="24"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>' },
-      ]
-    },
-  ];
+  sections: { title: string; items: { id: string; name: string; description: string; connected: boolean; iconKey: string; comingSoon: boolean; safeIcon: SafeHtml }[] }[] = [];
+
+  ngOnInit() {
+    this.settingsApi.getSettings().subscribe(s => {
+      this.shopify.connected = s.store.connected;
+      this.shopify.storeUrl = s.store.storeUrl;
+      this.buildSections(s.integrations);
+    });
+  }
+
+  private buildSections(integrations: IntegrationItem[]) {
+    const byKey = Object.fromEntries(integrations.map(i => [i.key, i]));
+    const item = (id: string, fallbackName: string, fallbackDesc: string, iconKey: string) => {
+      const api = byKey[id];
+      return {
+        id,
+        name: api?.name ?? fallbackName,
+        description: api?.description ?? fallbackDesc,
+        connected: api?.connected ?? false,
+        iconKey: api?.iconKey ?? iconKey,
+        comingSoon: api?.comingSoon ?? false,
+        safeIcon: this.icon(api?.iconKey ?? iconKey),
+      };
+    };
+    this.sections = [
+      {
+        title: 'Store Platforms',
+        items: [
+          item('shopify', 'Shopify', 'Connect your store for purchase flows, abandoned cart recovery, and subscriber capture', 'checkout'),
+          item('woocommerce', 'WooCommerce', 'Connect your WooCommerce store for the same automation flows as Shopify', 'checkout'),
+        ],
+      },
+      {
+        title: 'Reader Delivery',
+        items: [
+          item('bookfunnel', 'BookFunnel', 'Sync reader magnet downloads and trigger welcome sequences automatically', 'book'),
+          item('storyorigin', 'StoryOrigin', 'Import subscribers from newsletter swaps and group promotions', 'form'),
+        ],
+      },
+      {
+        title: 'Analytics & Advertising',
+        items: [
+          item('google_analytics', 'Google Analytics', 'Track email campaign traffic and conversions in GA4', 'chart'),
+          item('facebook_pixel', 'Facebook Pixel', 'Retarget email subscribers with Facebook and Instagram ads', 'link'),
+        ],
+      },
+      {
+        title: 'Automation',
+        items: [
+          item('zapier', 'Zapier', 'Connect ScribeCount Email with 5,000+ apps via Zapier', 'trend'),
+        ],
+      },
+    ];
+  }
+
+  private icon(key: string): SafeHtml {
+    return this.sanitizer.bypassSecurityTrustHtml(NAV_ICONS[key] ?? NAV_ICONS['integration']);
+  }
+
+  handleIntegrationClick(int: { id: string; comingSoon: boolean; connected: boolean }) {
+    if (int.comingSoon) {
+      this.showToast('Coming soon — this integration is not available yet.', 'info');
+      return;
+    }
+    if (int.id === 'shopify') this.shopifyView.set(true);
+    else if (int.id === 'woocommerce') this.wooView.set(true);
+  }
 }

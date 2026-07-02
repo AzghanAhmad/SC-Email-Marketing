@@ -6,13 +6,14 @@ using Microsoft.EntityFrameworkCore;
 using ScribeCount.Email.Api.Data;
 using ScribeCount.Email.Api.DTOs;
 using ScribeCount.Email.Api.Entities;
+using ScribeCount.Email.Api.Services;
 
 namespace ScribeCount.Email.Api.Controllers;
 
 [ApiController]
 [Authorize]
 [Route("api/v1/flows")]
-public class FlowsController(AppDbContext db) : ControllerBase
+public class FlowsController(AppDbContext db, FlowService flowService) : ControllerBase
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
@@ -74,6 +75,27 @@ public class FlowsController(AppDbContext db) : ControllerBase
         return Ok(MapFlow(flow));
     }
 
+    [HttpPost("{id:guid}/trigger")]
+    public async Task<ActionResult<FlowTriggerResultDto>> Trigger(Guid id)
+    {
+        try
+        {
+            var result = await flowService.TriggerFlowAsync(GetUserId(), id);
+            return result is null ? NotFound() : Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpGet("{id:guid}/results")]
+    public async Task<ActionResult<FlowResultsDto>> GetResults(Guid id)
+    {
+        var results = await flowService.GetFlowResultsAsync(GetUserId(), id);
+        return results is null ? NotFound() : Ok(results);
+    }
+
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id)
     {
@@ -88,10 +110,12 @@ public class FlowsController(AppDbContext db) : ControllerBase
 
     private static FlowDto MapFlow(UserFlow f)
     {
-        var steps = JsonSerializer.Deserialize<List<FlowStepDto>>(f.StepsJson, JsonOptions) ?? [];
+        var steps = FlowService.ParseSteps(f.StepsJson);
         object? metrics = string.IsNullOrWhiteSpace(f.SubscriptionMetricsJson)
             ? null
             : JsonSerializer.Deserialize<object>(f.SubscriptionMetricsJson, JsonOptions);
-        return new FlowDto(f.Id.ToString(), f.Name, f.Description, f.Status, f.Triggers, f.Family, f.GoalExit, f.Priority, f.RequiresWebhook, steps, metrics);
+        return new FlowDto(
+            f.Id.ToString(), f.Name, f.Description, f.Status, f.Triggers, f.Family, f.GoalExit,
+            f.Priority, f.RequiresWebhook, steps, metrics, f.TemplateId);
     }
 }

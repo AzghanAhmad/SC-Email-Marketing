@@ -14,7 +14,7 @@ public record CampaignFunnelRowDto(
 public record MetricCardDto(string Label, string Value, double Change, string Color, string Sparkline);
 
 public record MetricDetailRowDto(
-    string Name, string Current, string Previous, double ChangeNum, string Spark);
+    string Name, string Current, string Previous, double ChangeNum, string Status);
 
 public record FlowStepRowDto(
     string Step, int Entered, int Completed, int Delivered, int Opens, int Clicks, string Revenue);
@@ -45,13 +45,35 @@ public record ListHealthOutcomeDto(string Name, int Count, int Pct, string Color
 public record FlaggedSubscriberDto(
     string Email, string LastEngaged, int DaysInactive, string Status, string StatusClass, string Threshold);
 
-public record CustomReportDto(string Name, string Type, string Description, string LastUpdated, string IconKey);
+public record CustomReportDto(string Id, string Name, string Type, string Description, string LastUpdated, string IconKey);
+
+public record DeliverabilityActionDto(
+    string IconKey, string Title, string Description, string? PrimaryBtn, string? SecondaryBtn,
+    string? LinkRoute, string? LinkLabel);
+
+public record MarketingAnalyticsDto(
+    PerformanceSummaryDto Performance,
+    List<AttributionItemDto> Attribution,
+    List<MarketingSourceDto> RevenueBySource,
+    List<MarketingCampaignImpactDto> CampaignImpact,
+    List<VolumeDataPointDto> VolumeData,
+    List<EngagementTrendPointDto> EngagementTrend,
+    string PeriodStart,
+    string PeriodEnd);
+
+public record MarketingSourceDto(string Name, string Value, double Pct, string Color);
+
+public record MarketingCampaignImpactDto(
+    string Name, string Revenue, int Sent, double OpenRate, double Pct);
+
+public record CreateCustomReportRequest(string Name, string Type, string? Description);
 
 public record AnalyticsBundleDto(
     List<AnalyticsKpiDto> Kpis,
     List<VolumeDataPointDto> VolumeData,
     List<EngagementTrendPointDto> EngagementTrend,
     List<EngagementBreakdownDto> EngagementBreakdown,
+    List<SubscriberGrowthPointDto> SubscriberGrowth,
     List<CampaignFunnelRowDto> CampaignFunnel,
     List<MetricCardDto> Metrics,
     List<MetricDetailRowDto> MetricDetails,
@@ -70,5 +92,6 @@ public record AnalyticsBundleDto(
     List<ListHealthTrendPointDto> ListHealthTrend,
     List<ListHealthOutcomeDto> ListHealthOutcomes,
     List<FlaggedSubscriberDto> FlaggedQueue,
-    List<CustomReportDto> CustomReports
+    List<CustomReportDto> CustomReports,
+    List<DeliverabilityActionDto> DeliverabilityActions
 );

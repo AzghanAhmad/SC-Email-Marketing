@@ -38,6 +38,14 @@ export interface SubscriptionMetrics {
   resubscriptionRate?: number;
 }
 
+export interface FlowFormField {
+  id: string;
+  label: string;
+  type: 'text' | 'textarea' | 'select';
+  required?: boolean;
+  options?: string[];
+}
+
 export interface Flow {
   id: string;
   name: string;
@@ -50,20 +58,21 @@ export interface Flow {
   priority?: 'day-one' | 'pre-store' | 'pre-launch' | 'mature';
   requiresWebhook?: boolean;
   subscriptionMetrics?: SubscriptionMetrics;
+  templateId?: string;
 }
 
 export interface FlowStep {
   id: string;
-  type: 'trigger' | 'billing-trigger' | 'email' | 'wait' | 'condition' | 'goal-exit';
+  type: 'trigger' | 'billing-trigger' | 'email' | 'wait' | 'condition' | 'goal-exit' | 'form';
   label: string;
   detail: string;
   subject?: string;
-  previewText?: string;
   emailBody?: string;
   waitDuration?: number;
   waitUnit?: 'minutes' | 'hours' | 'days' | 'weeks';
   conditionType?: string;
   triggerEvent?: string;
+  formFields?: FlowFormField[];
 }
 
 export interface FlowTemplate {

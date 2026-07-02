@@ -1,7 +1,8 @@
 import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Flow, FlowStep, SubscriptionMetrics } from '../../core/services/mock-data.service';
+import { Flow, FlowFormField, FlowStep } from '../../core/services/mock-data.service';
+import { FlowApiService, FlowResults } from '../../core/services/flow-api.service';
 import { UnsubscribeDetailPanelComponent } from './unsubscribe/unsubscribe-detail-panel.component';
 import { WelcomeSequenceDetailPanelComponent } from './welcome-sequence/welcome-sequence-detail-panel.component';
 import { ReaderMagnetDetailPanelComponent } from './reader-magnet/reader-magnet-detail-panel.component';
@@ -57,7 +58,8 @@ import { MilestoneCelebrationDetailPanelComponent } from './milestone-celebratio
           <button class="btn-secondary" (click)="toggleStatus()">
             {{ flow.status === 'active' ? 'Pause Flow' : 'Activate Flow' }}
           </button>
-          <button class="btn-primary" (click)="saveFlow()">Save Changes</button>
+          <button class="btn-secondary" (click)="viewResults()">View Results</button>
+          <button class="btn-primary" (click)="saveFlow()" [disabled]="saving">Save Changes</button>
         </div>
       </div>
 
@@ -78,11 +80,33 @@ import { MilestoneCelebrationDetailPanelComponent } from './milestone-celebratio
 
         <!-- Steps canvas -->
         <div class="steps-canvas">
-          <div class="step-wrapper" *ngFor="let step of flow.steps; let i = index; let last = last">
+          <p class="steps-reorder-hint" *ngIf="flow.steps.length > 1">Drag steps to reorder</p>
+          <div class="step-wrapper"
+               *ngFor="let step of flow.steps; let i = index; let last = last"
+               [class.drag-over-above]="dragOverIndex === i && dragOverPosition === 'above'"
+               [class.drag-over-below]="dragOverIndex === i && dragOverPosition === 'below'"
+               (dragover)="onStepDragOver($event, i)"
+               (dragleave)="onStepDragLeave($event, i)"
+               (drop)="onStepDrop($event, i)">
 
             <div class="flow-step"
-                 [ngClass]="['step-' + step.type, selectedStep?.id === step.id ? 'selected' : '']"
+                 [ngClass]="['step-' + step.type, selectedStep?.id === step.id ? 'selected' : '', canDragStep(step) ? 'draggable' : '', draggedStepIndex === i ? 'dragging' : '']"
+                 [attr.draggable]="canDragStep(step) ? true : null"
+                 (dragstart)="onDragStart($event, i)"
+                 (dragend)="onDragEnd()"
                  (click)="selectStep(step)">
+              <button type="button"
+                      class="drag-handle"
+                      *ngIf="canDragStep(step)"
+                      title="Drag to reorder"
+                      (click)="$event.stopPropagation()"
+                      (mousedown)="$event.stopPropagation()">
+                <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+                  <circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/>
+                  <circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/>
+                  <circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/>
+                </svg>
+              </button>
               <div class="step-icon" [ngClass]="'icon-' + step.type">
                 <!-- trigger -->
                 <svg *ngIf="step.type === 'trigger'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="17" height="17">
@@ -158,6 +182,12 @@ import { MilestoneCelebrationDetailPanelComponent } from './milestone-celebratio
                 </svg>
                 + Condition
               </button>
+              <button class="menu-item" (click)="addNewStep('form')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+                </svg>
+                + Collect Info
+              </button>
               <button class="menu-item" (click)="addNewStep('goal-exit')">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                   <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
@@ -222,12 +252,35 @@ import { MilestoneCelebrationDetailPanelComponent } from './milestone-celebratio
                     <input type="text" class="form-input" [(ngModel)]="selectedStep.subject" placeholder="Enter engaging subject line...">
                   </div>
                   <div class="form-group">
-                    <label class="form-label">Preview Text</label>
-                    <input type="text" class="form-input" [(ngModel)]="selectedStep.previewText" placeholder="Inbox summary text...">
-                  </div>
-                  <div class="form-group">
                     <label class="form-label">Email Message Body</label>
                     <textarea class="form-textarea" rows="8" [(ngModel)]="selectedStep.emailBody" placeholder="Hi Reader, write your message here..."></textarea>
+                  </div>
+                </ng-container>
+
+                <ng-container *ngIf="selectedStep.type === 'form'">
+                  <div class="form-group">
+                    <label class="form-label">Form Fields</label>
+                    <div class="form-field-block" *ngFor="let field of selectedStep.formFields; let fi = index">
+                      <div class="form-field-row">
+                        <input type="text" class="form-input" [(ngModel)]="field.label" placeholder="Field label">
+                        <select class="form-select" [(ngModel)]="field.type" (ngModelChange)="onFormFieldTypeChange(field, $event)">
+                          <option value="text">Short text</option>
+                          <option value="textarea">Long text</option>
+                          <option value="select">Choice</option>
+                        </select>
+                        <button type="button" class="remove-field-btn" (click)="removeFormField(selectedStep, fi)">×</button>
+                      </div>
+                      <div class="choice-options-panel" *ngIf="field.type === 'select'">
+                        <label class="form-label">Choice options</label>
+                        <p class="field-help">Add each option readers can pick from.</p>
+                        <div class="choice-option-row" *ngFor="let opt of field.options; let oi = index; trackBy: trackByIndex">
+                          <input type="text" class="form-input" [(ngModel)]="field.options![oi]" placeholder="Option {{ oi + 1 }}">
+                          <button type="button" class="remove-field-btn" (click)="removeChoiceOption(field, oi)" [disabled]="(field.options?.length || 0) <= 1">×</button>
+                        </div>
+                        <button type="button" class="btn-ghost btn-sm" (click)="addChoiceOption(field)">+ Add option</button>
+                      </div>
+                    </div>
+                    <button type="button" class="btn-ghost btn-sm" (click)="addFormField(selectedStep)">+ Add field</button>
                   </div>
                 </ng-container>
 
@@ -363,15 +416,50 @@ import { MilestoneCelebrationDetailPanelComponent } from './milestone-celebratio
       </div>
 
       <!-- Toast notification -->
-      <div class="toast" *ngIf="showTriggerToast">
+      <div class="toast" [class.toast-error]="toastIsError" *ngIf="showTriggerToast">
         <div class="toast-content">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16" class="toast-icon">
+          <svg *ngIf="!toastIsError" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16" class="toast-icon">
             <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          <svg *ngIf="toastIsError" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16" class="toast-icon toast-icon-error">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
           </svg>
           <div class="toast-text">
             <strong>{{ toastTitle }}</strong>
             <span>{{ toastDescription }}</span>
           </div>
+        </div>
+      </div>
+
+      <div class="results-backdrop" *ngIf="showResults" (click)="showResults = false">
+        <div class="results-modal" (click)="$event.stopPropagation()">
+          <div class="results-header">
+            <h3>Flow Results</h3>
+            <button type="button" class="close-btn" (click)="showResults = false">×</button>
+          </div>
+          <div class="results-loading" *ngIf="resultsLoading">Loading results…</div>
+          <ng-container *ngIf="!resultsLoading && results">
+            <div class="results-stats">
+              <div><span class="stat-label">Runs</span><span class="stat-value">{{ results.totalRuns }}</span></div>
+              <div><span class="stat-label">Enrolled</span><span class="stat-value">{{ results.totalEnrollments }}</span></div>
+              <div><span class="stat-label">Completed</span><span class="stat-value">{{ results.completedEnrollments }}</span></div>
+              <div><span class="stat-label">In progress</span><span class="stat-value">{{ results.inProgressEnrollments }}</span></div>
+            </div>
+            <div class="results-table-wrap" *ngIf="results.responses.length > 0">
+              <table class="results-table">
+                <thead><tr><th>Subscriber</th><th>Step</th><th>Response</th><th>When</th></tr></thead>
+                <tbody>
+                  <tr *ngFor="let row of results.responses">
+                    <td>{{ row.subscriberName }}<br><span class="sub-email">{{ row.subscriberEmail }}</span></td>
+                    <td>{{ row.stepLabel }}</td>
+                    <td>{{ row.responseSummary }}</td>
+                    <td>{{ row.submittedAt | date:'short' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="results-empty" *ngIf="results.responses.length === 0">No responses yet. Trigger the flow to enroll subscribers.</p>
+          </ng-container>
         </div>
       </div>
     </div>
@@ -451,10 +539,34 @@ import { MilestoneCelebrationDetailPanelComponent } from './milestone-celebratio
       display: flex; flex-direction: column; align-items: center;
       min-width: 0; max-width: 100%;
     }
+    .steps-reorder-hint {
+      margin: 0 0 .75rem;
+      font-size: .72rem;
+      font-weight: 600;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
     .step-wrapper {
       display: flex; flex-direction: column; align-items: center;
       width: 100%; max-width: min(500px, 100%);
+      position: relative;
     }
+    .step-wrapper.drag-over-above::before,
+    .step-wrapper.drag-over-below::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: #3b82f6;
+      border-radius: 100px;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+      z-index: 2;
+      pointer-events: none;
+    }
+    .step-wrapper.drag-over-above::before { top: -6px; }
+    .step-wrapper.drag-over-below::after { bottom: -6px; }
 
     .flow-step {
       width: 100%; display: flex; align-items: center; gap: .875rem;
@@ -463,7 +575,36 @@ import { MilestoneCelebrationDetailPanelComponent } from './milestone-celebratio
       cursor: pointer; transition: all .18s;
       box-shadow: 0 1px 3px rgba(0,0,0,.04);
     }
+    .flow-step.draggable { cursor: grab; }
+    .flow-step.draggable:active { cursor: grabbing; }
+    .flow-step.dragging {
+      opacity: .55;
+      border-color: #93c5fd;
+      box-shadow: 0 8px 20px rgba(59, 130, 246, 0.12);
+      transform: scale(1.01);
+    }
+    .drag-handle {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 38px;
+      margin: -0.25rem 0;
+      padding: 0;
+      border: none;
+      background: transparent;
+      color: #cbd5e1;
+      border-radius: 6px;
+      cursor: grab;
+      flex-shrink: 0;
+      transition: color .15s, background .15s;
+    }
+    .drag-handle:hover {
+      color: #64748b;
+      background: #f8fafc;
+    }
     .flow-step:hover { border-color: #bfdbfe; transform: translateX(3px); box-shadow: 0 4px 12px rgba(59,130,246,.08); }
+    .flow-step.dragging:hover { transform: scale(1.01); }
     .flow-step.selected { border-color: #3b82f6; background: #f0f7ff; box-shadow: 0 0 0 3px rgba(59,130,246,.12); }
     .step-goal-exit { border-style: dashed; border-color: #10b981; }
     .step-goal-exit:hover { border-color: #059669; }
@@ -610,6 +751,17 @@ import { MilestoneCelebrationDetailPanelComponent } from './milestone-celebratio
       padding: 4px;
       border-radius: 50%;
       flex-shrink: 0;
+    }
+    .toast-error {
+      background: #450a0a;
+      border-color: rgba(248, 113, 113, 0.25);
+    }
+    .toast-icon-error {
+      color: #f87171;
+      background: rgba(248, 113, 113, 0.15);
+    }
+    .toast-error .toast-text span {
+      color: #fecaca;
     }
     .toast-text {
       display: flex;
@@ -816,35 +968,140 @@ import { MilestoneCelebrationDetailPanelComponent } from './milestone-celebratio
     .badge-wait { background: #f1f5f9; color: #475569; }
     .badge-condition { background: #f3e8ff; color: #5b21b6; }
     .badge-goal-exit { background: #dcfce7; color: #166534; }
+    .form-field-block { margin-bottom: .875rem; }
+    .form-field-row { display:grid; grid-template-columns:1fr 120px auto; gap:.5rem; align-items:center; }
+    .choice-options-panel {
+      margin-top: .625rem;
+      padding: .75rem;
+      background: #f8fafc;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: .5rem;
+    }
+    .choice-option-row { display: grid; grid-template-columns: 1fr auto; gap: .5rem; align-items: center; }
+    .btn-ghost.btn-sm {
+      align-self: flex-start;
+      padding: .35rem .65rem;
+      background: transparent;
+      border: 1px dashed #cbd5e1;
+      border-radius: 8px;
+      color: #64748b;
+      font-size: .75rem;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .btn-ghost.btn-sm:hover { border-color: #93c5fd; color: #3b82f6; background: #f8fafc; }
+    .remove-field-btn { border:none; background:#fee2e2; color:#dc2626; width:28px; height:28px; border-radius:8px; cursor:pointer; }
+    .remove-field-btn:disabled { opacity: .4; cursor: not-allowed; }
+    .results-backdrop { position:fixed; inset:0; background:rgba(15,23,42,.45); display:flex; align-items:center; justify-content:center; z-index:1200; padding:1rem; }
+    .results-modal { background:#fff; border-radius:16px; width:100%; max-width:900px; max-height:85vh; overflow:auto; padding:1.5rem; }
+    .results-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; }
+    .results-header h3 { margin:0; font-size:1.125rem; }
+    .close-btn { border:none; background:none; font-size:1.5rem; cursor:pointer; color:#64748b; }
+    .results-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:.75rem; margin-bottom:1rem; }
+    .stat-label { display:block; font-size:.7rem; color:#94a3b8; text-transform:uppercase; font-weight:700; }
+    .stat-value { font-size:1.25rem; font-weight:700; color:#0f172a; }
+    .results-table { width:100%; border-collapse:collapse; font-size:.8125rem; }
+    .results-table th, .results-table td { padding:.625rem; border-bottom:1px solid #f1f5f9; text-align:left; vertical-align:top; }
+    .sub-email { color:#94a3b8; font-size:.75rem; }
+    .results-empty, .results-loading { color:#64748b; font-size:.875rem; }
+    @media(max-width:700px) { .results-stats { grid-template-columns:1fr 1fr; } }
   `]
 })
 export class FlowBuilderComponent {
   @Input() flow!: Flow;
   @Output() onBack = new EventEmitter<void>();
+  @Output() onFlowUpdated = new EventEmitter<Flow>();
+
+  constructor(private flowApi: FlowApiService) {}
 
   selectedStep: FlowStep | null = null;
   showAddStepSelector = false;
   showTriggerToast = false;
+  showResults = false;
+  resultsLoading = false;
+  results: FlowResults | null = null;
+  saving = false;
   toastTitle = 'Flow Triggered!';
   toastDescription = 'Successfully initiated flow for test subscriber.';
+  toastIsError = false;
+  private toastTimeout: ReturnType<typeof setTimeout> | null = null;
+  draggedStepIndex: number | null = null;
+  dragOverIndex: number | null = null;
+  dragOverPosition: 'above' | 'below' | null = null;
+
+  private persistFlow(onSuccess?: () => void) {
+    this.saving = true;
+    this.flowApi.updateFlow(this.flow.id, {
+      name: this.flow.name,
+      description: this.flow.description,
+      status: this.flow.status,
+      steps: this.flow.steps,
+    }).subscribe({
+      next: updated => {
+        this.flow = { ...this.flow, ...updated, steps: updated.steps ?? this.flow.steps };
+        this.onFlowUpdated.emit(this.flow);
+        this.saving = false;
+        onSuccess?.();
+      },
+      error: err => {
+        this.saving = false;
+        this.showToast('Save failed', err.message || 'Could not save flow.', true);
+      },
+    });
+  }
 
   triggerFlow() {
-    this.flow.triggers++;
-    this.toastTitle = 'Flow Triggered!';
-    this.toastDescription = `Successfully initiated flow for test subscriber (Total Triggers: ${this.flow.triggers}).`;
-    this.showTriggerToast = true;
-    setTimeout(() => {
-      this.showTriggerToast = false;
-    }, 4000);
+    this.persistFlow(() => {
+      this.flowApi.triggerFlow(this.flow.id).subscribe({
+        next: res => {
+          this.flow.triggers += 1;
+          this.showToast('Flow Triggered!', res.message);
+        },
+        error: err => {
+          this.showToast('Trigger failed', err.message || 'Could not trigger flow.', true);
+        },
+      });
+    });
   }
 
   saveFlow() {
-    this.toastTitle = 'Changes Saved!';
-    this.toastDescription = 'All changes to the flow and steps have been saved successfully.';
+    this.persistFlow(() => {
+      this.showToast('Changes Saved!', 'Flow and steps saved to your account.');
+    });
+  }
+
+  private showToast(title: string, description: string, isError = false) {
+    if (this.toastTimeout) {
+      clearTimeout(this.toastTimeout);
+      this.toastTimeout = null;
+    }
+    this.toastTitle = title;
+    this.toastDescription = description;
+    this.toastIsError = isError;
     this.showTriggerToast = true;
-    setTimeout(() => {
+    const duration = isError ? 5000 : 4500;
+    this.toastTimeout = setTimeout(() => {
       this.showTriggerToast = false;
-    }, 4000);
+      this.toastTimeout = null;
+    }, duration);
+  }
+
+  viewResults() {
+    this.showResults = true;
+    this.resultsLoading = true;
+    this.flowApi.getFlowResults(this.flow.id).subscribe({
+      next: res => { this.results = res; this.resultsLoading = false; },
+      error: () => { this.resultsLoading = false; this.results = null; },
+    });
+  }
+
+  toggleStatus() {
+    this.flow = { ...this.flow, status: this.flow.status === 'active' ? 'paused' : 'active' };
+    this.persistFlow();
   }
 
   deleteStep(step: FlowStep) {
@@ -852,6 +1109,7 @@ export class FlowBuilderComponent {
     if (index > -1) {
       this.flow.steps.splice(index, 1);
       this.selectedStep = null;
+      this.persistFlow();
     }
   }
 
@@ -887,11 +1145,12 @@ export class FlowBuilderComponent {
     step.detail = map[step.triggerEvent || ''] || step.detail;
   }
 
-  addNewStep(type: 'email' | 'wait' | 'condition' | 'goal-exit') {
+  addNewStep(type: 'email' | 'wait' | 'condition' | 'form' | 'goal-exit') {
     const stepLabels: Record<string, string> = {
       email: 'Send Campaign Email',
       wait: 'Wait Duration',
       condition: 'Check Email Engagement',
+      form: 'Collect Subscriber Info',
       'goal-exit': 'Exit Flow Sequence'
     };
 
@@ -899,83 +1158,198 @@ export class FlowBuilderComponent {
       email: 'Deliver the next follow-up message to the user',
       wait: 'Wait 3 days before moving to next step',
       condition: 'Split path: if user opened previous email, continue',
+      form: 'Ask subscribers to submit information',
       'goal-exit': 'Cleanly terminate automated campaign'
     };
 
     const newStep: FlowStep = {
       id: `${Date.now()}`,
-      type: type as any,
+      type: type as FlowStep['type'],
       label: stepLabels[type],
       detail: stepDetails[type]
     };
 
     if (type === 'email') {
       newStep.subject = 'Follow-up Email';
-      newStep.previewText = 'A quick message for you...';
       newStep.emailBody = 'Hello! Write your email content here.';
     } else if (type === 'wait') {
       newStep.waitDuration = 3;
       newStep.waitUnit = 'days';
     } else if (type === 'condition') {
       newStep.conditionType = 'opened_email';
+    } else if (type === 'form') {
+      newStep.formFields = [{ id: 'field1', label: 'Your answer', type: 'text', required: true }];
     }
 
     this.flow.steps.push(newStep);
     this.selectedStep = newStep;
     this.showAddStepSelector = false;
+    this.persistFlow();
+  }
+
+  addFormField(step: FlowStep) {
+    step.formFields = step.formFields ?? [];
+    step.formFields.push({ id: `field${Date.now()}`, label: 'New field', type: 'text', required: false });
+  }
+
+  removeFormField(step: FlowStep, index: number) {
+    step.formFields?.splice(index, 1);
+  }
+
+  onFormFieldTypeChange(field: FlowFormField, type: FlowFormField['type']) {
+    field.type = type;
+    if (type === 'select') {
+      if (!field.options?.length) {
+        field.options = ['Option 1', 'Option 2'];
+      }
+    } else {
+      delete field.options;
+    }
+  }
+
+  addChoiceOption(field: FlowFormField) {
+    field.options = field.options ?? [];
+    field.options.push(`Option ${field.options.length + 1}`);
+  }
+
+  removeChoiceOption(field: FlowFormField, index: number) {
+    if (!field.options || field.options.length <= 1) return;
+    field.options.splice(index, 1);
+  }
+
+  trackByIndex(index: number) {
+    return index;
+  }
+
+  private tplId(): string {
+    return this.flow?.templateId ?? '';
   }
 
   get isUnsubscribeFlow(): boolean {
-    return this.flow?.id === '13a' || this.flow?.id === '13b';
+    return this.tplId() === 't13' || this.tplId() === 't14';
   }
 
   get isWelcomeSequenceFlow(): boolean {
-    return this.flow?.id === '1';
+    return this.tplId() === 't1';
   }
 
   get isReaderMagnetFlow(): boolean {
-    return this.flow?.id === '2';
+    return this.tplId() === 't2';
   }
 
-  /** Post-purchase transaction flows: Order Confirmation, Thank You, Follow-Up, Review Request, Repeat Thank You */
   get isPostPurchaseFlow(): boolean {
-    return ['3', '4', '20', '21', '22'].includes(this.flow?.id ?? '');
+    return ['t3', 't4a', 't4b', 't4c', 't4d'].includes(this.tplId());
   }
 
-  /** Abandoned Cart and Abandoned Checkout flows */
   get isAbandonedFlow(): boolean {
-    return ['5', '6'].includes(this.flow?.id ?? '');
+    return ['t5', 't5b', 't5c'].includes(this.tplId());
   }
 
-  /** Preorder Confirmation & Nurture flow */
   get isPreorderFlow(): boolean {
-    return this.flow?.id === '8';
+    return this.tplId().startsWith('t8');
   }
 
-  /** Series Completion flow */
   get isSeriesCompletionFlow(): boolean {
-    return this.flow?.id === '9';
+    return this.tplId() === 't9';
   }
 
-  /** Re-engagement flow */
   get isReEngagementFlow(): boolean {
-    return this.flow?.id === '11';
+    return this.tplId() === 't11';
   }
 
-  /** Milestone Celebration flow */
   get isMilestoneCelebrationFlow(): boolean {
-    return this.flow?.id === '12';
+    return this.tplId() === 't12';
   }
 
   selectStep(step: FlowStep) {
+    if (step.type === 'form' && step.formFields) {
+      for (const field of step.formFields) {
+        if (field.type === 'select' && !field.options?.length) {
+          field.options = ['Option 1', 'Option 2'];
+        }
+      }
+    }
     this.selectedStep = this.selectedStep?.id === step.id ? null : step;
   }
 
-  toggleStatus() {
-    this.flow = {
-      ...this.flow,
-      status: this.flow.status === 'active' ? 'paused' : 'active'
-    };
+  canDragStep(step: FlowStep): boolean {
+    return step.type !== 'trigger' && step.type !== 'billing-trigger';
+  }
+
+  private minReorderIndex(): number {
+    const first = this.flow.steps[0];
+    return first && (first.type === 'trigger' || first.type === 'billing-trigger') ? 1 : 0;
+  }
+
+  onDragStart(event: DragEvent, index: number) {
+    const step = this.flow.steps[index];
+    if (!this.canDragStep(step)) {
+      event.preventDefault();
+      return;
+    }
+    this.draggedStepIndex = index;
+    event.dataTransfer?.setData('text/plain', String(index));
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move';
+    }
+  }
+
+  onDragEnd() {
+    this.draggedStepIndex = null;
+    this.dragOverIndex = null;
+    this.dragOverPosition = null;
+  }
+
+  onStepDragOver(event: DragEvent, index: number) {
+    if (this.draggedStepIndex === null) return;
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'move';
+    }
+
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    const position: 'above' | 'below' = event.clientY < rect.top + rect.height / 2 ? 'above' : 'below';
+    let insertAt = position === 'above' ? index : index + 1;
+
+    if (insertAt < this.minReorderIndex()) {
+      this.dragOverIndex = this.minReorderIndex();
+      this.dragOverPosition = 'above';
+      return;
+    }
+
+    this.dragOverIndex = index;
+    this.dragOverPosition = position;
+  }
+
+  onStepDragLeave(event: DragEvent, index: number) {
+    const related = event.relatedTarget as Node | null;
+    const current = event.currentTarget as HTMLElement;
+    if (related && current.contains(related)) return;
+    if (this.dragOverIndex === index) {
+      this.dragOverIndex = null;
+      this.dragOverPosition = null;
+    }
+  }
+
+  onStepDrop(event: DragEvent, index: number) {
+    event.preventDefault();
+    const from = this.draggedStepIndex;
+    if (from === null) return;
+
+    const position = this.dragOverPosition ?? 'below';
+    let insertAt = position === 'above' ? index : index + 1;
+    insertAt = Math.max(this.minReorderIndex(), insertAt);
+
+    if (from !== insertAt && from !== insertAt - 1) {
+      const steps = [...this.flow.steps];
+      const [moved] = steps.splice(from, 1);
+      if (from < insertAt) insertAt -= 1;
+      steps.splice(insertAt, 0, moved);
+      this.flow.steps = steps;
+      this.persistFlow();
+    }
+
+    this.onDragEnd();
   }
 
   getWhyEvent(step: FlowStep): string {

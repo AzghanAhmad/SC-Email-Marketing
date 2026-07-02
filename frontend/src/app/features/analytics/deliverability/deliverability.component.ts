@@ -1,13 +1,15 @@
 import { Component, signal, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { RouterModule, ActivatedRoute, Router } from '@angular/router';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
-import { AnalyticsApiService } from '../../../core/services/analytics-api.service';
+import { AnalyticsApiService, DeliverabilityAction } from '../../../core/services/analytics-api.service';
 import { NAV_ICONS } from '../../../core/constants/nav-icons';
+import { XyChartComponent, ChartSeries } from '../../../shared/components/xy-chart/xy-chart.component';
 
 @Component({
   selector: 'app-deliverability',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, RouterModule, XyChartComponent],
   template: `
     <div class="page-wrapper">
       <div class="page-header">
@@ -81,22 +83,7 @@ import { NAV_ICONS } from '../../../core/constants/nav-icons';
 
             <!-- Over Time Chart -->
             <div class="score-time-chart" *ngIf="scoreView() === 'time'">
-              <div class="time-chart">
-                <svg viewBox="0 0 400 140" preserveAspectRatio="none" class="time-svg">
-                  <defs>
-                    <linearGradient id="timeGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.2"/>
-                      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.02"/>
-                    </linearGradient>
-                  </defs>
-                  <polygon [attr.points]="timeAreaPoints" fill="url(#timeGrad)"/>
-                  <polyline [attr.points]="timeLinePoints" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
-                  <circle *ngFor="let pt of timeDots" [attr.cx]="pt.x" [attr.cy]="pt.y" r="4" fill="#3b82f6" stroke="white" stroke-width="2"/>
-                </svg>
-                <div class="time-labels">
-                  <span *ngFor="let d of scoreHistory">{{ d.label }}</span>
-                </div>
-              </div>
+              <app-xy-chart type="line" [labels]="scoreLabels" [series]="scoreSeries" yAxisLabel="Score" xAxisLabel="Week"/>
             </div>
 
             <!-- Metrics Table -->
@@ -123,15 +110,15 @@ import { NAV_ICONS } from '../../../core/constants/nav-icons';
             <p class="action-sub">Learn how to improve your score</p>
 
             <div class="action-item" *ngFor="let action of actions">
-              <div class="action-icon">{{ action.icon }}</div>
+              <span class="nav-icon action-icon-svg" [innerHTML]="action.safeIcon"></span>
               <div class="action-body">
                 <h4 class="ai-title">{{ action.title }}</h4>
                 <p class="ai-desc">{{ action.description }}</p>
                 <div class="ai-actions">
-                  <button class="btn-primary btn-sm" *ngIf="action.primaryBtn">{{ action.primaryBtn }}</button>
-                  <button class="btn-ghost btn-sm" *ngIf="action.secondaryBtn">{{ action.secondaryBtn }}</button>
+                  <button type="button" class="btn-primary btn-sm" *ngIf="action.primaryBtn" (click)="runAction(action)">{{ action.primaryBtn }}</button>
+                  <button type="button" class="btn-ghost btn-sm" *ngIf="action.secondaryBtn" (click)="markActionDone(action)">{{ action.secondaryBtn }}</button>
                 </div>
-                <a class="ai-link" *ngIf="action.link">{{ action.link }} ↗</a>
+                <a class="ai-link" *ngIf="action.linkLabel && action.linkRoute && action.linkLabel !== action.primaryBtn" [routerLink]="action.linkRoute" [queryParams]="action.queryParams || null">{{ action.linkLabel }}</a>
               </div>
             </div>
           </div>
@@ -250,6 +237,8 @@ import { NAV_ICONS } from '../../../core/constants/nav-icons';
     .action-item { margin-bottom:1.5rem; padding-bottom:1.5rem; border-bottom:1px solid #f1f5f9; }
     .action-item:last-child { margin-bottom:0; padding-bottom:0; border-bottom:none; }
     .action-icon { font-size:1.25rem; margin-bottom:.5rem; }
+    .action-icon-svg { display:block; margin-bottom:.5rem; color:#64748b; }
+    .action-icon-svg svg { width:20px; height:20px; }
     .ai-title { font-size:.9375rem; font-weight:700; color:#0f172a; margin:0 0 .35rem; }
     .ai-desc { font-size:.8125rem; color:#94a3b8; margin:0 0 .875rem; line-height:1.5; }
     .ai-actions { display:flex; gap:.5rem; margin-bottom:.5rem; }
@@ -285,6 +274,8 @@ import { NAV_ICONS } from '../../../core/constants/nav-icons';
 export class DeliverabilityComponent implements OnInit {
   private sanitizer = inject(DomSanitizer);
   private analyticsApi = inject(AnalyticsApiService);
+  private route = inject(ActivatedRoute);
+  private router = inject(Router);
 
   activeSubTab = signal('score');
   scoreView = signal<'factors' | 'time'>('factors');
@@ -295,28 +286,26 @@ export class DeliverabilityComponent implements OnInit {
   scoreRatingClass = 'fair';
   scoreChange = 0;
   scoreHistory: { label: string; score: number }[] = [];
-  timeLinePoints = '';
-  timeAreaPoints = '';
-  timeDots: { x: number; y: number }[] = [];
+  scoreLabels: string[] = [];
+  scoreSeries: ChartSeries[] = [];
   metrics: { name: string; rate: string; recommended: string; statusClass: string }[] = [];
   deliveryReports: { name: string; sent: number; delivered: number; bounced: number; rate: number }[] = [];
   bounceData: { label: string; value: string; pct: string; safeIcon: SafeHtml }[] = [];
   bouncedEmails: { email: string; type: string; reason: string; date: string }[] = [];
-
-  actions = [
-    {
-      icon: '✨', title: 'Create a "Never engaged" segment',
-      description: 'Use this segment to improve your deliverability score by removing subscribers that have shown no engagement',
-      primaryBtn: 'Create segment', secondaryBtn: 'Mark done', link: 'Create a "Never engaged" segment'
-    },
-    {
-      icon: '🧹', title: 'Clean your list',
-      description: 'Boost email deliverability and sender reputation with inbox providers by cleaning your list to exclude unengaged profiles, reducing unsubscribe rates, and enhancing open and click rates.',
-      primaryBtn: 'Start cleaning', secondaryBtn: 'Mark done', link: 'Understanding list cleaning in ScribeCount'
-    },
-  ];
+  actions: (DeliverabilityAction & { safeIcon: SafeHtml; queryParams?: Record<string, string> })[] = [];
+  private doneActionKeys = new Set<string>();
 
   ngOnInit() {
+    this.route.queryParamMap.subscribe(params => {
+      const tab = params.get('tab');
+      if (tab === 'bounce' || tab === 'reports' || tab === 'score') {
+        this.activeSubTab.set(tab);
+      }
+    });
+    this.loadData();
+  }
+
+  private loadData() {
     this.analyticsApi.getAnalytics(30).subscribe(b => {
       this.deliverabilityScore = b.deliverabilityScore;
       this.scorePercent = b.deliverabilityScore;
@@ -324,6 +313,8 @@ export class DeliverabilityComponent implements OnInit {
       this.scoreRating = this.deliverabilityScore >= 80 ? 'Good' : this.deliverabilityScore >= 60 ? 'Fair' : 'Poor';
       this.scoreRatingClass = this.deliverabilityScore >= 80 ? 'good' : this.deliverabilityScore >= 60 ? 'fair' : 'poor';
       this.scoreHistory = b.scoreHistory;
+      this.scoreLabels = b.scoreHistory.map(d => d.label);
+      this.scoreSeries = [{ name: 'Score', color: '#3b82f6', values: b.scoreHistory.map(d => d.score) }];
       this.metrics = b.deliverabilityMetrics;
       this.deliveryReports = b.deliveryReports;
       this.bounceData = b.bounceStats.map(stat => ({
@@ -333,23 +324,29 @@ export class DeliverabilityComponent implements OnInit {
         safeIcon: this.sanitizer.bypassSecurityTrustHtml(NAV_ICONS[stat.iconKey] ?? NAV_ICONS['hard-bounce']),
       }));
       this.bouncedEmails = b.bouncedEmails;
-      this.buildTimeChart();
+      this.actions = (b.deliverabilityActions ?? [])
+        .filter(a => !this.doneActionKeys.has(a.title))
+        .map(a => ({
+          ...a,
+          safeIcon: this.sanitizer.bypassSecurityTrustHtml(NAV_ICONS[a.iconKey] ?? NAV_ICONS['refresh']),
+          queryParams: a.linkLabel === 'Bounce Details' ? { tab: 'bounce' } : undefined,
+        }));
     });
   }
 
-  buildTimeChart() {
-    const data = this.scoreHistory;
-    if (data.length < 2) return;
-    const max = Math.max(...data.map(d => d.score));
-    const min = Math.min(...data.map(d => d.score));
-    const range = max - min || 1;
-    const W = 400, H = 140, PAD = 15;
-    const pts = data.map((d, i) => ({
-      x: PAD + (i / (data.length - 1)) * (W - PAD * 2),
-      y: H - PAD - ((d.score - min) / range) * (H - PAD * 2)
-    }));
-    this.timeDots = pts;
-    this.timeLinePoints = pts.map(p => `${p.x},${p.y}`).join(' ');
-    this.timeAreaPoints = `${pts[0].x},${H} ${pts.map(p => `${p.x},${p.y}`).join(' ')} ${pts[pts.length - 1].x},${H}`;
+  runAction(action: DeliverabilityAction & { safeIcon: SafeHtml; queryParams?: Record<string, string> }) {
+    if (action.linkRoute) {
+      this.router.navigate([action.linkRoute], { queryParams: action.queryParams ?? undefined });
+      if (action.queryParams?.['tab'] === 'bounce') {
+        this.activeSubTab.set('bounce');
+      }
+      return;
+    }
+    this.markActionDone(action);
+  }
+
+  markActionDone(action: DeliverabilityAction & { safeIcon: SafeHtml }) {
+    this.doneActionKeys.add(action.title);
+    this.actions = this.actions.filter(a => a.title !== action.title);
   }
 }

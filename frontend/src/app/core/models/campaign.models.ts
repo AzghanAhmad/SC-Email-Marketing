@@ -41,6 +41,8 @@ export interface NewsletterSchedule {
   replyQuestion: string;
   content: string;
   status: string;
+  nextSendAt?: string | null;
+  lastSentAt?: string | null;
 }
 
 export interface AbTest {
@@ -55,6 +57,28 @@ export interface AbTest {
   openRateA?: number;
   openRateB?: number;
   winner?: string;
+  votesA?: number;
+  votesB?: number;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  publicUrl?: string;
+}
+
+export interface ReleasePlan {
+  bookTitle: string;
+  releaseDate?: string | null;
+}
+
+export interface PublicAbTest {
+  id: string;
+  name: string;
+  subjectA: string;
+  subjectB: string;
+  status: string;
+  votesA: number;
+  votesB: number;
+  winner?: string;
+  votingOpen: boolean;
 }
 
 export interface CampaignsBundle {
@@ -62,6 +86,7 @@ export interface CampaignsBundle {
   calendarEvents: CalendarEvent[];
   newsletter: NewsletterSchedule;
   abTests: AbTest[];
+  releasePlan?: ReleasePlan | null;
 }
 
 export interface CreateCampaignPayload {

@@ -8,7 +8,7 @@ namespace ScribeCount.Email.Api.Controllers;
 [ApiController]
 [AllowAnonymous]
 [Route("api/v1/public/campaigns")]
-public class PublicCampaignController(CampaignService campaigns) : ControllerBase
+public class PublicCampaignController(CampaignService campaigns, IHttpContextAccessor httpContext) : ControllerBase
 {
     private static readonly byte[] TransparentGif =
     [
@@ -46,5 +46,36 @@ public class PublicCampaignController(CampaignService campaigns) : ControllerBas
     {
         var view = await campaigns.GetCampaignViewAsync(token);
         return view is null ? NotFound(new { message = "This email view link is invalid or has expired." }) : Ok(view);
+    }
+
+    [HttpGet("ab-tests/{id:guid}")]
+    public async Task<ActionResult<PublicAbTestDto>> GetAbTest(Guid id)
+    {
+        var test = await campaigns.GetPublicAbTestAsync(id);
+        return test is null ? NotFound(new { message = "This A/B test was not found." }) : Ok(test);
+    }
+
+    [HttpPost("ab-tests/{id:guid}/vote")]
+    public async Task<ActionResult<VoteAbTestResponse>> VoteOnAbTest(Guid id, [FromBody] VoteAbTestRequest request)
+    {
+        var voterKey = BuildVoterKey();
+        try
+        {
+            var result = await campaigns.VoteOnAbTestAsync(id, request, voterKey);
+            return result is null ? NotFound(new { message = "This A/B test was not found." }) : Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    private string BuildVoterKey()
+    {
+        var ctx = httpContext.HttpContext;
+        var ip = ctx?.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        var ua = ctx?.Request.Headers.UserAgent.ToString() ?? "";
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes($"{ip}|{ua}")))[..32];
     }
 }

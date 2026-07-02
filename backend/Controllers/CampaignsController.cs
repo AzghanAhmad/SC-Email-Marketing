@@ -129,6 +129,27 @@ public class CampaignsController(CampaignService campaigns) : ControllerBase
         return updated is null ? NotFound() : Ok(updated);
     }
 
+    [HttpPut("release-plan")]
+    public async Task<ActionResult<ReleasePlanDto>> SaveReleasePlan([FromBody] SaveReleasePlanRequest request)
+    {
+        var saved = await campaigns.SaveReleasePlanAsync(GetUserId(), request);
+        return Ok(saved);
+    }
+
+    [HttpPost("ab-tests/{id:guid}/launch")]
+    public async Task<ActionResult<AbTestDto>> LaunchAbTest(Guid id)
+    {
+        try
+        {
+            var launched = await campaigns.LaunchAbTestAsync(GetUserId(), id);
+            return launched is null ? NotFound() : Ok(launched);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     [HttpDelete("calendar-events/{id:guid}")]
     public async Task<IActionResult> DeleteCalendarEvent(Guid id)
     {

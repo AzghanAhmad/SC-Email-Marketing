@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MailKit;
 using MailKit.Net.Imap;
 using MailKit.Net.Smtp;
@@ -382,6 +383,9 @@ public class MailboxService(AppDbContext db, ILogger<MailboxService> logger)
 
     public async Task SendEmailAsync(Guid userId, SendEmailRequest request)
     {
+        if (string.IsNullOrWhiteSpace(request.To))
+            throw new InvalidOperationException("Recipient is required.");
+
         var conn = await GetConnectionForUserAsync(userId)
             ?? throw new InvalidOperationException("Mailbox not connected.");
 
@@ -389,27 +393,9 @@ public class MailboxService(AppDbContext db, ILogger<MailboxService> logger)
             throw new InvalidOperationException("Mailbox is disconnected. Reconnect your inbox under Email → Settings.");
 
         var password = UnprotectPassword(conn.PasswordEncrypted);
-        var message = new MimeMessage();
-        message.From.Add(new MailboxAddress(conn.EmailAddress, conn.EmailAddress));
-        message.To.Add(MailboxAddress.Parse(request.To));
-        message.Subject = request.Subject;
-        message.Body = BuildMimeBody(request.Body, request.Attachments);
+        await DeliverViaSmtpAsync(conn, password, request.To, request.Subject, request.Body, request.Attachments);
 
-        try
-        {
-            using var smtp = new SmtpClient { Timeout = 25000 };
-            await smtp.ConnectAsync(conn.SmtpHost, conn.SmtpPort, ResolveSmtpSecurity(conn));
-            await smtp.AuthenticateAsync(conn.Username, password);
-            await smtp.SendAsync(message);
-            await smtp.DisconnectAsync(true);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "SMTP send failed for user {UserId}", userId);
-            throw new InvalidOperationException(MapConnectionError(ex, conn.Provider, forSmtp: true));
-        }
-
-        var preview = request.Body.Length > 100 ? request.Body[..100] : request.Body;
+        var preview = MailboxContentHelper.PreparePreview(request.Body);
         db.MailboxMessages.Add(new MailboxMessage
         {
             Id = Guid.NewGuid(),
@@ -428,6 +414,98 @@ public class MailboxService(AppDbContext db, ILogger<MailboxService> logger)
             AttachmentsJson = SerializeAttachments(request.Attachments)
         });
         await db.SaveChangesAsync();
+    }
+
+    public async Task<MailboxMessage> SendScheduledMessageAsync(Guid userId, Guid messageId)
+    {
+        var msg = await db.MailboxMessages.FirstOrDefaultAsync(m => m.Id == messageId && m.UserId == userId)
+            ?? throw new InvalidOperationException("Scheduled message not found.");
+
+        if (!string.Equals(msg.Folder, "scheduled", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Only scheduled messages can be sent this way.");
+
+        if (string.IsNullOrWhiteSpace(msg.ToEmail))
+            throw new InvalidOperationException("Recipient is required.");
+
+        var conn = await GetConnectionForUserAsync(userId)
+            ?? throw new InvalidOperationException("Mailbox not connected.");
+
+        if (!IsLinked(conn))
+            throw new InvalidOperationException("Mailbox is disconnected. Reconnect your inbox under Email → Settings.");
+
+        var password = UnprotectPassword(conn.PasswordEncrypted);
+        var attachments = ParseAttachmentsForSend(msg.AttachmentsJson);
+        await DeliverViaSmtpAsync(conn, password, msg.ToEmail, msg.Subject, msg.Body, attachments);
+
+        msg.Folder = "sent";
+        msg.Timestamp = DateTime.UtcNow;
+        msg.FromEmail = conn.EmailAddress;
+        msg.Preview = MailboxContentHelper.PreparePreview(msg.Body);
+        msg.Read = true;
+        await db.SaveChangesAsync();
+        return msg;
+    }
+
+    public async Task ProcessDueScheduledMessagesAsync(CancellationToken cancellationToken = default)
+    {
+        var now = DateTime.UtcNow;
+        var due = await db.MailboxMessages
+            .Where(m => m.Folder == "scheduled" && m.Timestamp <= now)
+            .OrderBy(m => m.Timestamp)
+            .Select(m => new { m.Id, m.UserId })
+            .Take(100)
+            .ToListAsync(cancellationToken);
+
+        foreach (var item in due)
+        {
+            try
+            {
+                await SendScheduledMessageAsync(item.UserId, item.Id);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to send scheduled mailbox message {MessageId}", item.Id);
+            }
+        }
+    }
+
+    private async Task DeliverViaSmtpAsync(
+        MailboxConnection conn,
+        string password,
+        string to,
+        string subject,
+        string body,
+        List<EmailAttachmentUploadDto>? attachments)
+    {
+        var message = new MimeMessage();
+        message.From.Add(new MailboxAddress(conn.EmailAddress, conn.EmailAddress));
+        message.To.Add(MailboxAddress.Parse(to));
+        message.Subject = subject;
+        message.Body = BuildMimeBody(body, attachments);
+
+        try
+        {
+            using var smtp = new SmtpClient { Timeout = 25000 };
+            await smtp.ConnectAsync(conn.SmtpHost, conn.SmtpPort, ResolveSmtpSecurity(conn));
+            await smtp.AuthenticateAsync(conn.Username, password);
+            await smtp.SendAsync(message);
+            await smtp.DisconnectAsync(true);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "SMTP send failed for mailbox {Email}", conn.EmailAddress);
+            throw new InvalidOperationException(MapConnectionError(ex, conn.Provider, forSmtp: true));
+        }
+    }
+
+    private static List<EmailAttachmentUploadDto> ParseAttachmentsForSend(string attachmentsJson)
+    {
+        var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+        var dtos = JsonSerializer.Deserialize<List<EmailAttachmentDto>>(attachmentsJson, options) ?? [];
+        return dtos
+            .Where(a => !string.IsNullOrWhiteSpace(a.ContentBase64))
+            .Select(a => new EmailAttachmentUploadDto(a.Name, a.Size, a.Type, a.ContentBase64!))
+            .ToList();
     }
 
     public static string SerializeAttachments(List<EmailAttachmentUploadDto>? attachments, string? existingJson = null)

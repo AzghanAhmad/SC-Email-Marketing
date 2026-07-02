@@ -8,6 +8,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<User> Users => Set<User>();
     public DbSet<FlowTemplate> FlowTemplates => Set<FlowTemplate>();
     public DbSet<UserFlow> UserFlows => Set<UserFlow>();
+    public DbSet<FlowRun> FlowRuns => Set<FlowRun>();
+    public DbSet<FlowEnrollment> FlowEnrollments => Set<FlowEnrollment>();
+    public DbSet<FlowStepResponse> FlowStepResponses => Set<FlowStepResponse>();
     public DbSet<MailboxConnection> MailboxConnections => Set<MailboxConnection>();
     public DbSet<MailboxMessage> MailboxMessages => Set<MailboxMessage>();
     public DbSet<Subscriber> Subscribers => Set<Subscriber>();
@@ -16,6 +19,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<CampaignCalendarEvent> CampaignCalendarEvents => Set<CampaignCalendarEvent>();
     public DbSet<NewsletterSchedule> NewsletterSchedules => Set<NewsletterSchedule>();
     public DbSet<AbTest> AbTests => Set<AbTest>();
+    public DbSet<AbTestVote> AbTestVotes => Set<AbTestVote>();
+    public DbSet<ReleasePlan> ReleasePlans => Set<ReleasePlan>();
     public DbSet<SubscriberGrowthPoint> SubscriberGrowthPoints => Set<SubscriberGrowthPoint>();
     public DbSet<DashboardActivity> DashboardActivities => Set<DashboardActivity>();
     public DbSet<AudienceFolder> AudienceFolders => Set<AudienceFolder>();
@@ -29,6 +34,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<LandingPage> LandingPages => Set<LandingPage>();
     public DbSet<GrowthToolConfig> GrowthToolConfigs => Set<GrowthToolConfig>();
     public DbSet<SubscriberActivity> SubscriberActivities => Set<SubscriberActivity>();
+    public DbSet<UserSettings> UserSettings => Set<UserSettings>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -45,6 +51,24 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<UserFlow>(e =>
         {
             e.HasOne(x => x.User).WithMany(x => x.Flows).HasForeignKey(x => x.UserId);
+        });
+
+        modelBuilder.Entity<FlowRun>(e =>
+        {
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId);
+            e.HasOne(x => x.UserFlow).WithMany().HasForeignKey(x => x.UserFlowId);
+        });
+
+        modelBuilder.Entity<FlowEnrollment>(e =>
+        {
+            e.HasOne(x => x.FlowRun).WithMany(x => x.Enrollments).HasForeignKey(x => x.FlowRunId);
+            e.HasOne(x => x.Subscriber).WithMany().HasForeignKey(x => x.SubscriberId);
+            e.HasIndex(x => x.Token).IsUnique();
+        });
+
+        modelBuilder.Entity<FlowStepResponse>(e =>
+        {
+            e.HasOne(x => x.FlowEnrollment).WithMany(x => x.Responses).HasForeignKey(x => x.FlowEnrollmentId);
         });
 
         modelBuilder.Entity<MailboxConnection>(e =>
@@ -107,6 +131,18 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId);
             e.HasIndex(x => x.UserId);
+        });
+
+        modelBuilder.Entity<AbTestVote>(e =>
+        {
+            e.HasOne(x => x.AbTest).WithMany(x => x.Votes).HasForeignKey(x => x.AbTestId);
+            e.HasIndex(x => new { x.AbTestId, x.VoterKey }).IsUnique();
+        });
+
+        modelBuilder.Entity<ReleasePlan>(e =>
+        {
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId);
+            e.HasIndex(x => x.UserId).IsUnique();
         });
 
         modelBuilder.Entity<AudienceFolder>(e =>
@@ -176,6 +212,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId);
             e.HasOne(x => x.Subscriber).WithMany().HasForeignKey(x => x.SubscriberId);
             e.HasIndex(x => new { x.SubscriberId, x.OccurredAt });
+        });
+
+        modelBuilder.Entity<UserSettings>(e =>
+        {
+            e.HasKey(x => x.UserId);
+            e.HasOne(x => x.User).WithOne().HasForeignKey<UserSettings>(x => x.UserId);
         });
     }
 }

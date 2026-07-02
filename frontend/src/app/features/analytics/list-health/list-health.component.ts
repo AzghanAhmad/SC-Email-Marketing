@@ -1,11 +1,12 @@
 import { Component, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AnalyticsApiService } from '../../../core/services/analytics-api.service';
+import { XyChartComponent, ChartSeries } from '../../../shared/components/xy-chart/xy-chart.component';
 
 @Component({
   selector: 'app-list-health',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, XyChartComponent],
   template: `
     <div class="page-wrapper">
       <div class="page-header">
@@ -15,10 +16,11 @@ import { AnalyticsApiService } from '../../../core/services/analytics-api.servic
             Monitor subscriber quality, flagged inactive readers, and re-engagement flow impact
           </p>
         </div>
-        <select class="period-select">
-          <option>Last 30 days</option>
-          <option>Last 90 days</option>
-          <option>Last 6 months</option>
+        <select class="period-select" [value]="periodDays" (change)="onPeriodChange($event)">
+          <option [value]="7">Last 7 days</option>
+          <option [value]="30">Last 30 days</option>
+          <option [value]="90">Last 90 days</option>
+          <option [value]="180">Last 6 months</option>
         </select>
       </div>
 
@@ -36,15 +38,7 @@ import { AnalyticsApiService } from '../../../core/services/analytics-api.servic
             <h3 class="lh-chart-title">Engagement trend</h3>
             <p class="lh-chart-sub">Active engaged vs flagged inactive over 6 months</p>
           </div>
-          <div class="lh-bars">
-            <div class="lh-bar-col" *ngFor="let b of trend">
-              <div class="lh-bar-stack">
-                <div class="lh-bar active" [style.height.%]="b.active"></div>
-                <div class="lh-bar inactive" [style.height.%]="b.inactive"></div>
-              </div>
-              <span class="lh-bar-label">{{ b.month }}</span>
-            </div>
-          </div>
+          <app-xy-chart type="bar" [labels]="trendLabels" [series]="trendSeries" yAxisLabel="%" xAxisLabel="Month" [height]="140" [showLegend]="false"/>
           <div class="lh-legend">
             <span><span class="lh-dot active"></span> Active engaged</span>
             <span><span class="lh-dot inactive"></span> Flagged inactive</span>
@@ -52,7 +46,7 @@ import { AnalyticsApiService } from '../../../core/services/analytics-api.servic
         </div>
 
         <div class="glass-card lh-flow-card">
-          <h3 class="lh-chart-title">Re-engagement flow (30 days)</h3>
+          <h3 class="lh-chart-title">Re-engagement flow ({{ periodDays }} days)</h3>
           <p class="lh-chart-sub">Outcomes from subscribers who entered the sequence</p>
           <div class="lh-outcomes">
             <div class="lh-outcome" *ngFor="let o of outcomes">
@@ -70,8 +64,17 @@ import { AnalyticsApiService } from '../../../core/services/analytics-api.servic
       </div>
 
       <div class="glass-card lh-table-card">
-        <h3 class="lh-chart-title">Flagged subscribers queue</h3>
-        <p class="lh-chart-sub">Readers who crossed the inactivity threshold — review before sequence begins</p>
+        <div class="lh-table-header">
+          <div>
+            <h3 class="lh-chart-title">Flagged subscribers queue</h3>
+            <p class="lh-chart-sub">Readers who crossed the inactivity threshold — review before sequence begins</p>
+          </div>
+          <select class="filter-select" [value]="statusFilter" (change)="onStatusFilter($event)">
+            <option value="all">All statuses</option>
+            <option value="queued">Queued</option>
+            <option value="in-sequence">In sequence</option>
+          </select>
+        </div>
         <table class="data-table">
           <thead>
             <tr>
@@ -83,10 +86,10 @@ import { AnalyticsApiService } from '../../../core/services/analytics-api.servic
             </tr>
           </thead>
           <tbody>
-            <tr *ngIf="flaggedQueue.length === 0">
-              <td colspan="5" class="empty-row">No flagged subscribers.</td>
+            <tr *ngIf="filteredQueue.length === 0">
+              <td colspan="5" class="empty-row">No flagged subscribers match this filter.</td>
             </tr>
-            <tr *ngFor="let s of flaggedQueue">
+            <tr *ngFor="let s of filteredQueue">
               <td class="lh-email">{{ s.email }}</td>
               <td class="muted">{{ s.lastEngaged }}</td>
               <td>{{ s.daysInactive }} days</td>
@@ -111,6 +114,10 @@ import { AnalyticsApiService } from '../../../core/services/analytics-api.servic
     </div>
   `,
   styles: [`
+    .period-select, .filter-select {
+      padding:.55rem 1rem; background:white; border:1.5px solid #e2e8f0;
+      border-radius:10px; color:#334155; font-size:.8125rem; font-family:inherit; outline:none; cursor:pointer;
+    }
     .lh-kpi-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -121,32 +128,16 @@ import { AnalyticsApiService } from '../../../core/services/analytics-api.servic
     .lh-kpi-val { display: block; font-size: 1.75rem; font-weight: 800; margin-bottom: .25rem; }
     .lh-kpi-label { display: block; font-size: .8125rem; font-weight: 600; color: #0f172a; margin-bottom: .2rem; }
     .lh-kpi-desc { display: block; font-size: .72rem; color: #94a3b8; line-height: 1.4; }
-
-    .lh-row {
-      display: grid;
-      grid-template-columns: 1.2fr 1fr;
-      gap: 1rem;
-      margin-bottom: 1.25rem;
-    }
+    .lh-row { display: grid; grid-template-columns: 1.2fr 1fr; gap: 1rem; margin-bottom: 1.25rem; }
     @media (max-width: 900px) { .lh-row { grid-template-columns: 1fr; } }
-
     .lh-chart-card, .lh-flow-card, .lh-table-card, .lh-note-card { padding: 1.25rem; }
-    .lh-chart-header { margin-bottom: 1rem; }
+    .lh-chart-header, .lh-table-header { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; margin-bottom:1rem; flex-wrap:wrap; }
     .lh-chart-title { font-size: 1rem; font-weight: 600; color: #0f172a; margin: 0 0 .2rem; }
     .lh-chart-sub { font-size: .8125rem; color: #94a3b8; margin: 0 0 .75rem; }
-
-    .lh-bars { display: flex; align-items: flex-end; gap: .75rem; height: 120px; margin-bottom: .75rem; }
-    .lh-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: .35rem; height: 100%; }
-    .lh-bar-stack { flex: 1; width: 100%; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; }
-    .lh-bar { width: 100%; border-radius: 4px 4px 0 0; min-height: 3px; }
-    .lh-bar.active { background: #db2777; }
-    .lh-bar.inactive { background: #e2e8f0; }
-    .lh-bar-label { font-size: .72rem; color: #94a3b8; }
-    .lh-legend { display: flex; gap: 1.25rem; font-size: .78rem; color: #64748b; }
+    .lh-legend { display: flex; gap: 1.25rem; font-size: .78rem; color: #64748b; margin-top:.75rem; padding-top:.25rem; }
     .lh-dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: .35rem; vertical-align: middle; }
     .lh-dot.active { background: #db2777; }
     .lh-dot.inactive { background: #e2e8f0; }
-
     .lh-outcomes { display: flex; flex-direction: column; gap: .875rem; }
     .lh-outcome-header { display: flex; justify-content: space-between; margin-bottom: .35rem; }
     .lh-outcome-name { font-size: .8125rem; color: #374151; }
@@ -154,20 +145,13 @@ import { AnalyticsApiService } from '../../../core/services/analytics-api.servic
     .lh-outcome-bar { height: 8px; background: #f1f5f9; border-radius: 100px; overflow: hidden; margin-bottom: .25rem; }
     .lh-outcome-fill { height: 100%; border-radius: 100px; transition: width .6s; }
     .lh-outcome-pct { font-size: .72rem; color: #94a3b8; }
-
     .lh-table-card { margin-bottom: 1.25rem; overflow-x: auto; }
     .lh-email { font-weight: 500; color: #0f172a; }
-    .lh-status {
-      font-size: .72rem; font-weight: 600; padding: .15rem .5rem;
-      border-radius: 100px;
-    }
+    .lh-status { font-size: .72rem; font-weight: 600; padding: .15rem .5rem; border-radius: 100px; }
     .lh-status.queued { background: rgba(217,119,6,0.12); color: #d97706; }
     .lh-status.in-sequence { background: rgba(219,39,119,0.12); color: #db2777; }
     .lh-status.re-engaged { background: rgba(16,185,129,0.12); color: #059669; }
-
-    .lh-note-card {
-      display: flex; align-items: flex-start; gap: .75rem;
-    }
+    .lh-note-card { display: flex; align-items: flex-start; gap: .75rem; }
     .lh-note-card p { font-size: .875rem; color: #374151; margin: 0; line-height: 1.6; }
     .empty-row { text-align:center; color:#94a3b8; padding:1.5rem !important; }
   `]
@@ -175,15 +159,38 @@ import { AnalyticsApiService } from '../../../core/services/analytics-api.servic
 export class ListHealthComponent implements OnInit {
   private analyticsApi = inject(AnalyticsApiService);
 
+  periodDays = 30;
+  statusFilter = 'all';
   kpis: { label: string; value: string; desc: string; color: string }[] = [];
-  trend: { month: string; active: number; inactive: number }[] = [];
+  trendLabels: string[] = [];
+  trendSeries: ChartSeries[] = [];
   outcomes: { name: string; count: number; pct: number; color: string }[] = [];
   flaggedQueue: { email: string; lastEngaged: string; daysInactive: number; status: string; statusClass: string; threshold: string }[] = [];
 
-  ngOnInit() {
-    this.analyticsApi.getAnalytics(30).subscribe(b => {
+  get filteredQueue() {
+    if (this.statusFilter === 'all') return this.flaggedQueue;
+    return this.flaggedQueue.filter(s => s.statusClass === this.statusFilter);
+  }
+
+  ngOnInit() { this.load(); }
+
+  onPeriodChange(ev: Event) {
+    this.periodDays = Number((ev.target as HTMLSelectElement).value);
+    this.load();
+  }
+
+  onStatusFilter(ev: Event) {
+    this.statusFilter = (ev.target as HTMLSelectElement).value;
+  }
+
+  private load() {
+    this.analyticsApi.getAnalytics(this.periodDays).subscribe(b => {
       this.kpis = b.listHealthKpis;
-      this.trend = b.listHealthTrend;
+      this.trendLabels = b.listHealthTrend.map(t => t.month);
+      this.trendSeries = [
+        { name: 'Active engaged', color: '#db2777', values: b.listHealthTrend.map(t => t.active) },
+        { name: 'Flagged inactive', color: '#cbd5e1', values: b.listHealthTrend.map(t => t.inactive) },
+      ];
       this.outcomes = b.listHealthOutcomes;
       this.flaggedQueue = b.flaggedQueue;
     });

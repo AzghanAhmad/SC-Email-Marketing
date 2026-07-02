@@ -50,7 +50,7 @@ export interface MetricDetailRow {
   current: string;
   previous: string;
   changeNum: number;
-  spark: string;
+  status: string;
 }
 
 export interface FlowStepRow {
@@ -150,6 +150,7 @@ export interface FlaggedSubscriber {
 }
 
 export interface CustomReport {
+  id: string;
   name: string;
   type: string;
   description: string;
@@ -157,11 +158,33 @@ export interface CustomReport {
   iconKey: string;
 }
 
+export interface DeliverabilityAction {
+  iconKey: string;
+  title: string;
+  description: string;
+  primaryBtn?: string | null;
+  secondaryBtn?: string | null;
+  linkRoute?: string | null;
+  linkLabel?: string | null;
+}
+
+export interface MarketingAnalytics {
+  performance: { totalRevenue: number; totalRevenueChange: number; attributedRevenue: number; attributedRevenueChange: number; periodLabel: string };
+  attribution: { label: string; value: string; pct: string; icon: string }[];
+  revenueBySource: { name: string; value: string; pct: number; color: string }[];
+  campaignImpact: { name: string; revenue: string; sent: number; openRate: number; pct: number }[];
+  volumeData: VolumeDataPoint[];
+  engagementTrend: EngagementTrendPoint[];
+  periodStart: string;
+  periodEnd: string;
+}
+
 export interface AnalyticsBundle {
   kpis: AnalyticsKpi[];
   volumeData: VolumeDataPoint[];
   engagementTrend: EngagementTrendPoint[];
   engagementBreakdown: EngagementBreakdown[];
+  subscriberGrowth: { label: string; count: number }[];
   campaignFunnel: CampaignFunnelRow[];
   metrics: MetricCard[];
   metricDetails: MetricDetailRow[];
@@ -181,6 +204,7 @@ export interface AnalyticsBundle {
   listHealthOutcomes: ListHealthOutcome[];
   flaggedQueue: FlaggedSubscriber[];
   customReports: CustomReport[];
+  deliverabilityActions: DeliverabilityAction[];
 }
 
 @Injectable({ providedIn: 'root' })
@@ -189,5 +213,9 @@ export class AnalyticsApiService {
 
   getAnalytics(days = 30): Observable<AnalyticsBundle> {
     return this.api.get<AnalyticsBundle>(`/analytics?days=${days}`);
+  }
+
+  getMarketingAnalytics(days = 30): Observable<MarketingAnalytics> {
+    return this.api.get<MarketingAnalytics>(`/analytics/marketing?days=${days}`);
   }
 }

@@ -20,6 +20,14 @@ export const routes: Routes = [
     loadComponent: () => import('./features/public/campaign-email-view.component').then(m => m.CampaignEmailViewComponent)
   },
   {
+    path: 'ab-test/:id',
+    loadComponent: () => import('./features/public/ab-test-vote.component').then(m => m.AbTestVoteComponent)
+  },
+  {
+    path: 'flow/respond/:token',
+    loadComponent: () => import('./features/public/flow-respond.component').then(m => m.FlowRespondComponent)
+  },
+  {
     path: 'p/:slug',
     loadComponent: () => import('./features/public/landing-page-public.component').then(m => m.LandingPagePublicComponent)
   },
@@ -128,10 +136,6 @@ export const routes: Routes = [
       {
         path: 'analytics/list-health',
         loadComponent: () => import('./features/analytics/list-health/list-health.component').then(m => m.ListHealthComponent)
-      },
-      {
-        path: 'analytics/link-clicks',
-        loadComponent: () => import('./features/analytics/link-clicks/link-clicks.component').then(m => m.LinkClicksComponent)
       },
 
       // Advanced

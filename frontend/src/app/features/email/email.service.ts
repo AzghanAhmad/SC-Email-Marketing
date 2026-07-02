@@ -167,6 +167,13 @@ export class EmailService {
     this.api.delete(`/mailbox/messages/${id}`).subscribe();
   }
 
+  sendScheduledNow(id: string): Observable<Email> {
+    return this.api.post<EmailDto>(`/mailbox/messages/${id}/send-now`, {}).pipe(
+      map(dto => this.mapDto(dto)),
+      tap(sent => this._emails.update(emails => emails.map(e => e.id === id ? sent : e)))
+    );
+  }
+
   sendEmail(to: string, subject: string, body: string, attachments: EmailAttachment[] = []): Observable<void> {
     const preview = this.plainTextPreview(body);
     const payload = this.toAttachmentPayloads(attachments).filter(a => !!a.contentBase64);

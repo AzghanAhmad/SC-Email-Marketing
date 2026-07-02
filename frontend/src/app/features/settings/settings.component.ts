@@ -1,11 +1,14 @@
-import { Component, OnInit, signal } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { AuthService } from '../../core/services/auth.service';
+import { SettingsApiService, UserSettings } from '../../core/services/settings-api.service';
+import { NAV_ICONS } from '../../core/constants/nav-icons';
 import { InboxConnectionComponent } from './inbox-connection.component';
 
-type SettingsTab = 'account' | 'domain' | 'inbox' | 'integrations' | 'store' | 'notifications' | 'preferences' | 'billing' | 'help';
+type SettingsTab = 'account' | 'domain' | 'inbox' | 'store' | 'notifications' | 'preferences';
 
 @Component({
   selector: 'app-settings',
@@ -16,7 +19,7 @@ type SettingsTab = 'account' | 'domain' | 'inbox' | 'integrations' | 'store' | '
       <div class="page-header">
         <div>
           <h1 class="page-title">Settings</h1>
-          <p class="page-subtitle">Manage your account, domain, and integrations</p>
+          <p class="page-subtitle">Manage your account, domain, and store connection</p>
         </div>
       </div>
 
@@ -130,29 +133,6 @@ type SettingsTab = 'account' | 'domain' | 'inbox' | 'integrations' | 'store' | '
             <app-inbox-connection></app-inbox-connection>
           </div>
 
-          <!-- Integrations -->
-          <div *ngIf="activeTab() === 'integrations'">
-            <div class="glass-card settings-card">
-              <h2 class="sc-title">Integrations</h2>
-              <p class="sc-sub">Connect ScribeCount Email with your favorite tools</p>
-              <div class="integrations-grid">
-                <div class="integration-card" *ngFor="let int of integrations">
-                  <div class="int-icon-wrap" [innerHTML]="int.icon"></div>
-                  <div class="int-body">
-                    <h4 class="int-name">{{ int.name }}</h4>
-                    <p class="int-desc">{{ int.description }}</p>
-                  </div>
-                  <div class="int-status">
-                    <button class="int-badge" [class.connected]="int.connected"
-                      (click)="int.name === 'Shopify' ? activeTab.set('store') : null">
-                      {{ int.connected ? 'Connected' : int.name === 'Shopify' ? 'Set Up' : 'Connect' }}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
           <!-- Store Connection (Shopify) -->
           <div *ngIf="activeTab() === 'store'">
 
@@ -223,15 +203,19 @@ type SettingsTab = 'account' | 'domain' | 'inbox' | 'integrations' | 'store' | '
                 </div>
                 <div class="conn-detail-row">
                   <span class="conn-detail-key">Connected since</span>
-                  <span class="conn-detail-val">Mar 1, 2026</span>
+                  <span class="conn-detail-val">{{ shopify.connectedSince || '—' }}</span>
                 </div>
                 <div class="conn-detail-row">
                   <span class="conn-detail-key">Events received</span>
-                  <span class="conn-detail-val">1,284 webhooks</span>
+                  <span class="conn-detail-val">{{ shopify.eventsReceived | number }} webhooks</span>
+                </div>
+                <div class="conn-detail-row" *ngIf="shopify.lastEvent">
+                  <span class="conn-detail-key">Last event</span>
+                  <span class="conn-detail-val">{{ shopify.lastEvent }}</span>
                 </div>
                 <div class="conn-actions">
-                  <button class="btn-secondary btn-sm" (click)="save()" data-tooltip="Test the connection by sending a simulated event">Test Connection</button>
-                  <button class="btn-ghost btn-sm danger-btn" (click)="shopify.connected = false" data-tooltip="Disconnect your Shopify store">Disconnect</button>
+                  <button class="btn-secondary btn-sm" (click)="testStoreConnection()" data-tooltip="Test the connection by sending a simulated event">Test Connection</button>
+                  <button class="btn-ghost btn-sm danger-btn" (click)="disconnectShopify()" data-tooltip="Disconnect your Shopify store">Disconnect</button>
                 </div>
               </div>
             </div>
@@ -363,7 +347,7 @@ type SettingsTab = 'account' | 'domain' | 'inbox' | 'integrations' | 'store' | '
                 </div>
               </div>
 
-              <button class="btn-primary" style="margin-top:1rem" (click)="save()">Save Event Settings</button>
+              <button class="btn-primary" style="margin-top:1rem" (click)="saveStoreSettings()">Save Event Settings</button>
             </div>
 
             <!-- Testing Console -->
@@ -435,7 +419,7 @@ type SettingsTab = 'account' | 'domain' | 'inbox' | 'integrations' | 'store' | '
                   <input type="checkbox" class="toggle" [(ngModel)]="n.enabled" />
                 </div>
               </div>
-              <button class="btn-primary" style="margin-top:1rem" (click)="save()" data-tooltip="Save notification preferences">Save Preferences</button>
+              <button class="btn-primary" style="margin-top:1rem" (click)="saveNotifications()" data-tooltip="Save notification preferences">Save Preferences</button>
             </div>
           </div>
 
@@ -477,7 +461,7 @@ type SettingsTab = 'account' | 'domain' | 'inbox' | 'integrations' | 'store' | '
                     <input type="checkbox" [(ngModel)]="freq.enabled" />
                     <span class="toggle-slider"></span>
                   </label>
-                  <div class="pref-freq-icon">{{ freq.icon }}</div>
+                  <span class="nav-icon pref-freq-icon" [innerHTML]="freq.safeIcon"></span>
                   <div class="pref-freq-name">{{ freq.name }}</div>
                   <div class="pref-freq-desc">{{ freq.description }}</div>
                 </div>
@@ -487,7 +471,7 @@ type SettingsTab = 'account' | 'domain' | 'inbox' | 'integrations' | 'store' | '
               <h3 class="pref-section-title" style="margin-top:1.5rem">Footer Link Preview</h3>
               <div class="pref-footer-preview">
                 <div class="pfp-inner">
-                  <p class="pfp-text">You're receiving this because you subscribed at <strong>janeausten.com</strong>.</p>
+                  <p class="pfp-text">You're receiving this because you subscribed at <strong>{{ brandDomain }}</strong>.</p>
                   <div class="pfp-links">
                     <a class="pfp-link">Manage preferences</a>
                     <span class="pfp-sep">·</span>
@@ -500,70 +484,7 @@ type SettingsTab = 'account' | 'domain' | 'inbox' | 'integrations' | 'store' | '
               </div>
               <p class="pref-footer-note">The "Manage preferences" link is automatically added to every email footer and links to your preference center page.</p>
 
-              <button class="btn-primary" style="margin-top:1.25rem" (click)="save()">Save Preference Center Settings</button>
-            </div>
-          </div>
-
-          <!-- Billing -->
-          <div *ngIf="activeTab() === 'billing'">
-            <div class="glass-card settings-card plan-card">
-              <div class="plan-header">
-                <div>
-                  <h2 class="plan-name">Pro Plan</h2>
-                  <p class="plan-price">$29 / month</p>
-                </div>
-                <span class="plan-badge">Current Plan</span>
-              </div>
-              <div class="plan-features">
-                <div class="plan-feat" *ngFor="let f of planFeatures">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" width="16" height="16"><polyline points="20 6 9 17 4 12"/></svg>
-                  {{ f }}
-                </div>
-              </div>
-            </div>
-            <div class="glass-card settings-card">
-              <h2 class="sc-title">Billing History</h2>
-              <div class="billing-table">
-                <div class="billing-row header">
-                  <span>Date</span><span>Description</span><span>Amount</span><span>Status</span>
-                </div>
-                <div class="billing-row" *ngFor="let inv of invoices">
-                  <span>{{ inv.date }}</span>
-                  <span>{{ inv.desc }}</span>
-                  <span class="inv-amount">{{ inv.amount }}</span>
-                  <span class="inv-status">{{ inv.status }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Help -->
-          <div *ngIf="activeTab() === 'help'">
-            <div class="glass-card settings-card">
-              <h2 class="sc-title">Help & Documentation</h2>
-              <p class="sc-sub">Find answers, guides, and support resources</p>
-              <div class="help-grid">
-                <a class="help-card" *ngFor="let h of helpItems" [href]="h.url" target="_blank" data-tooltip="Open documentation">
-                  <div class="help-icon" [innerHTML]="h.icon"></div>
-                  <div class="help-body">
-                    <h4 class="help-title">{{ h.title }}</h4>
-                    <p class="help-desc">{{ h.description }}</p>
-                  </div>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" class="help-arrow"><polyline points="9 18 15 12 9 6"/></svg>
-                </a>
-              </div>
-            </div>
-            <div class="glass-card settings-card">
-              <h2 class="sc-title">Contact Support</h2>
-              <div class="form-group">
-                <label class="form-label">Subject</label>
-                <input type="text" class="form-input" placeholder="What do you need help with?" />
-              </div>
-              <div class="form-group">
-                <label class="form-label">Message</label>
-                <textarea class="form-input" rows="4" placeholder="Describe your issue..."></textarea>
-              </div>
-              <button class="btn-primary" data-tooltip="Send your support request">Send Message</button>
+              <button class="btn-primary" style="margin-top:1.25rem" (click)="savePreferences()">Save Preference Center Settings</button>
             </div>
           </div>
 
@@ -613,8 +534,9 @@ type SettingsTab = 'account' | 'domain' | 'inbox' | 'integrations' | 'store' | '
     .integrations-grid { display:flex; flex-direction:column; gap:.75rem; }
     .integration-card { display:flex; align-items:center; gap:1rem; padding:1rem; background:#f8fafc; border:1.5px solid #f1f5f9; border-radius:12px; transition:all .2s; }
     .integration-card:hover { background:#f0f7ff; border-color:#bfdbfe; }
-    .int-icon-wrap { width:40px; height:40px; border-radius:10px; background:#f1f5f9; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-    .int-icon-wrap :global(svg) { width:22px; height:22px; }
+    .nav-icon { display:flex; align-items:center; justify-content:center; flex-shrink:0; color:#64748b; }
+    .nav-icon :global(svg) { width:22px; height:22px; display:block; }
+    .pref-freq-icon { margin-bottom:.5rem; }
     .int-body { flex:1; }
     .int-name { font-size:.9rem; font-weight:600; color:#0f172a; margin:0 0 .2rem; }
     .int-desc { font-size:.8rem; color:#94a3b8; margin:0; }
@@ -775,7 +697,6 @@ type SettingsTab = 'account' | 'domain' | 'inbox' | 'integrations' | 'store' | '
     .pref-freq-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:.75rem; }
     .pref-freq-card { position:relative; padding:1rem; border:1.5px solid #e2e8f0; border-radius:12px; background:#f8fafc; transition:all .15s; }
     .pref-freq-active { border-color:rgba(59,130,246,0.3); background:rgba(59,130,246,0.04); }
-    .pref-freq-icon { font-size:1.5rem; margin-bottom:.5rem; }
     .pref-freq-name { font-size:.875rem; font-weight:600; color:#0f172a; margin-bottom:.2rem; }
     .pref-freq-desc { font-size:.75rem; color:#94a3b8; }
     .pref-footer-preview { border:1.5px solid #e2e8f0; border-radius:12px; overflow:hidden; margin-bottom:.5rem; }
@@ -797,8 +718,12 @@ type SettingsTab = 'account' | 'domain' | 'inbox' | 'integrations' | 'store' | '
   `]
 })
 export class SettingsComponent implements OnInit {
+  private settingsApi = inject(SettingsApiService);
+  private sanitizer = inject(DomSanitizer);
+
   activeTab = signal<SettingsTab>('account');
   showToast = signal(false);
+  brandDomain = 'yourdomain.com';
 
   account = {
     firstName: 'Jane', lastName: 'Austen',
@@ -811,12 +736,9 @@ export class SettingsComponent implements OnInit {
     { id: 'account' as SettingsTab, label: 'Account', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>' },
     { id: 'domain' as SettingsTab, label: 'Domain Setup', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>' },
     { id: 'inbox' as SettingsTab, label: 'Inbox Connection', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>' },
-    { id: 'integrations' as SettingsTab, label: 'Integrations', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>' },
     { id: 'store' as SettingsTab, label: 'Store Connection', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>' },
     { id: 'notifications' as SettingsTab, label: 'Notifications', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>' },
     { id: 'preferences' as SettingsTab, label: 'Preference Center', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>' },
-    { id: 'billing' as SettingsTab, label: 'Billing', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>' },
-    { id: 'help' as SettingsTab, label: 'Help', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>' },
   ];
 
   dnsRecords = [
@@ -825,18 +747,12 @@ export class SettingsComponent implements OnInit {
     { type: 'CNAME', name: 'mail', value: 'mail.scribecount.com' },
   ];
 
-  integrations = [
-    { icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="1.75" width="24" height="24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>', name: 'BookFunnel', description: 'Sync reader magnet downloads to your list', connected: true },
-    { icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="1.75" width="24" height="24"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>', name: 'Shopify', description: 'Connect your store for purchase flows and abandoned cart recovery', connected: false },
-    { icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="1.75" width="24" height="24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>', name: 'Google Analytics', description: 'Track email campaign traffic in GA4', connected: false },
-    { icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="1.75" width="24" height="24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>', name: 'Zapier', description: 'Connect with 5,000+ apps via Zapier', connected: false },
-    { icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="1.75" width="24" height="24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>', name: 'StoryOrigin', description: 'Import subscribers from StoryOrigin newsletter swaps', connected: true },
-    { icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="1.75" width="24" height="24"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>', name: 'Facebook Pixel', description: 'Retarget email subscribers on Facebook', connected: false },
-  ];
-
   shopify = {
     connected: false,
     storeUrl: '',
+    connectedSince: '' as string | null,
+    eventsReceived: 0,
+    lastEvent: '' as string | null,
     events: {
       purchase: true,
       abandonedCart: true,
@@ -861,46 +777,11 @@ export class SettingsComponent implements OnInit {
     { time: 'May 7, 14:11', eventLabel: 'order.completed', type: 'purchase', email: 'ja***@icloud.com', flow: 'Post-Purchase Thank You', status: 'warn' },
   ];
 
-  notifications = [
-    { title: 'Campaign Sent', description: 'Notify me when a campaign is sent successfully', enabled: true },
-    { title: 'New Subscriber', description: 'Notify me when someone joins my list', enabled: false },
-    { title: 'Weekly Report', description: 'Receive a weekly summary of my email performance', enabled: true },
-    { title: 'Flow Triggered', description: 'Notify me when an automation flow is triggered', enabled: false },
-    { title: 'Unsubscribe Alert', description: 'Notify me when someone unsubscribes', enabled: true },
-    { title: 'Product Updates', description: 'News about new ScribeCount Email features', enabled: true },
-  ];
+  notifications: { key: string; title: string; description: string; enabled: boolean }[] = [];
 
-  planFeatures = [
-    'Unlimited subscribers', 'Unlimited emails/month', 'Automation flows',
-    'Advanced analytics', 'Custom domain', 'Priority support'
-  ];
+  prefOptions: { key: string; name: string; description: string; enabled: boolean; subscriberCount: number }[] = [];
 
-  invoices = [
-    { date: 'Mar 1, 2026', desc: 'Pro Plan — Monthly', amount: '$29.00', status: 'Paid' },
-    { date: 'Feb 1, 2026', desc: 'Pro Plan — Monthly', amount: '$29.00', status: 'Paid' },
-    { date: 'Jan 1, 2026', desc: 'Pro Plan — Monthly', amount: '$29.00', status: 'Paid' },
-  ];
-
-  helpItems = [
-    { icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="1.75" width="22" height="22"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>', title: 'Getting Started Guide', description: 'Learn the basics of ScribeCount Email', url: '#' },
-    { icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="1.75" width="22" height="22"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>', title: 'Campaign Best Practices', description: 'Tips for higher open and click rates', url: '#' },
-    { icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="1.75" width="22" height="22"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>', title: 'Automation Flows', description: 'How to set up and manage flows', url: '#' },
-    { icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="1.75" width="22" height="22"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>', title: 'Understanding Analytics', description: 'Make sense of your email metrics', url: '#' },
-  ];
-
-  prefOptions = [
-    { name: 'Full Newsletter', description: 'Regular newsletter with writing updates, reading picks, and behind-the-scenes content', enabled: true, subscriberCount: 2341 },
-    { name: 'New Release Announcements', description: 'Only notified when a new book is available or pre-order goes live', enabled: true, subscriberCount: 4820 },
-    { name: 'Promotional Emails', description: 'Sales, limited-time offers, and backlist discounts', enabled: true, subscriberCount: 1876 },
-    { name: 'Community Updates', description: 'Reader events, signings, ARC opportunities, and community news', enabled: false, subscriberCount: 934 },
-  ];
-
-  prefFrequencies = [
-    { name: 'Weekly', description: 'Hear from me every week', icon: '📅', enabled: true },
-    { name: 'Biweekly', description: 'Every two weeks', icon: '🗓️', enabled: true },
-    { name: 'Monthly', description: 'Once a month', icon: '📆', enabled: true },
-    { name: 'New releases only', description: 'Only when I publish something new', icon: '📚', enabled: true },
-  ];
+  prefFrequencies: { key: string; name: string; description: string; enabled: boolean; iconKey: string; safeIcon: SafeHtml }[] = [];
 
   constructor(public auth: AuthService, private route: ActivatedRoute) {
     this.applyTabFromRoute(this.route.snapshot.queryParamMap.get('tab'));
@@ -917,6 +798,35 @@ export class SettingsComponent implements OnInit {
       this.account.lastName = parts.slice(1).join(' ');
       this.account.email = user.email;
     }
+    this.loadSettings();
+  }
+
+  private loadSettings() {
+    this.settingsApi.getSettings().subscribe(s => this.applySettings(s));
+  }
+
+  private applySettings(s: UserSettings) {
+    this.notifications = s.notifications;
+    this.prefOptions = s.preferenceEmailTypes;
+    this.prefFrequencies = s.preferenceFrequencies.map(f => ({
+      ...f,
+      safeIcon: this.sanitizer.bypassSecurityTrustHtml(NAV_ICONS[f.iconKey] ?? NAV_ICONS['calendar']),
+    }));
+    this.brandDomain = s.brandDomain || 'yourdomain.com';
+    this.shopify = {
+      connected: s.store.connected,
+      storeUrl: s.store.storeUrl,
+      connectedSince: s.store.connectedSince ?? null,
+      eventsReceived: s.store.eventsReceived,
+      lastEvent: s.store.lastEvent ?? null,
+      events: {
+        purchase: s.store.events.purchase,
+        abandonedCart: s.store.events.abandonedCart,
+        abandonedCheckout: s.store.events.abandonedCheckout,
+        optIn: s.store.events.optIn,
+      },
+      autoAddPurchasers: s.store.events.autoAddPurchasers,
+    };
   }
 
   private applyTabFromRoute(tab: string | null) {
@@ -926,19 +836,71 @@ export class SettingsComponent implements OnInit {
   }
 
   save() {
-    this.showToast.set(true);
-    setTimeout(() => this.showToast.set(false), 2500);
+    this.toast();
+  }
+
+  saveNotifications() {
+    this.settingsApi.updateNotifications(this.notifications).subscribe(s => {
+      this.applySettings(s);
+      this.toast();
+    });
+  }
+
+  savePreferences() {
+    this.settingsApi.updatePreferences(
+      this.prefOptions,
+      this.prefFrequencies.map(({ key, name, description, enabled, iconKey }) => ({ key, name, description, enabled, iconKey }))
+    ).subscribe(s => {
+      this.applySettings(s);
+      this.toast();
+    });
+  }
+
+  saveStoreSettings() {
+    this.settingsApi.updateStore({
+      connected: this.shopify.connected,
+      storeUrl: this.shopify.storeUrl,
+      events: {
+        purchase: this.shopify.events.purchase,
+        abandonedCart: this.shopify.events.abandonedCart,
+        abandonedCheckout: this.shopify.events.abandonedCheckout,
+        optIn: this.shopify.events.optIn,
+        autoAddPurchasers: this.shopify.autoAddPurchasers,
+      },
+    }).subscribe(s => {
+      this.applySettings(s);
+      this.toast();
+    });
   }
 
   connectShopify() {
     if (!this.shopify.storeUrl.trim()) return;
-    this.shopify.connected = true;
-    this.showToast.set(true);
-    setTimeout(() => this.showToast.set(false), 2500);
+    this.settingsApi.connectStore(this.shopify.storeUrl.trim()).subscribe(s => {
+      this.applySettings(s);
+      this.toast();
+    });
+  }
+
+  disconnectShopify() {
+    this.settingsApi.disconnectStore().subscribe(s => {
+      this.applySettings(s);
+      this.toast();
+    });
+  }
+
+  testStoreConnection() {
+    this.settingsApi.testStore().subscribe(s => {
+      this.applySettings(s);
+      this.toast();
+    });
   }
 
   runTest(t: { label: string; result: string }) {
     t.result = 'pass';
+    this.testStoreConnection();
+  }
+
+  private toast() {
     this.showToast.set(true);
     setTimeout(() => this.showToast.set(false), 2500);
   }

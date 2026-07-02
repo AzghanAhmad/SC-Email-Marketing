@@ -51,13 +51,20 @@ builder.Services.AddScoped<JwtTokenService>();
 builder.Services.AddScoped<DatabaseSeeder>();
 builder.Services.AddScoped<MailboxService>();
 builder.Services.AddScoped<DashboardService>();
+builder.Services.AddScoped<SettingsService>();
+builder.Services.AddMemoryCache();
+builder.Services.AddScoped<IndustryBenchmarkService>();
 builder.Services.AddScoped<AnalyticsService>();
 builder.Services.AddScoped<AudienceService>();
 builder.Services.AddScoped<ContentService>();
 builder.Services.AddScoped<WebsiteService>();
+builder.Services.AddScoped<FlowService>();
 builder.Services.AddScoped<CampaignTrackingService>();
 builder.Services.AddScoped<CampaignService>();
 builder.Services.AddHostedService<CampaignSchedulerService>();
+builder.Services.AddHostedService<CampaignFeatureSchedulerService>();
+builder.Services.AddHostedService<MailboxSchedulerService>();
+builder.Services.AddHttpContextAccessor();
 
 var jwtKey = builder.Configuration["Jwt:Key"] ?? "ScribeCount-Dev-Secret-Key-Change-In-Production-32chars!";
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

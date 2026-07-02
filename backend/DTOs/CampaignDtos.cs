@@ -77,7 +77,9 @@ public record NewsletterScheduleDto(
     string PreviewText,
     string ReplyQuestion,
     string Content,
-    string Status
+    string Status,
+    DateTime? NextSendAt = null,
+    DateTime? LastSentAt = null
 );
 
 public record AbTestDto(
@@ -91,8 +93,39 @@ public record AbTestDto(
     string Status,
     decimal? OpenRateA,
     decimal? OpenRateB,
-    string? Winner
+    string? Winner,
+    int VotesA,
+    int VotesB,
+    DateTime? StartedAt,
+    DateTime? CompletedAt,
+    string? PublicUrl = null
 );
+
+public record PublicAbTestDto(
+    string Id,
+    string Name,
+    string SubjectA,
+    string SubjectB,
+    string Status,
+    int VotesA,
+    int VotesB,
+    string? Winner,
+    bool VotingOpen
+);
+
+public record VoteAbTestRequest(string Variant, string? VoterToken);
+
+public record VoteAbTestResponse(
+    string Message,
+    int VotesA,
+    int VotesB,
+    string? Winner,
+    string Status
+);
+
+public record ReleasePlanDto(string BookTitle, string? ReleaseDate);
+
+public record SaveReleasePlanRequest(string? BookTitle, string? ReleaseDate);
 
 public record CreateAbTestRequest(
     string SubjectA,
@@ -107,7 +140,8 @@ public record CampaignsBundleDto(
     List<CampaignDto> Campaigns,
     List<CalendarEventDto> CalendarEvents,
     NewsletterScheduleDto Newsletter,
-    List<AbTestDto> AbTests
+    List<AbTestDto> AbTests,
+    ReleasePlanDto? ReleasePlan = null
 );
 
 public record AudienceSegmentDto(

@@ -83,14 +83,15 @@ public record SaveGrowthToolConfigRequest(string ConfigJson);
 
 public record EmailTemplateDto(
     string Id, string Name, string Category, string Preview, string Description,
-    string SubjectLine, string PreviewText, string HtmlBody, string IconKey, string SuggestedCampaignType);
+    string SubjectLine, string PreviewText, string HtmlBody, string IconKey, string SuggestedCampaignType,
+    bool IsCustom);
 
 public record ContentBlockDto(
     string Id, string Name, string Type, string Description, int UsedIn, string IconKey, string HtmlBody);
 
 public record BrandColorDto(string Label, string Value);
 
-public record BrandAssetDto(string Id, string Name, string Size, string IconKey);
+public record BrandAssetDto(string Id, string Name, string Size, string IconKey, string? Url, string? MimeType);
 
 public record ContentBundleDto(
     List<EmailTemplateDto> Templates,
@@ -106,6 +107,17 @@ public record WebsiteTemplateDto(
 
 public record CreateContentBlockRequest(
     string Name, string BlockType, string Description, string IconKey);
+
+public record UpdateContentBlockRequest(
+    string? Name, string? BlockType, string? Description, string? IconKey, string? HtmlBody);
+
+public record CreateCustomTemplateRequest(
+    string Name, string? Description, string? SubjectLine);
+
+public record UpdateEmailTemplateRequest(
+    string? Name, string? Description, string? SubjectLine, string? HtmlBody);
+
+public record AppendBlockToTemplateRequest(bool? InsertAtStart);
 
 public record UpdateBrandColorsRequest(List<BrandColorDto> Colors);
 

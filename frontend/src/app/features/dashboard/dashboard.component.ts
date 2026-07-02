@@ -2,11 +2,12 @@ import { Component, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { DashboardApiService, DashboardData } from '../../core/services/dashboard-api.service';
+import { XyChartComponent, ChartSeries } from '../../shared/components/xy-chart/xy-chart.component';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterModule],
+  imports: [CommonModule, RouterModule, XyChartComponent],
   template: `
     <div class="page-wrapper">
       <!-- Welcome Header -->
@@ -25,17 +26,26 @@ import { DashboardApiService, DashboardData } from '../../core/services/dashboar
         <div class="conv-header">
           <h3 class="conv-label">Conversion metric</h3>
           <div class="conv-controls">
-            <select class="conv-select">
-              <option>Placed Order</option>
-              <option>Clicked Link</option>
-              <option>Opened Email</option>
+            <select class="conv-select" [value]="conversionMetric" (change)="onConversionChange($event)">
+              <option value="placed_order">Placed Order</option>
+              <option value="clicked_link">Clicked Link</option>
+              <option value="opened_email">Opened Email</option>
             </select>
-            <button class="btn-ghost btn-sm conv-period-btn">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-              Time period
-            </button>
+            <select class="conv-select" [value]="periodDays" (change)="onPeriodChange($event)">
+              <option [value]="7">Last 7 days</option>
+              <option [value]="30">Last 30 days</option>
+              <option [value]="90">Last 90 days</option>
+              <option [value]="365">Last year</option>
+            </select>
           </div>
           <span class="conv-date-range">{{ periodStart }} — {{ periodEnd }} compared to previous period</span>
+        </div>
+        <div class="conv-display" *ngIf="activeConversion">
+          <span class="conv-value">{{ activeConversion.value }}</span>
+          <span class="conv-change" [class.up]="activeConversion.change > 0" [class.down]="activeConversion.change < 0">
+            {{ activeConversion.change > 0 ? '+' : '' }}{{ activeConversion.change }}% vs previous period
+          </span>
+          <p class="conv-desc">{{ activeConversion.description }}</p>
         </div>
       </div>
 
@@ -120,14 +130,8 @@ import { DashboardApiService, DashboardData } from '../../core/services/dashboar
               <span class="legend-item"><span class="legend-dot" style="background:#a78bfa"></span>Opened</span>
             </div>
           </div>
-          <div class="bar-chart">
-            <div class="bar-group" *ngFor="let d of campaignData">
-              <div class="bars">
-                <div class="bar sent" [style.height]="(d.sent / maxSent * 100) + '%'" [attr.data-tooltip]="d.sent + ' sent'"></div>
-                <div class="bar opened" [style.height]="(d.opened / maxSent * 100) + '%'" [attr.data-tooltip]="d.opened + ' opened'"></div>
-              </div>
-              <span class="bar-label">{{ d.label }}</span>
-            </div>
+          <div class="chart-container">
+            <app-xy-chart type="bar" [labels]="campaignLabels" [series]="campaignSeries" yAxisLabel="Count" xAxisLabel="Month" [showLegend]="false"/>
           </div>
         </div>
 
@@ -136,52 +140,43 @@ import { DashboardApiService, DashboardData } from '../../core/services/dashboar
           <div class="chart-header">
             <div>
               <h3 class="chart-title">Subscriber Growth</h3>
-              <p class="chart-sub">Total subscribers over time</p>
-            </div>
-            <div class="growth-legend">
-              <span class="legend-item"><span class="legend-dot" style="background:#1e3a5f"></span>Actual</span>
-              <span class="legend-item"><span class="legend-dot legend-dot-dash" style="background:#64748b"></span>Target</span>
+              <p class="chart-sub">Total active subscribers over time</p>
             </div>
           </div>
-          <!-- Proper line chart with axes -->
-          <div class="growth-chart-container">
-            <div class="growth-y-axis">
-              <span *ngFor="let y of yAxisLabels">{{ y }}</span>
-            </div>
-            <div class="growth-chart-inner">
-              <svg class="growth-svg" [attr.viewBox]="'0 0 ' + svgW + ' ' + svgH" preserveAspectRatio="none">
-                <defs>
-                  <linearGradient id="growthGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stop-color="#1e3a5f" stop-opacity="0.12"/>
-                    <stop offset="100%" stop-color="#1e3a5f" stop-opacity="0.01"/>
-                  </linearGradient>
-                </defs>
-                <!-- Grid lines -->
-                <line *ngFor="let gl of gridLines" [attr.x1]="0" [attr.y1]="gl" [attr.x2]="svgW" [attr.y2]="gl" stroke="#e2e8f0" stroke-width="1"/>
-                <!-- Target dashed line -->
-                <line [attr.x1]="growthDots[0]?.x" [attr.y1]="growthDots[0]?.y" [attr.x2]="growthDots[growthDots.length-1]?.x" [attr.y2]="growthDots[growthDots.length-1]?.y" stroke="#64748b" stroke-width="1.5" stroke-dasharray="5 4"/>
-                <!-- Area fill -->
-                <polygon [attr.points]="growthAreaPoints" fill="url(#growthGrad)"/>
-                <!-- Main line -->
-                <polyline [attr.points]="growthLinePoints" fill="none" stroke="#1e3a5f" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-                <!-- Data dots -->
-                <g *ngFor="let pt of growthDots; let i = index">
-                  <circle [attr.cx]="pt.x" [attr.cy]="pt.y" r="5" fill="white" stroke="#1e3a5f" stroke-width="2"/>
-                  <circle [attr.cx]="pt.x" [attr.cy]="pt.y" r="2.5" fill="#1e3a5f"/>
-                </g>
-              </svg>
-              <!-- X-axis labels -->
-              <div class="growth-x-labels">
-                <span *ngFor="let d of growthData">{{ d.label }}</span>
-              </div>
-            </div>
-          </div>
+          <app-xy-chart type="line" [labels]="growthLabels" [series]="growthSeries" yAxisLabel="Subscribers" xAxisLabel="Month"/>
           <div class="growth-footer">
             <span class="growth-current">{{ growthData.length ? (growthData[growthData.length - 1].count | number) : '0' }}</span>
             <span class="growth-label">total subscribers</span>
             <span class="growth-change up">+{{ subscriberGrowthPct }}% vs last period</span>
           </div>
         </div>
+      </div>
+
+      <!-- Campaign Performance Funnel -->
+      <div class="glass-card funnel-card anim-up d3" *ngIf="campaignFunnel.length > 0">
+        <div class="chart-header">
+          <div>
+            <h3 class="chart-title">Campaign Performance Funnel</h3>
+            <p class="chart-sub">Sent → Delivered → Opens → Clicks → Purchases → Revenue</p>
+          </div>
+          <a routerLink="/analytics/dashboards" class="btn-secondary btn-sm">Full analytics</a>
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr><th>Campaign</th><th>Sent</th><th>Delivered</th><th>Opens</th><th>Clicks</th><th>Purchases</th><th>Revenue</th></tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let c of campaignFunnel">
+              <td class="camp-name">{{ c.name }}</td>
+              <td>{{ c.sent | number }}</td>
+              <td>{{ c.delivered | number }}</td>
+              <td>{{ c.opens | number }}</td>
+              <td>{{ c.clicks | number }}</td>
+              <td>{{ c.purchases }}</td>
+              <td class="revenue">{{ c.revenue }}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <!-- Bottom Row -->
@@ -270,6 +265,12 @@ import { DashboardApiService, DashboardData } from '../../core/services/dashboar
     .conversion-section { margin-bottom:1.5rem; }
     .conv-header { display:flex; align-items:center; gap:1rem; flex-wrap:wrap; }
     .conv-label { font-size:.875rem; font-weight:600; color:#0f172a; margin:0; }
+    .conv-display { margin-top:.75rem; display:flex; flex-wrap:wrap; align-items:baseline; gap:.75rem 1.25rem; }
+    .conv-value { font-size:1.75rem; font-weight:800; color:#0f172a; letter-spacing:-.03em; }
+    .conv-change { font-size:.8125rem; font-weight:600; padding:.2rem .55rem; border-radius:6px; background:#f1f5f9; color:#64748b; }
+    .conv-change.up { color:#059669; background:rgba(16,185,129,0.1); }
+    .conv-change.down { color:#dc2626; background:rgba(239,68,68,0.1); }
+    .conv-desc { width:100%; font-size:.8125rem; color:#94a3b8; margin:0; }
     .conv-controls { display:flex; align-items:center; gap:.5rem; }
     .conv-select { padding:.4rem .75rem; background:white; border:1.5px solid #e2e8f0; border-radius:8px; font-size:.8rem; font-family:inherit; color:#334155; outline:none; cursor:pointer; }
     .conv-period-btn { display:flex; align-items:center; gap:.375rem; padding:.4rem .75rem !important; border:1.5px solid #e2e8f0 !important; border-radius:8px !important; font-size:.8rem !important; }
@@ -326,14 +327,7 @@ import { DashboardApiService, DashboardData } from '../../core/services/dashboar
     .legend-item { display:flex; align-items:center; gap:.375rem; font-size:.75rem; color:#64748b; font-weight:500; }
     .legend-dot { width:8px; height:8px; border-radius:50%; }
 
-    .bar-chart { display:flex; align-items:flex-end; gap:.75rem; height:140px; padding-bottom:1.5rem; position:relative; }
-    .bar-group { display:flex; flex-direction:column; align-items:center; gap:.5rem; flex:1; height:100%; }
-    .bars { display:flex; align-items:flex-end; gap:3px; flex:1; width:100%; }
-    .bar { flex:1; border-radius:5px 5px 0 0; transition:height .8s cubic-bezier(.4,0,.2,1); min-height:4px; cursor:pointer; }
-    .bar:hover { opacity:.8; }
-    .bar.sent { background:linear-gradient(180deg,#3b82f6,rgba(59,130,246,0.4)); }
-    .bar.opened { background:linear-gradient(180deg,#8b5cf6,rgba(139,92,246,0.4)); }
-    .bar-label { font-size:.7rem; color:#64748b; font-weight:500; }
+    .chart-container { width:100%; }
 
     .line-chart-wrap { position:relative; margin-bottom:.75rem; }
     .line-svg { width:100%; height:120px; }
@@ -348,9 +342,9 @@ import { DashboardApiService, DashboardData } from '../../core/services/dashboar
     .growth-current { font-size:1.625rem; font-weight:800; color:#0f172a; letter-spacing:-.03em; }
     .growth-label { font-size:.8rem; color:#64748b; }
     .growth-change { font-size:.75rem; font-weight:700; padding:.2rem .5rem; border-radius:6px; }
-    .growth-change.up { color:#059669; background:rgba(16,185,129,0.1); }
-
-    .bottom-row { display:grid; grid-template-columns:1.4fr 1fr; gap:1.5rem; }
+    .funnel-card { padding:1.5rem; margin-bottom:1.5rem; }
+    .camp-name { font-weight:600; color:#0f172a; }
+    .revenue { color:#059669; font-weight:700; }
     .activity-card { padding:1.5rem; }
     .quick-card { padding:1.5rem; }
     .card-header-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.25rem; }
@@ -398,7 +392,6 @@ import { DashboardApiService, DashboardData } from '../../core/services/dashboar
       .conv-date-range { display:none; }
       .attr-grid { grid-template-columns:repeat(2,1fr); }
       .bar-chart { height:100px; }
-      .perf-summary,.chart-card,.activity-card,.quick-card { padding:1rem; }
     }
   `]
 })
@@ -407,28 +400,46 @@ export class DashboardComponent implements OnInit {
   welcomeName = 'there';
   periodStart = '';
   periodEnd = '';
+  periodDays = 30;
+  conversionMetric = 'opened_email';
+  conversionMetrics: { key: string; label: string; value: string; change: number; description: string }[] = [];
   subscriberGrowthPct = 0;
+
+  get activeConversion() {
+    return this.conversionMetrics.find(m => m.key === this.conversionMetric) ?? this.conversionMetrics[0];
+  }
 
   stats: { label: string; value: string; growth: number; icon: string; color: string; tooltip: string }[] = [];
   performance = { totalRevenue: 0, totalRevenueChange: 0, attributedRevenue: 0, attributedRevenueChange: 0, periodLabel: '' };
   campaignData: { label: string; sent: number; opened: number }[] = [];
+  campaignLabels: string[] = [];
+  campaignSeries: ChartSeries[] = [];
   growthData: { label: string; count: number }[] = [];
+  growthLabels: string[] = [];
+  growthSeries: ChartSeries[] = [];
+  campaignFunnel: { name: string; sent: number; delivered: number; opens: number; clicks: number; purchases: number; revenue: string }[] = [];
   activity: { id: string; type: string; message: string; time: string; icon: string }[] = [];
-  maxSent = 1;
-  growthLinePoints = '';
-  growthAreaPoints = '';
-  growthDots: { x: number; y: number }[] = [];
-  yAxisLabels: string[] = [];
-  gridLines: number[] = [];
-  svgW = 400;
-  svgH = 160;
 
   attributionData: { label: string; value: string; pct: string; icon: string }[] = [];
 
   constructor(private dashboardApi: DashboardApiService) {}
 
   ngOnInit() {
-    this.dashboardApi.getDashboard().subscribe({
+    this.loadDashboard();
+  }
+
+  onPeriodChange(ev: Event) {
+    this.periodDays = Number((ev.target as HTMLSelectElement).value);
+    this.loadDashboard();
+  }
+
+  onConversionChange(ev: Event) {
+    this.conversionMetric = (ev.target as HTMLSelectElement).value;
+  }
+
+  private loadDashboard() {
+    this.loading.set(true);
+    this.dashboardApi.getDashboard(this.periodDays).subscribe({
       next: (data) => this.applyDashboard(data),
       error: () => this.loading.set(false)
     });
@@ -439,6 +450,7 @@ export class DashboardComponent implements OnInit {
     this.welcomeName = data.welcomeName;
     this.periodStart = data.periodStart;
     this.periodEnd = data.periodEnd;
+    this.conversionMetrics = data.conversionMetrics ?? [];
     this.subscriberGrowthPct = s.subscriberGrowth;
     this.performance = data.performance;
 
@@ -451,57 +463,20 @@ export class DashboardComponent implements OnInit {
 
     this.attributionData = data.attribution;
     this.campaignData = data.campaignChart;
-    this.maxSent = Math.max(...this.campaignData.map(d => Math.max(d.sent, d.opened)), 1);
+    this.campaignLabels = data.campaignChart.map(d => d.label);
+    this.campaignSeries = [
+      { name: 'Sent', color: '#60a5fa', values: data.campaignChart.map(d => d.sent) },
+      { name: 'Opened', color: '#a78bfa', values: data.campaignChart.map(d => d.opened) },
+    ];
     this.growthData = data.growthChart;
+    this.growthLabels = data.growthChart.map(d => d.label);
+    this.growthSeries = [{ name: 'Subscribers', color: '#1e3a5f', values: data.growthChart.map(d => d.count) }];
+    this.campaignFunnel = data.campaignFunnel ?? [];
     this.activity = data.recentActivity;
-    this.buildGrowthChart();
     this.loading.set(false);
   }
 
   formatCurrency(value: number): string {
     return '$' + value.toLocaleString(undefined, { maximumFractionDigits: 0 });
-  }
-
-  buildGrowthChart() {
-    const data = this.growthData;
-    if (!data.length) return;
-    const max = Math.max(...data.map(d => d.count));
-    const min = Math.min(...data.map(d => d.count));
-    let paddedMin: number;
-    let paddedMax: number;
-    if (max === min) {
-      paddedMin = Math.max(0, min - 1);
-      paddedMax = max + 1;
-    } else if (max > 1000) {
-      paddedMin = Math.floor(min / 1000) * 1000;
-      paddedMax = Math.ceil(max / 1000) * 1000;
-    } else {
-      paddedMin = Math.max(0, min - 1);
-      paddedMax = max + 1;
-    }
-    const range = paddedMax - paddedMin || 1;
-    const W = this.svgW, H = this.svgH;
-    const PAD_T = 12, PAD_B = 8, PAD_L = 4, PAD_R = 4;
-    const chartH = H - PAD_T - PAD_B;
-    const chartW = W - PAD_L - PAD_R;
-
-    // Y-axis labels (5 steps)
-    const steps = 4;
-    this.yAxisLabels = [];
-    this.gridLines = [];
-    for (let i = steps; i >= 0; i--) {
-      const val = paddedMin + (i / steps) * range;
-      this.yAxisLabels.push(val >= 1000 ? (val / 1000).toFixed(0) + 'k' : val.toFixed(0));
-      const y = PAD_T + ((steps - i) / steps) * chartH;
-      this.gridLines.push(y);
-    }
-
-    const pts = data.map((d, i) => ({
-      x: PAD_L + (data.length === 1 ? chartW / 2 : (i / (data.length - 1)) * chartW),
-      y: PAD_T + (1 - (d.count - paddedMin) / range) * chartH
-    }));
-    this.growthDots = pts;
-    this.growthLinePoints = pts.map(p => `${p.x},${p.y}`).join(' ');
-    this.growthAreaPoints = `${pts[0].x},${H - PAD_B} ${pts.map(p => `${p.x},${p.y}`).join(' ')} ${pts[pts.length - 1].x},${H - PAD_B}`;
   }
 }

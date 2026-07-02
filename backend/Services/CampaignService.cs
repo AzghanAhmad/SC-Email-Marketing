@@ -29,12 +29,14 @@ public class CampaignService(AppDbContext db, AudienceService audience, MailboxS
         var newsletter = await db.NewsletterSchedules.FirstOrDefaultAsync(n => n.UserId == userId);
         var abTests = await db.AbTests.Where(t => t.UserId == userId)
             .OrderByDescending(t => t.CreatedAt).ToListAsync();
+        var releasePlan = await db.ReleasePlans.FirstOrDefaultAsync(r => r.UserId == userId);
 
         return new CampaignsBundleDto(
             campaigns.Select(MapCampaign).ToList(),
             events.Select(MapCalendarEvent).ToList(),
             MapNewsletter(newsletter ?? new NewsletterSchedule { UserId = userId }),
-            abTests.Select(MapAbTest).ToList()
+            abTests.Select(MapAbTest).ToList(),
+            releasePlan is null ? null : MapReleasePlan(releasePlan)
         );
     }
 
@@ -554,8 +556,255 @@ public class CampaignService(AppDbContext db, AudienceService audience, MailboxS
         existing.Status = dto.Status;
         existing.UpdatedAt = DateTime.UtcNow;
 
+        if (string.Equals(dto.Status, "active", StringComparison.OrdinalIgnoreCase))
+            existing.NextSendAt ??= ComputeNextNewsletterSendAt(existing);
+        else if (string.Equals(dto.Status, "paused", StringComparison.OrdinalIgnoreCase))
+            existing.NextSendAt = null;
+
         await db.SaveChangesAsync();
         return MapNewsletter(existing);
+    }
+
+    public async Task<ReleasePlanDto> SaveReleasePlanAsync(Guid userId, SaveReleasePlanRequest request)
+    {
+        var plan = await db.ReleasePlans.FirstOrDefaultAsync(r => r.UserId == userId);
+        if (plan is null)
+        {
+            plan = new ReleasePlan { Id = Guid.NewGuid(), UserId = userId };
+            db.ReleasePlans.Add(plan);
+        }
+
+        plan.BookTitle = request.BookTitle?.Trim() ?? "";
+        plan.ReleaseDate = ParseDate(request.ReleaseDate);
+        plan.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        return MapReleasePlan(plan);
+    }
+
+    public async Task<AbTestDto?> LaunchAbTestAsync(Guid userId, Guid id)
+    {
+        var test = await db.AbTests.FirstOrDefaultAsync(t => t.Id == id && t.UserId == userId);
+        if (test is null) return null;
+
+        if (test.Status is "running" or "complete")
+            throw new InvalidOperationException("This A/B test has already been launched.");
+
+        if (string.IsNullOrWhiteSpace(test.SubjectA) || string.IsNullOrWhiteSpace(test.SubjectB))
+            throw new InvalidOperationException("Both subject lines are required before launching.");
+
+        test.Status = "running";
+        test.StartedAt = DateTime.UtcNow;
+        test.CompletedAt = null;
+        test.Winner = null;
+        test.VotesA = 0;
+        test.VotesB = 0;
+        test.OpenRateA = null;
+        test.OpenRateB = null;
+
+        var existingVotes = await db.AbTestVotes.Where(v => v.AbTestId == test.Id).ToListAsync();
+        if (existingVotes.Count > 0)
+            db.AbTestVotes.RemoveRange(existingVotes);
+
+        await db.SaveChangesAsync();
+        return MapAbTest(test);
+    }
+
+    public async Task<PublicAbTestDto?> GetPublicAbTestAsync(Guid id)
+    {
+        var test = await db.AbTests.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id);
+        if (test is null) return null;
+
+        return new PublicAbTestDto(
+            test.Id.ToString(),
+            test.Name,
+            test.SubjectA,
+            test.SubjectB,
+            test.Status,
+            test.VotesA,
+            test.VotesB,
+            test.Winner,
+            test.Status == "running");
+    }
+
+    public async Task<VoteAbTestResponse?> VoteOnAbTestAsync(Guid id, VoteAbTestRequest request, string voterKey)
+    {
+        var test = await db.AbTests.FirstOrDefaultAsync(t => t.Id == id);
+        if (test is null) return null;
+
+        if (test.Status != "running")
+            throw new InvalidOperationException("This A/B test is not accepting votes.");
+
+        var variant = request.Variant?.Trim().ToUpperInvariant();
+        if (variant is not ("A" or "B"))
+            throw new InvalidOperationException("Vote must be for variant A or B.");
+
+        var key = string.IsNullOrWhiteSpace(request.VoterToken) ? voterKey : request.VoterToken.Trim();
+        if (string.IsNullOrWhiteSpace(key))
+            throw new InvalidOperationException("Could not identify voter.");
+
+        var existing = await db.AbTestVotes.FirstOrDefaultAsync(v => v.AbTestId == id && v.VoterKey == key);
+        if (existing is not null)
+            throw new InvalidOperationException("You have already voted on this test.");
+
+        db.AbTestVotes.Add(new AbTestVote
+        {
+            Id = Guid.NewGuid(),
+            AbTestId = id,
+            Variant = variant,
+            VoterKey = key,
+        });
+
+        if (variant == "A") test.VotesA++;
+        else test.VotesB++;
+
+        await db.SaveChangesAsync();
+
+        return new VoteAbTestResponse(
+            "Thanks — your vote was recorded.",
+            test.VotesA,
+            test.VotesB,
+            test.Winner,
+            test.Status);
+    }
+
+    public async Task ProcessDueAbTestsAsync(CancellationToken cancellationToken = default)
+    {
+        var now = DateTime.UtcNow;
+        var due = await db.AbTests
+            .Where(t => t.Status == "running"
+                && t.StartedAt != null
+                && t.StartedAt.Value.AddHours(t.WaitHours) <= now)
+            .ToListAsync(cancellationToken);
+
+        foreach (var test in due)
+        {
+            CompleteAbTest(test);
+            await db.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    public async Task ProcessDueNewslettersAsync(CancellationToken cancellationToken = default)
+    {
+        var now = DateTime.UtcNow;
+        var due = await db.NewsletterSchedules
+            .Where(n => n.Status == "active"
+                && n.NextSendAt != null
+                && n.NextSendAt <= now)
+            .ToListAsync(cancellationToken);
+
+        foreach (var schedule in due)
+        {
+            try
+            {
+                await SendNewsletterIssueAsync(schedule, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to send newsletter issue for user {UserId}", schedule.UserId);
+            }
+        }
+    }
+
+    private async Task SendNewsletterIssueAsync(NewsletterSchedule schedule, CancellationToken cancellationToken)
+    {
+        var body = schedule.Content;
+        if (!string.IsNullOrWhiteSpace(schedule.ReplyQuestion))
+            body += $"\n\n<p><strong>Reply to this email:</strong> {System.Net.WebUtility.HtmlEncode(schedule.ReplyQuestion)}</p>";
+
+        var campaign = new Campaign
+        {
+            Id = Guid.NewGuid(),
+            UserId = schedule.UserId,
+            Name = $"{schedule.Name} — {DateTime.UtcNow:MMM d, yyyy}",
+            Subject = string.IsNullOrWhiteSpace(schedule.Subject) ? schedule.Name : schedule.Subject,
+            PreviewText = schedule.PreviewText,
+            Content = body,
+            CampaignType = "newsletter",
+            Status = "draft",
+            FromName = "Newsletter",
+            SendToSegment = "newsletter",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+        };
+        db.Campaigns.Add(campaign);
+        await db.SaveChangesAsync(cancellationToken);
+
+        await SendCampaignAsync(schedule.UserId, campaign.Id, scheduleOnly: false);
+
+        schedule.LastSentAt = DateTime.UtcNow;
+        schedule.NextSendAt = ComputeNextNewsletterSendAt(schedule, schedule.LastSentAt.Value);
+        schedule.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private static void CompleteAbTest(AbTest test)
+    {
+        test.Status = "complete";
+        test.CompletedAt = DateTime.UtcNow;
+
+        if (test.VotesA > test.VotesB)
+        {
+            test.Winner = "A";
+            test.OpenRateA = 100;
+            test.OpenRateB = 0;
+        }
+        else if (test.VotesB > test.VotesA)
+        {
+            test.Winner = "B";
+            test.OpenRateA = 0;
+            test.OpenRateB = 100;
+        }
+        else
+        {
+            test.Winner = test.VotesA == 0 ? null : "tie";
+            test.OpenRateA = 50;
+            test.OpenRateB = 50;
+        }
+    }
+
+    private static DateTime ComputeNextNewsletterSendAt(NewsletterSchedule schedule, DateTime? after = null)
+    {
+        var baseTime = after ?? DateTime.UtcNow;
+        if (!TimeSpan.TryParse(schedule.SendTime, out var sendTime))
+            sendTime = new TimeSpan(9, 0, 0);
+
+        var candidate = baseTime.Date.Add(sendTime);
+        if (candidate <= baseTime)
+            candidate = candidate.AddDays(1);
+
+        if (string.Equals(schedule.Frequency, "weekly", StringComparison.OrdinalIgnoreCase))
+        {
+            while (candidate.DayOfWeek.ToString() != schedule.DayOfWeek || candidate <= baseTime)
+                candidate = candidate.AddDays(1);
+        }
+        else if (string.Equals(schedule.Frequency, "biweekly", StringComparison.OrdinalIgnoreCase))
+        {
+            while (candidate.DayOfWeek.ToString() != schedule.DayOfWeek || candidate <= baseTime)
+                candidate = candidate.AddDays(1);
+            if (schedule.LastSentAt.HasValue && (candidate - schedule.LastSentAt.Value).TotalDays < 13)
+                candidate = candidate.AddDays(14);
+        }
+        else
+        {
+            var day = schedule.DayOfMonth switch
+            {
+                "2nd" => 2,
+                "3rd" => 3,
+                "last" => DateTime.DaysInMonth(candidate.Year, candidate.Month),
+                _ => 1,
+            };
+            candidate = new DateTime(candidate.Year, candidate.Month, Math.Min(day, DateTime.DaysInMonth(candidate.Year, candidate.Month)), sendTime.Hours, sendTime.Minutes, 0, DateTimeKind.Utc);
+            if (candidate <= baseTime)
+            {
+                var nextMonth = candidate.AddMonths(1);
+                var nextDay = schedule.DayOfMonth == "last"
+                    ? DateTime.DaysInMonth(nextMonth.Year, nextMonth.Month)
+                    : Math.Min(day, DateTime.DaysInMonth(nextMonth.Year, nextMonth.Month));
+                candidate = new DateTime(nextMonth.Year, nextMonth.Month, nextDay, sendTime.Hours, sendTime.Minutes, 0, DateTimeKind.Utc);
+            }
+        }
+
+        return candidate;
     }
 
     public async Task<AbTestDto> CreateAbTestAsync(Guid userId, CreateAbTestRequest request)
@@ -669,6 +918,10 @@ public class CampaignService(AppDbContext db, AudienceService audience, MailboxS
         e.DaysFromRelease
     );
 
+    private static ReleasePlanDto MapReleasePlan(ReleasePlan plan) => new(
+        plan.BookTitle,
+        plan.ReleaseDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+
     private static NewsletterScheduleDto MapNewsletter(NewsletterSchedule n) => new(
         n.Name,
         n.Frequency,
@@ -680,7 +933,9 @@ public class CampaignService(AppDbContext db, AudienceService audience, MailboxS
         n.PreviewText,
         n.ReplyQuestion,
         n.Content,
-        n.Status
+        n.Status,
+        n.NextSendAt,
+        n.LastSentAt
     );
 
     private static AbTestDto MapAbTest(AbTest t) => new(
@@ -694,7 +949,12 @@ public class CampaignService(AppDbContext db, AudienceService audience, MailboxS
         t.Status,
         t.OpenRateA,
         t.OpenRateB,
-        t.Winner
+        t.Winner,
+        t.VotesA,
+        t.VotesB,
+        t.StartedAt,
+        t.CompletedAt,
+        $"/ab-test/{t.Id}"
     );
 
     private static string FormatDate(DateTime date) =>

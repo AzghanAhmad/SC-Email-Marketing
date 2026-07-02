@@ -14,7 +14,13 @@ public class AbTest
     public decimal? OpenRateA { get; set; }
     public decimal? OpenRateB { get; set; }
     public string? Winner { get; set; }
+    public int VotesA { get; set; }
+    public int VotesB { get; set; }
+    public DateTime? StartedAt { get; set; }
+    public DateTime? CompletedAt { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    public ICollection<AbTestVote> Votes { get; set; } = [];
 
     public User User { get; set; } = null!;
 }

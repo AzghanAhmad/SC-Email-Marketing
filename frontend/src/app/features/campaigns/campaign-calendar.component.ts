@@ -1,7 +1,7 @@
-import { Component, Input, Output, EventEmitter } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { CalendarEvent } from '../../core/models/campaign.models';
+import { CalendarEvent, Campaign, ReleasePlan } from '../../core/models/campaign.models';
 
 export interface CampaignTypeOption {
   id: string; label: string; purpose: string; audience: string; icon: string; color: string;
@@ -59,11 +59,11 @@ export interface CampaignTypeOption {
         <div class="form-row-2" style="margin-bottom:1.25rem">
           <div class="form-group">
             <label class="form-label">Book Title</label>
-            <input type="text" class="form-input" [(ngModel)]="calRelease.title" placeholder="e.g. The Ember Crown" />
+            <input type="text" class="form-input" [(ngModel)]="calRelease.title" placeholder="e.g. The Ember Crown" (blur)="saveReleasePlan()" />
           </div>
           <div class="form-group">
             <label class="form-label">Release Date</label>
-            <input type="date" class="form-input" [(ngModel)]="calRelease.date" />
+            <input type="date" class="form-input" [(ngModel)]="calRelease.date" (change)="saveReleasePlan()" />
           </div>
         </div>
         <div class="baseline-campaigns" *ngIf="calRelease.date">
@@ -126,21 +126,31 @@ export interface CampaignTypeOption {
     </div>
 
     <!-- Planned Campaigns -->
-    <div class="glass-card step-card" *ngIf="calendarEvents.length > 0">
-      <h3 class="step-title" style="font-size:1rem;margin-bottom:1.25rem">Planned Campaigns</h3>
-      <div class="cal-events-list">
-        <div class="cal-event" *ngFor="let ev of calendarEvents">
+    <div class="glass-card step-card">
+      <div class="planned-header">
+        <h3 class="step-title" style="font-size:1rem;margin:0">Planned Campaigns</h3>
+        <span class="planned-count">{{ allPlannedItems.length }} item(s)</span>
+      </div>
+
+      <div class="cal-events-list" *ngIf="allPlannedItems.length > 0">
+        <div class="cal-event" *ngFor="let ev of allPlannedItems">
           <div class="ce-date">{{ ev.date }}</div>
           <div class="ce-info">
             <span class="ce-name">{{ ev.name }}</span>
             <span class="ce-type-badge">{{ ev.type }}</span>
+            <span class="ce-source" *ngIf="ev.source">{{ ev.source }}</span>
           </div>
           <span class="badge" [ngClass]="'badge-' + ev.status">{{ ev.status }}</span>
           <div class="ce-actions">
-            <button class="row-btn edit-btn btn-sm" (click)="onEditEvent.emit(ev)">Create</button>
-            <button class="row-btn delete-btn btn-sm" (click)="onDeleteEvent.emit(ev.id)">Delete</button>
+            <button class="row-btn edit-btn btn-sm" (click)="onEditEvent.emit(ev.raw)">Create</button>
+            <button class="row-btn delete-btn btn-sm" *ngIf="ev.canDelete" (click)="onDeleteEvent.emit(ev.id)">Delete</button>
           </div>
         </div>
+      </div>
+
+      <div class="baseline-empty" *ngIf="allPlannedItems.length === 0">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" stroke-width="1.5" width="32" height="32"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <p>No planned campaigns yet. Add one above or create from the release planner.</p>
       </div>
     </div>
 
@@ -232,7 +242,10 @@ export interface CampaignTypeOption {
     .lt-type-name { font-size:.875rem; font-weight:600; color:#0f172a; }
     .lt-purpose { font-size:.8125rem; color:#64748b; }
     .lt-audience { font-size:.75rem; color:#94a3b8; }
+    .planned-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.25rem; }
+    .planned-count { font-size:.75rem; font-weight:600; color:#64748b; background:#f1f5f9; padding:.25rem .625rem; border-radius:100px; }
     .cal-events-list { display:flex; flex-direction:column; gap:.625rem; }
+    .ce-source { font-size:.7rem; color:#94a3b8; }
     .cal-event { display:flex; align-items:center; gap:1rem; padding:.75rem 1rem; border:1.5px solid #e2e8f0; border-radius:10px; flex-wrap:wrap; }
     .ce-date { font-size:.8125rem; font-weight:600; color:#64748b; min-width:90px; }
     .ce-info { flex:1; display:flex; align-items:center; gap:.625rem; flex-wrap:wrap; }
@@ -252,9 +265,11 @@ export interface CampaignTypeOption {
     @media(max-width:700px) { .cvf-callout { grid-template-columns:1fr; } .cvf-vs { display:none; } .lt-phase { grid-template-columns:1fr; } .lt-row { grid-template-columns:1fr 1fr; } .form-row-2 { grid-template-columns:1fr; } }
   `]
 })
-export class CampaignCalendarComponent {
+export class CampaignCalendarComponent implements OnChanges {
   @Input() campaignTypes: CampaignTypeOption[] = [];
   @Input() calendarEvents: CalendarEvent[] = [];
+  @Input() scheduledCampaigns: Campaign[] = [];
+  @Input() releasePlan: ReleasePlan | null = null;
   @Input() launchSequence: any[] = [];
   @Input() baselineCampaigns: any[] = [];
   @Output() onCreateFromBaseline = new EventEmitter<any>();
@@ -262,11 +277,71 @@ export class CampaignCalendarComponent {
   @Output() onAddEvent = new EventEmitter<{ name: string; type: string; date: string; status: string }>();
   @Output() onDeleteEvent = new EventEmitter<string>();
   @Output() onEditEvent = new EventEmitter<CalendarEvent>();
-  @Output() onGoToCreate = new EventEmitter<void>();
+  @Output() onSaveReleasePlan = new EventEmitter<{ bookTitle: string; releaseDate: string | null }>();
 
   calRelease = { title: '', date: '' };
   showAddModal = false;
   newEvent = { name: '', type: 'Book Launch', date: '', status: 'planned' };
+  allPlannedItems: {
+    id: string;
+    name: string;
+    type: string;
+    date: string;
+    status: string;
+    source?: string;
+    canDelete: boolean;
+    raw: CalendarEvent;
+  }[] = [];
+
+  ngOnChanges(changes: SimpleChanges) {
+    if (changes['releasePlan']?.currentValue) {
+      this.calRelease.title = changes['releasePlan'].currentValue.bookTitle || '';
+      this.calRelease.date = changes['releasePlan'].currentValue.releaseDate || '';
+    }
+    if (changes['calendarEvents'] || changes['scheduledCampaigns'] || changes['releasePlan']) {
+      this.rebuildPlannedItems();
+    }
+  }
+
+  private rebuildPlannedItems() {
+    const calendarItems = this.calendarEvents.map(ev => ({
+      id: ev.id,
+      name: ev.name,
+      type: ev.type,
+      date: ev.date,
+      status: ev.status,
+      source: 'Calendar',
+      canDelete: true,
+      raw: ev,
+    }));
+
+    const campaignItems = this.scheduledCampaigns.map(c => ({
+      id: c.id,
+      name: c.name,
+      type: c.campaignType || 'Campaign',
+      date: c.scheduledAt ? new Date(c.scheduledAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : c.date,
+      status: c.status,
+      source: 'Campaign',
+      canDelete: false,
+      raw: {
+        id: c.id,
+        name: c.name,
+        type: c.campaignType || '',
+        date: c.scheduledAt || c.date,
+        status: c.status,
+      } as CalendarEvent,
+    }));
+
+    this.allPlannedItems = [...calendarItems, ...campaignItems]
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }
+
+  saveReleasePlan() {
+    this.onSaveReleasePlan.emit({
+      bookTitle: this.calRelease.title.trim(),
+      releaseDate: this.calRelease.date || null,
+    });
+  }
 
   openAddModal() {
     this.newEvent = { name: '', type: this.campaignTypes[0]?.label || 'Book Launch', date: '', status: 'planned' };

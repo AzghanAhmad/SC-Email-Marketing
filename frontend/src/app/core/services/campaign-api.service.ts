@@ -10,6 +10,7 @@ import {
   CreateCampaignPayload,
   NewsletterSchedule,
   ReachEstimate,
+  ReleasePlan,
   TestSendResponse,
 } from '../models/campaign.models';
 
@@ -22,6 +23,7 @@ export type {
   CreateCampaignPayload,
   NewsletterSchedule,
   ReachEstimate,
+  ReleasePlan,
   TestSendResponse,
 };
 
@@ -120,5 +122,13 @@ export class CampaignApiService {
 
   deleteCalendarEvent(id: string): Observable<void> {
     return this.api.delete<void>(`/campaigns/calendar-events/${id}`);
+  }
+
+  saveReleasePlan(payload: { bookTitle?: string; releaseDate?: string | null }): Observable<ReleasePlan> {
+    return this.api.put<ReleasePlan>('/campaigns/release-plan', payload);
+  }
+
+  launchAbTest(id: string): Observable<AbTest> {
+    return this.api.post<AbTest>(`/campaigns/ab-tests/${id}/launch`, {});
   }
 }

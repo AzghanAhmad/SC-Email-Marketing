@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Campaign, CampaignApiService, AbTest, NewsletterSchedule, CalendarEvent, AudienceSegment, ReachEstimate } from '../../core/services/campaign-api.service';
+import { Campaign, CampaignApiService, AbTest, NewsletterSchedule, CalendarEvent, AudienceSegment, ReachEstimate, ReleasePlan } from '../../core/services/campaign-api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { CampaignListComponent } from './campaign-list.component';
 import { CampaignCalendarComponent } from './campaign-calendar.component';
@@ -22,6 +22,7 @@ import { CampaignSenderModalComponent } from './campaign-sender-modal.component'
 import { CampaignDesignModalComponent, AppliedTemplate } from './campaign-design-modal.component';
 import { CampaignRecipientsPanelComponent, CampaignRecipients } from './campaign-recipients-panel.component';
 import { applyPreviewMergeTags } from './campaign-preview.utils';
+import { userCollectibleMergeTags, mergeTagLabel } from './merge-tag.utils';
 
 type CampaignTab = 'list' | 'create' | 'newsletter' | 'ab-test' | 'calendar';
 
@@ -95,6 +96,8 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
         <app-campaign-calendar
           [campaignTypes]="campaignTypes"
           [calendarEvents]="calendarEvents"
+          [scheduledCampaigns]="scheduledCampaigns"
+          [releasePlan]="releasePlan"
           [launchSequence]="launchSequence"
           [baselineCampaigns]="baselineCampaigns"
           (onCreateFromBaseline)="createFromBaseline($event)"
@@ -102,7 +105,7 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
           (onAddEvent)="openAddCalendarEvent($event)"
           (onDeleteEvent)="deleteCalendarEvent($event)"
           (onEditEvent)="editCalendarEvent($event)"
-          (onGoToCreate)="activeTab.set('create')">
+          (onSaveReleasePlan)="saveReleasePlan($event)">
         </app-campaign-calendar>
       </div>
 
@@ -446,6 +449,7 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
           [abTests]="abTests"
           (onToast)="showToast($event.message, $event.type)"
           (onCreateAbTest)="createAbTest($event)"
+          (onLaunchAbTest)="launchAbTest($event)"
           (onDeleteAbTest)="deleteAbTest($event)">
         </app-campaign-ab-test>
       </div>
@@ -1435,10 +1439,10 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
                 <label class="form-label">Campaign Name <span class="required">*</span></label>
                 <input type="text" class="form-input" [(ngModel)]="draft.name" name="name" placeholder="e.g. April Newsletter" />
               </div>
-              <div class="form-group" *ngIf="draftUsesBookTitle">
-                <label class="form-label">Book Title</label>
-                <input type="text" class="form-input" [(ngModel)]="draft.bookTitle" name="bookTitle" placeholder="e.g. The Midnight Harbor" />
-                <p class="char-tip ok" style="margin-top:.35rem" ngNonBindable>Used for {{book_title}} in your email template.</p>
+              <div class="form-group" *ngFor="let tag of collectibleMergeTags">
+                <label class="form-label">{{ mergeTagLabel(tag) }} <span class="required">*</span></label>
+                <input type="text" class="form-input" [(ngModel)]="draft.mergeFields[tag]" [name]="'merge_' + tag" [placeholder]="'Enter ' + mergeTagLabel(tag).toLowerCase()" />
+                <p class="char-tip ok" style="margin-top:.35rem">Fill in the value for this merge field in your email content.</p>
               </div>
               <div class="form-group">
                 <label class="form-label">Subject Line <span class="required">*</span></label>
@@ -2490,6 +2494,7 @@ export class CampaignsComponent implements OnInit {
   draft = {
     name: '', fromName: 'Author', fromEmail: '', subject: '', previewText: '', sendTo: 'all', content: '',
     bookTitle: '',
+    mergeFields: {} as Record<string, string>,
     templateName: '', templateId: '',
     scheduledAt: '', timezoneOptimized: true, campaignType: '',
     directStoreLink: '', amazonLink: '', arcTag: '', amazonReviewLink: '',
@@ -2529,6 +2534,11 @@ export class CampaignsComponent implements OnInit {
   // Campaign calendar
   calRelease = { title: '', date: '' };
   calendarEvents: CalendarEvent[] = [];
+  releasePlan: ReleasePlan | null = null;
+
+  get scheduledCampaigns(): Campaign[] {
+    return this.campaigns.filter(c => c.status === 'scheduled' || c.status === 'draft');
+  }
 
   readonly baselineCampaigns = [
     { timing: '4–6 weeks before', type: 'ARC Invitation', description: 'Recruit advance readers for review copies', offset: -35 },
@@ -2672,6 +2682,7 @@ export class CampaignsComponent implements OnInit {
     return {
       name: '', fromName, fromEmail, subject: '', previewText: '', sendTo: 'all', content: '',
       bookTitle: '',
+      mergeFields: {} as Record<string, string>,
       templateName: '', templateId: '',
       scheduledAt: '', timezoneOptimized: true, campaignType: '',
       directStoreLink: '', amazonLink: '', arcTag: '', amazonReviewLink: '',
@@ -2768,6 +2779,11 @@ export class CampaignsComponent implements OnInit {
         this.calendarEvents = bundle.calendarEvents;
         this.newsletter = bundle.newsletter;
         this.abTests = bundle.abTests;
+        this.releasePlan = bundle.releasePlan ?? null;
+        if (this.releasePlan) {
+          this.calRelease.title = this.releasePlan.bookTitle || '';
+          this.calRelease.date = this.releasePlan.releaseDate || '';
+        }
         this.loading = false;
         this.cdr.detectChanges();
       },
@@ -2784,11 +2800,24 @@ export class CampaignsComponent implements OnInit {
   }
 
   get safeDraftContent(): SafeHtml {
-    return this.sanitizer.bypassSecurityTrustHtml(applyPreviewMergeTags(this.draft.content || '', {
-      book_title: this.draft.bookTitle || undefined,
-      author_name: this.draft.fromName || undefined,
-    } as Record<string, string>));
+    const overrides: Record<string, string> = {
+      ...this.draft.mergeFields,
+      book_title: this.draft.mergeFields['book_title'] || this.draft.bookTitle || '',
+      author_name: this.draft.fromName || '',
+      store_link: this.draft.mergeFields['store_link'] || this.draft.directStoreLink || this.draft.amazonLink || '',
+    };
+    return this.sanitizer.bypassSecurityTrustHtml(applyPreviewMergeTags(this.draft.content || '', overrides));
   }
+
+  get collectibleMergeTags(): string[] {
+    const tags = userCollectibleMergeTags(this.draft.subject, this.draft.previewText, this.draft.content);
+    for (const tag of tags) {
+      if (this.draft.mergeFields[tag] === undefined) this.draft.mergeFields[tag] = '';
+    }
+    return tags;
+  }
+
+  mergeTagLabel = mergeTagLabel;
 
   get draftUsesBookTitle(): boolean {
     return /\{\{\s*book_title\s*\}\}/i.test(this.draft.content || '')
@@ -2924,7 +2953,11 @@ export class CampaignsComponent implements OnInit {
         recipientContactIds: JSON.stringify(this.recipients.contactIds),
         excludeUnengaged: String(this.recipients.excludeUnengaged),
         ...guidanceExtras,
-        ...(this.draft.bookTitle.trim() ? { book_title: this.draft.bookTitle.trim() } : {}),
+        ...Object.fromEntries(
+          Object.entries(this.draft.mergeFields).filter(([, v]) => v?.trim())
+        ),
+        ...(this.draft.bookTitle.trim() && !this.draft.mergeFields['book_title']?.trim()
+          ? { book_title: this.draft.bookTitle.trim() } : {}),
       },
     };
   }
@@ -2964,6 +2997,10 @@ export class CampaignsComponent implements OnInit {
     this.campaignApi.getCampaign(c.id).subscribe({
       next: full => {
         const extras = full.extras ?? {};
+        const mergeFields: Record<string, string> = {};
+        for (const tag of userCollectibleMergeTags(full.subject, full.previewText, full.content)) {
+          mergeFields[tag] = extras[tag] || (tag === 'book_title' ? (extras['book_title'] || extras['flashSale_title'] || '') : '');
+        }
         const fromName = full.fromName || this.auth.user()?.name?.split(' ')[0] || 'Author';
         this.draft = {
           name: full.name,
@@ -2974,6 +3011,7 @@ export class CampaignsComponent implements OnInit {
           sendTo: full.sendToSegment || 'all',
           content: full.content || '',
           bookTitle: extras['book_title'] || extras['flashSale_title'] || extras['backlist_title'] || '',
+          mergeFields,
           templateName: extras['templateName'] || '',
           templateId: extras['emailTemplateId'] || '',
           scheduledAt: full.scheduledAt ? full.scheduledAt.toString().slice(0, 16) : '',
@@ -3089,10 +3127,26 @@ export class CampaignsComponent implements OnInit {
     this.campaignApi.saveNewsletter(data).subscribe({
       next: saved => {
         this.newsletter = saved;
-        this.showToast('Newsletter schedule saved!', 'success');
+        const msg = saved.status === 'active'
+          ? 'Newsletter activated — issues will send on your schedule.'
+          : saved.status === 'paused'
+            ? 'Newsletter paused.'
+            : 'Newsletter schedule saved!';
+        this.showToast(msg, 'success');
         this.cdr.detectChanges();
       },
       error: err => this.showToast(err.message || 'Could not save newsletter', 'warn'),
+    });
+  }
+
+  saveReleasePlan(payload: { bookTitle: string; releaseDate: string | null }) {
+    this.campaignApi.saveReleasePlan(payload).subscribe({
+      next: saved => {
+        this.releasePlan = saved;
+        this.calRelease.title = saved.bookTitle || '';
+        this.calRelease.date = saved.releaseDate || '';
+      },
+      error: () => {},
     });
   }
 
@@ -3189,12 +3243,29 @@ export class CampaignsComponent implements OnInit {
     });
   }
 
-  createFromBaseline(bc: { type: string; description: string }) {
+  createFromBaseline(bc: { type: string; description: string; offset?: number }) {
     this.draft.campaignType = this.campaignTypes.find(ct => ct.label === bc.type)?.id || '';
     this.draft.name = `${bc.type} — ${this.calRelease.title || 'New Book'}`;
+    const date = this.calRelease.date && bc.offset !== undefined
+      ? this.offsetDate(this.calRelease.date, bc.offset)
+      : '';
+    if (date) {
+      this.openAddCalendarEvent({
+        name: this.draft.name,
+        type: bc.type,
+        date,
+        status: 'planned',
+      });
+    }
     this.currentStep.set(0);
     this.sendSuccess = false;
     this.activeTab.set('create');
+  }
+
+  private offsetDate(releaseDate: string, offsetDays: number): string {
+    const d = new Date(releaseDate);
+    d.setDate(d.getDate() + offsetDays);
+    return d.toISOString().slice(0, 10);
   }
 
   startCreateWithType(typeId: string) {
@@ -3230,10 +3301,21 @@ export class CampaignsComponent implements OnInit {
     this.campaignApi.createAbTest(payload).subscribe({
       next: test => {
         this.abTests = [test, ...this.abTests];
-        this.showToast('A/B test saved!', 'success');
+        this.showToast('A/B test saved! Click Launch to open voting.', 'success');
         this.cdr.detectChanges();
       },
       error: err => this.showToast(err.message || 'Could not save A/B test', 'warn'),
+    });
+  }
+
+  launchAbTest(id: string) {
+    this.campaignApi.launchAbTest(id).subscribe({
+      next: test => {
+        this.abTests = this.abTests.map(t => t.id === id ? test : t);
+        this.showToast('A/B test launched — share the vote link with readers.', 'success');
+        this.cdr.detectChanges();
+      },
+      error: err => this.showToast(err.message || 'Could not launch A/B test', 'warn'),
     });
   }
 

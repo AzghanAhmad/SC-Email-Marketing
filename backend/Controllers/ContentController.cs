@@ -24,6 +24,43 @@ public class ContentController(ContentService content, CampaignService campaigns
         return template is null ? NotFound() : Ok(template);
     }
 
+    [HttpPost("templates")]
+    public async Task<ActionResult<EmailTemplateDto>> CreateCustomTemplate([FromBody] CreateCustomTemplateRequest request)
+    {
+        try
+        {
+            return Ok(await content.CreateCustomTemplateAsync(UserId, request));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpPut("templates/{id:guid}")]
+    public async Task<ActionResult<EmailTemplateDto>> UpdateTemplate(Guid id, [FromBody] UpdateEmailTemplateRequest request)
+    {
+        var template = await content.UpdateTemplateAsync(UserId, id, request);
+        return template is null ? NotFound(new { message = "Custom template not found." }) : Ok(template);
+    }
+
+    [HttpDelete("templates/{id:guid}")]
+    public async Task<IActionResult> DeleteTemplate(Guid id)
+    {
+        var deleted = await content.DeleteTemplateAsync(UserId, id);
+        return deleted ? NoContent() : NotFound(new { message = "Custom template not found." });
+    }
+
+    [HttpPost("templates/{templateId:guid}/blocks/{blockId:guid}")]
+    public async Task<ActionResult<EmailTemplateDto>> AppendBlockToTemplate(
+        Guid templateId, Guid blockId, [FromBody] AppendBlockToTemplateRequest? request = null)
+    {
+        var template = await content.AppendBlockToTemplateAsync(UserId, templateId, blockId, request);
+        return template is null
+            ? NotFound(new { message = "Custom template or block not found." })
+            : Ok(template);
+    }
+
     [HttpGet("website-templates/{id}")]
     public ActionResult<WebsiteTemplateDto> GetWebsiteTemplate(string id)
     {
@@ -52,9 +89,30 @@ public class ContentController(ContentService content, CampaignService campaigns
         return Ok(created);
     }
 
+    [HttpGet("blocks/{id:guid}")]
+    public async Task<ActionResult<ContentBlockDto>> GetBlock(Guid id)
+    {
+        var block = await content.GetBlockAsync(UserId, id);
+        return block is null ? NotFound() : Ok(block);
+    }
+
     [HttpPost("blocks")]
     public async Task<ActionResult<ContentBlockDto>> CreateBlock([FromBody] CreateContentBlockRequest request) =>
         Ok(await content.CreateBlockAsync(UserId, request));
+
+    [HttpPut("blocks/{id:guid}")]
+    public async Task<ActionResult<ContentBlockDto>> UpdateBlock(Guid id, [FromBody] UpdateContentBlockRequest request)
+    {
+        var block = await content.UpdateBlockAsync(UserId, id, request);
+        return block is null ? NotFound() : Ok(block);
+    }
+
+    [HttpDelete("blocks/{id:guid}")]
+    public async Task<IActionResult> DeleteBlock(Guid id)
+    {
+        var deleted = await content.DeleteBlockAsync(UserId, id);
+        return deleted ? NoContent() : NotFound();
+    }
 
     [HttpPost("blocks/{id:guid}/use")]
     public async Task<ActionResult<CampaignDto>> UseBlock(Guid id)
@@ -90,4 +148,28 @@ public class ContentController(ContentService content, CampaignService campaigns
     [HttpPost("brand/assets")]
     public async Task<ActionResult<BrandAssetDto>> CreateAsset([FromBody] CreateBrandAssetRequest request) =>
         Ok(await content.CreateAssetAsync(UserId, request));
+
+    [HttpPost("brand/assets/upload")]
+    [RequestSizeLimit(10 * 1024 * 1024)]
+    public async Task<ActionResult<BrandAssetDto>> UploadAsset(
+        [FromForm] IFormFile file,
+        [FromForm] string name,
+        [FromForm] string assetCategory)
+    {
+        try
+        {
+            return Ok(await content.UploadAssetAsync(UserId, file, name, assetCategory));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpDelete("brand/assets/{id:guid}")]
+    public async Task<IActionResult> DeleteAsset(Guid id)
+    {
+        var deleted = await content.DeleteAssetAsync(UserId, id);
+        return deleted ? NoContent() : NotFound();
+    }
 }

@@ -27,6 +27,10 @@ export class ApiService {
     return this.http.delete<T>(`${environment.apiUrl}${path}`);
   }
 
+  postForm<T>(path: string, formData: FormData): Observable<T> {
+    return this.http.post<T>(`${environment.apiUrl}${path}`, formData);
+  }
+
   static mapError(err: HttpErrorResponse): { message: string } {
     const fallback = err.message || 'Something went wrong.';
     let body: unknown = err.error;
