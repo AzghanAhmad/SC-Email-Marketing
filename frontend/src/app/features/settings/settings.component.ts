@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { AuthService } from '../../core/services/auth.service';
-import { SettingsApiService, UserSettings } from '../../core/services/settings-api.service';
+import { SettingsApiService, UserSettings, NotificationSetting } from '../../core/services/settings-api.service';
 import { NAV_ICONS } from '../../core/constants/nav-icons';
 import { InboxConnectionComponent } from './inbox-connection.component';
 
@@ -409,17 +409,37 @@ type SettingsTab = 'account' | 'domain' | 'inbox' | 'store' | 'notifications' | 
           <div *ngIf="activeTab() === 'notifications'">
             <div class="glass-card settings-card">
               <h2 class="sc-title">Email Notifications</h2>
-              <p class="sc-sub">Choose which notifications you want to receive</p>
-              <div class="notif-list">
-                <div class="notif-item" *ngFor="let n of notifications">
-                  <div class="notif-info">
-                    <span class="notif-title">{{ n.title }}</span>
-                    <span class="notif-desc">{{ n.description }}</span>
-                  </div>
-                  <input type="checkbox" class="toggle" [(ngModel)]="n.enabled" />
-                </div>
+              <p class="sc-sub">Choose which alerts ScribeCount sends to your inbox</p>
+
+              <div class="notif-delivery">
+                <span class="notif-delivery-label">Delivery address</span>
+                <span class="notif-delivery-email">{{ account.email }}</span>
+                <span class="notif-delivery-note">Alerts are sent to your account email. Update it under Account.</span>
               </div>
-              <button class="btn-primary" style="margin-top:1rem" (click)="saveNotifications()" data-tooltip="Save notification preferences">Save Preferences</button>
+
+              <div class="notif-loading" *ngIf="notificationsLoading()">Loading notification preferences…</div>
+
+              <ng-container *ngIf="!notificationsLoading()">
+                <div class="notif-group" *ngFor="let group of notificationGroups">
+                  <h3 class="notif-group-title">{{ group.label }}</h3>
+                  <div class="notif-list">
+                    <div class="notif-item" *ngFor="let n of group.items">
+                      <div class="notif-info">
+                        <span class="notif-title">{{ n.title }}</span>
+                        <span class="notif-desc">{{ n.description }}</span>
+                      </div>
+                      <label class="toggle-wrap" [attr.aria-label]="'Toggle ' + n.title">
+                        <input type="checkbox" [(ngModel)]="n.enabled" />
+                        <span class="toggle-slider"></span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                <p class="notif-empty" *ngIf="notifications.length === 0">No notification options are available right now.</p>
+              </ng-container>
+
+              <button class="btn-primary" style="margin-top:1rem" (click)="saveNotifications()" [disabled]="notificationsLoading() || notifications.length === 0" data-tooltip="Save notification preferences">Save Preferences</button>
             </div>
           </div>
 
@@ -648,10 +668,18 @@ type SettingsTab = 'account' | 'domain' | 'inbox' | 'store' | 'notifications' | 
     }
 
     .notif-list { display:flex; flex-direction:column; gap:.5rem; }
-    .notif-item { display:flex; align-items:center; justify-content:space-between; padding:1rem; background:#f8fafc; border-radius:12px; border:1px solid #f1f5f9; }
-    .notif-info { display:flex; flex-direction:column; gap:.2rem; }
+    .notif-group { margin-bottom:1.25rem; }
+    .notif-group:last-of-type { margin-bottom:0; }
+    .notif-group-title { font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:#94a3b8; margin:0 0 .625rem; }
+    .notif-item { display:flex; align-items:center; justify-content:space-between; gap:1rem; padding:1rem; background:#f8fafc; border-radius:12px; border:1px solid #f1f5f9; }
+    .notif-info { display:flex; flex-direction:column; gap:.2rem; flex:1; min-width:0; }
     .notif-title { font-size:.875rem; font-weight:600; color:#0f172a; }
-    .notif-desc { font-size:.8rem; color:#94a3b8; }
+    .notif-desc { font-size:.8rem; color:#64748b; line-height:1.45; }
+    .notif-delivery { padding:.875rem 1rem; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; margin-bottom:1.25rem; display:flex; flex-direction:column; gap:.2rem; }
+    .notif-delivery-label { font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#94a3b8; }
+    .notif-delivery-email { font-size:.9375rem; font-weight:600; color:#0f172a; }
+    .notif-delivery-note { font-size:.75rem; color:#94a3b8; }
+    .notif-loading, .notif-empty { font-size:.875rem; color:#64748b; padding:.5rem 0; }
 
     .plan-card { background:linear-gradient(135deg,rgb(22,38,62),rgb(30,55,95)); border-color:transparent; }
     .plan-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:1.5rem; }
@@ -777,7 +805,40 @@ export class SettingsComponent implements OnInit {
     { time: 'May 7, 14:11', eventLabel: 'order.completed', type: 'purchase', email: 'ja***@icloud.com', flow: 'Post-Purchase Thank You', status: 'warn' },
   ];
 
-  notifications: { key: string; title: string; description: string; enabled: boolean }[] = [];
+  notifications: NotificationSetting[] = [];
+  notificationsLoading = signal(true);
+
+  private static readonly DEFAULT_NOTIFICATIONS: NotificationSetting[] = [
+    { key: 'campaign_sent', title: 'Campaign sent', description: 'When a campaign finishes sending to your list', enabled: true },
+    { key: 'campaign_scheduled', title: 'Campaign scheduled', description: 'When a campaign is scheduled for a future send time', enabled: true },
+    { key: 'flow_triggered', title: 'Flow triggered', description: 'When an automation flow enrolls subscribers', enabled: false },
+    { key: 'flow_completed', title: 'Flow completed', description: 'When a subscriber completes an automation flow', enabled: false },
+    { key: 'new_subscriber', title: 'New subscriber', description: 'When someone joins your email list', enabled: true },
+    { key: 'unsubscribe_alert', title: 'Unsubscribe alert', description: 'When a reader unsubscribes from your list', enabled: true },
+    { key: 'bounce_alert', title: 'Bounce alert', description: 'When an email hard-bounces and an address is flagged', enabled: true },
+    { key: 'spam_complaint', title: 'Spam complaint', description: 'When a reader marks your email as spam', enabled: true },
+    { key: 'weekly_report', title: 'Weekly performance report', description: 'Summary of opens, clicks, revenue, and list growth each Monday', enabled: true },
+    { key: 'deliverability_alert', title: 'Deliverability warning', description: 'When your deliverability score drops below a healthy threshold', enabled: true },
+    { key: 'product_updates', title: 'Product updates', description: 'News about new ScribeCount Email features and improvements', enabled: true },
+  ];
+
+  private static readonly NOTIFICATION_GROUP_KEYS: { label: string; keys: string[] }[] = [
+    { label: 'Campaigns & automations', keys: ['campaign_sent', 'campaign_scheduled', 'flow_triggered', 'flow_completed'] },
+    { label: 'Audience activity', keys: ['new_subscriber', 'unsubscribe_alert', 'bounce_alert', 'spam_complaint'] },
+    { label: 'Reports & insights', keys: ['weekly_report', 'deliverability_alert'] },
+    { label: 'Account', keys: ['product_updates'] },
+  ];
+
+  get notificationGroups(): { label: string; items: NotificationSetting[] }[] {
+    return SettingsComponent.NOTIFICATION_GROUP_KEYS
+      .map(group => ({
+        label: group.label,
+        items: group.keys
+          .map(key => this.notifications.find(n => n.key === key))
+          .filter((n): n is NotificationSetting => !!n),
+      }))
+      .filter(group => group.items.length > 0);
+  }
 
   prefOptions: { key: string; name: string; description: string; enabled: boolean; subscriberCount: number }[] = [];
 
@@ -802,11 +863,31 @@ export class SettingsComponent implements OnInit {
   }
 
   private loadSettings() {
-    this.settingsApi.getSettings().subscribe(s => this.applySettings(s));
+    this.notificationsLoading.set(true);
+    this.settingsApi.getSettings().subscribe({
+      next: s => {
+        this.applySettings(s);
+        this.notificationsLoading.set(false);
+      },
+      error: () => {
+        this.notifications = this.mergeNotifications([]);
+        this.notificationsLoading.set(false);
+      },
+    });
+  }
+
+  private mergeNotifications(fromApi: NotificationSetting[]): NotificationSetting[] {
+    const saved = new Map(fromApi.map(n => [n.key, n.enabled]));
+    return SettingsComponent.DEFAULT_NOTIFICATIONS.map(def => ({
+      ...def,
+      enabled: saved.has(def.key) ? saved.get(def.key)! : def.enabled,
+      title: fromApi.find(n => n.key === def.key)?.title ?? def.title,
+      description: fromApi.find(n => n.key === def.key)?.description ?? def.description,
+    }));
   }
 
   private applySettings(s: UserSettings) {
-    this.notifications = s.notifications;
+    this.notifications = this.mergeNotifications(s.notifications ?? []);
     this.prefOptions = s.preferenceEmailTypes;
     this.prefFrequencies = s.preferenceFrequencies.map(f => ({
       ...f,

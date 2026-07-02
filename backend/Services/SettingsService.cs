@@ -176,12 +176,17 @@ public class SettingsService(AppDbContext db)
 
     private static List<NotificationSettingDto> DefaultNotifications() =>
     [
-        new("campaign_sent", "Campaign Sent", "Notify me when a campaign is sent successfully", true),
-        new("new_subscriber", "New Subscriber", "Notify me when someone joins my list", false),
-        new("weekly_report", "Weekly Report", "Receive a weekly summary of my email performance", true),
-        new("flow_triggered", "Flow Triggered", "Notify me when an automation flow is triggered", false),
-        new("unsubscribe_alert", "Unsubscribe Alert", "Notify me when someone unsubscribes", true),
-        new("product_updates", "Product Updates", "News about new ScribeCount Email features", true),
+        new("campaign_sent", "Campaign sent", "When a campaign finishes sending to your list", true),
+        new("campaign_scheduled", "Campaign scheduled", "When a campaign is scheduled for a future send time", true),
+        new("flow_triggered", "Flow triggered", "When an automation flow enrolls subscribers", false),
+        new("flow_completed", "Flow completed", "When a subscriber completes an automation flow", false),
+        new("new_subscriber", "New subscriber", "When someone joins your email list", true),
+        new("unsubscribe_alert", "Unsubscribe alert", "When a reader unsubscribes from your list", true),
+        new("bounce_alert", "Bounce alert", "When an email hard-bounces and an address is flagged", true),
+        new("spam_complaint", "Spam complaint", "When a reader marks your email as spam", true),
+        new("weekly_report", "Weekly performance report", "Summary of opens, clicks, revenue, and list growth each Monday", true),
+        new("deliverability_alert", "Deliverability warning", "When your deliverability score drops below a healthy threshold", true),
+        new("product_updates", "Product updates", "News about new ScribeCount Email features and improvements", true),
     ];
 
     private static List<PreferenceEmailTypeDto> DefaultEmailTypes() =>
