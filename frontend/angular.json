@@ -62,7 +62,8 @@
             "development": {
               "optimization": false,
               "extractLicenses": false,
-              "sourceMap": true
+              "sourceMap": true,
+              "outputMode": "static"
             },
             "static": {
               "outputMode": "static",
@@ -91,6 +92,11 @@
         },
         "serve": {
           "builder": "@angular/build:dev-server",
+          "options": {
+            "liveReload": true,
+            "hmr": false,
+            "proxyConfig": "proxy.conf.json"
+          },
           "configurations": {
             "production": {
               "buildTarget": "frontend:build:production"

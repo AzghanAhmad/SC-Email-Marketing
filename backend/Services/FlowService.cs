@@ -6,7 +6,7 @@ using ScribeCount.Email.Api.Entities;
 
 namespace ScribeCount.Email.Api.Services;
 
-public class FlowService(AppDbContext db, MailboxService mailbox, ILogger<FlowService> logger)
+public class FlowService(AppDbContext db, SesEmailService ses, ILogger<FlowService> logger)
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
@@ -279,12 +279,19 @@ public class FlowService(AppDbContext db, MailboxService mailbox, ILogger<FlowSe
             var link = $"{baseUrl.TrimEnd('/')}/flow/respond/{enrollment.Token}";
             var body = $"{bodyTemplate}<p><a href=\"{link}\">Open your flow steps</a></p>";
 
+            if (!string.Equals(subscriber.Status, "active", StringComparison.OrdinalIgnoreCase))
+                continue;
+
             try
             {
-                await mailbox.SendEmailAsync(userId, new SendEmailRequest(
+                await ses.SendAsync(new PlatformSendRequest(
+                    userId,
                     subscriber.Email,
                     subject,
-                    body));
+                    body,
+                    "flow",
+                    subscriber.Id,
+                    FlowId: flow.Id));
             }
             catch (Exception ex)
             {

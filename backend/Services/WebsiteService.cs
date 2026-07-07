@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
@@ -8,8 +9,18 @@ using ScribeCount.Email.Api.Entities;
 
 namespace ScribeCount.Email.Api.Services;
 
-public class WebsiteService(AppDbContext db)
+public class WebsiteService(
+    AppDbContext db,
+    IConfiguration configuration,
+    SesEmailService ses,
+    ILogger<WebsiteService> logger)
 {
+    private string PublicBaseUrl =>
+        (configuration["App:PublicBaseUrl"] ?? "http://localhost:4200").TrimEnd('/');
+
+    private string LandingPageUrl(string slug) => $"{PublicBaseUrl}/p/{slug}";
+
+    private string SignUpFormUrl(Guid id) => $"{PublicBaseUrl}/website/forms/preview/{id}";
     private static readonly Dictionary<string, string> FormTypeIcons = new(StringComparer.OrdinalIgnoreCase)
     {
         ["Popup"] = "form",
@@ -240,13 +251,15 @@ public class WebsiteService(AppDbContext db)
         if (string.IsNullOrWhiteSpace(email) || !email.Contains('@'))
             return new PublicFormSubmitResult("Please enter a valid email address.", false);
 
-        await UpsertSubscriberAsync(form.UserId, email, request.FirstName, form.TargetListId, "sign_up_form", form.Name);
+        var subscriberId = await UpsertSubscriberAsync(form.UserId, email, request.FirstName, form.TargetListId, "sign_up_form", form.Name);
 
         form.Submissions++;
         form.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
 
         var content = WebsiteContentHelper.Parse(form.ContentJson, WebsiteContentHelper.DefaultForm(form.Name));
+        await TrySendSignupWelcomeEmailAsync(form.UserId, subscriberId, email, request.FirstName, form.Name, content, "sign_up_form");
+
         return new PublicFormSubmitResult(content.ThankYouMessage, true);
     }
 
@@ -265,17 +278,19 @@ public class WebsiteService(AppDbContext db)
             .Select(l => (Guid?)l.Id)
             .FirstOrDefaultAsync();
 
-        await UpsertSubscriberAsync(page.UserId, email, request.FirstName, defaultListId, "landing_page", page.Name);
+        var subscriberId = await UpsertSubscriberAsync(page.UserId, email, request.FirstName, defaultListId, "landing_page", page.Name);
 
         page.Signups++;
         page.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
 
         var content = WebsiteContentHelper.Parse(page.ContentJson, WebsiteContentHelper.DefaultLanding(page.Name));
+        await TrySendSignupWelcomeEmailAsync(page.UserId, subscriberId, email, request.FirstName, page.Name, content, "landing_page");
+
         return new PublicFormSubmitResult(content.ThankYouMessage, true);
     }
 
-    private async Task UpsertSubscriberAsync(
+    private async Task<Guid> UpsertSubscriberAsync(
         Guid userId, string email, string? firstName, Guid? listId, string sourceType, string sourceName)
     {
         var name = string.IsNullOrWhiteSpace(firstName) ? email.Split('@')[0] : firstName.Trim();
@@ -294,13 +309,15 @@ public class WebsiteService(AppDbContext db)
                 }
                 existing.ListId ??= listId;
             }
-            return;
+            await db.SaveChangesAsync();
+            return existing.Id;
         }
 
+        var newId = Guid.NewGuid();
         var listIdsForNew = listId.HasValue ? new List<string> { listId.Value.ToString() } : [];
         db.Subscribers.Add(new Subscriber
         {
-            Id = Guid.NewGuid(),
+            Id = newId,
             UserId = userId,
             Name = name,
             Email = email,
@@ -314,6 +331,44 @@ public class WebsiteService(AppDbContext db)
             JoinedAt = DateTime.UtcNow
         });
         await db.SaveChangesAsync();
+        return newId;
+    }
+
+    private async Task TrySendSignupWelcomeEmailAsync(
+        Guid userId,
+        Guid subscriberId,
+        string toEmail,
+        string? firstName,
+        string sourceName,
+        WebsitePageContent content,
+        string source)
+    {
+        if (!ses.IsConfigured) return;
+
+        var greeting = string.IsNullOrWhiteSpace(firstName) ? "there" : firstName.Trim();
+        var subject = string.IsNullOrWhiteSpace(content.Headline) ? $"Welcome to {sourceName}" : content.Headline;
+        var html = $"""
+            <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#0f172a;line-height:1.6">
+              <h1 style="margin:0 0 16px;font-size:24px;line-height:1.3">{WebUtility.HtmlEncode(content.ThankYouMessage)}</h1>
+              <p style="margin:0 0 12px;font-size:16px">Hi {WebUtility.HtmlEncode(greeting)},</p>
+              <p style="margin:0;font-size:16px;color:#334155">{WebUtility.HtmlEncode(content.Description)}</p>
+            </div>
+            """;
+
+        try
+        {
+            await ses.SendAsync(new PlatformSendRequest(
+                userId,
+                toEmail,
+                subject,
+                html,
+                source,
+                subscriberId));
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not send signup welcome email to {Email} for {Source}", toEmail, sourceName);
+        }
     }
 
     private static List<string> ParseListIds(string json)
@@ -328,22 +383,23 @@ public class WebsiteService(AppDbContext db)
         }
     }
 
-    private static SignUpFormDto MapForm(SignUpForm f)
+    private SignUpFormDto MapForm(SignUpForm f)
     {
         var content = WebsiteContentHelper.Parse(f.ContentJson, WebsiteContentHelper.DefaultForm(f.Name));
         return new SignUpFormDto(
             f.Id.ToString(), f.Name, f.FormType, f.Status, f.Submissions, f.ConversionRate,
             f.TargetListName, f.TargetListId?.ToString(), f.UpdatedAt.ToString("MMM d, yyyy"),
             FormTypeIcons.GetValueOrDefault(f.FormType, "form"),
-            content.Headline, content.Description, content.ButtonText, content.ThankYouMessage);
+            content.Headline, content.Description, content.ButtonText, content.ThankYouMessage,
+            SignUpFormUrl(f.Id));
     }
 
-    private static LandingPageDto MapPage(LandingPage p)
+    private LandingPageDto MapPage(LandingPage p)
     {
         var conv = p.Visits == 0 ? 0 : Math.Round(p.Signups / (double)p.Visits * 100, 1);
         var content = WebsiteContentHelper.Parse(p.ContentJson, WebsiteContentHelper.DefaultLanding(p.Name));
         return new LandingPageDto(
-            p.Id.ToString(), p.Name, p.Status, p.Slug, $"scribecount.com/p/{p.Slug}",
+            p.Id.ToString(), p.Name, p.Status, p.Slug, LandingPageUrl(p.Slug),
             p.Visits, p.Signups, conv, p.ThemeGradient, p.IconKey,
             content.Headline, content.Description, content.ButtonText, content.ThankYouMessage);
     }

@@ -150,6 +150,20 @@ public class CampaignsController(CampaignService campaigns) : ControllerBase
         }
     }
 
+    [HttpPost("ab-tests/{id:guid}/end")]
+    public async Task<ActionResult<AbTestDto>> EndAbTest(Guid id)
+    {
+        try
+        {
+            var ended = await campaigns.EndAbTestAsync(GetUserId(), id);
+            return ended is null ? NotFound() : Ok(ended);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     [HttpDelete("calendar-events/{id:guid}")]
     public async Task<IActionResult> DeleteCalendarEvent(Guid id)
     {

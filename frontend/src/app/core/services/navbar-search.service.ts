@@ -22,6 +22,8 @@ const SEARCH_INDEX: NavbarSearchResult[] = [
   { title: 'Landing Pages', description: 'Reader landing pages', route: '/website/landing-pages', category: 'Website', keywords: ['landing', 'page'] },
   { title: 'Analytics Dashboards', description: 'Performance dashboards', route: '/analytics/dashboards', category: 'Analytics', keywords: ['reports', 'metrics'] },
   { title: 'List Health', description: 'List quality and engagement', route: '/analytics/list-health', category: 'Analytics', keywords: ['health', 'engagement', 'inactive'] },
+  { title: 'Domain Setup', description: 'Amazon SES and DNS configuration', route: '/settings/domain', category: 'Settings', keywords: ['domain', 'ses', 'dns', 'deliverability'] },
+  { title: 'Amazon SES setup', description: 'Connect AWS SES and SNS', route: '/settings/amazon-ses-setup', category: 'Settings', keywords: ['ses', 'sns', 'aws', 'domain', 'deliverability'] },
   { title: 'Deliverability', description: 'Inbox placement and sending', route: '/analytics/deliverability', category: 'Analytics', keywords: ['spam', 'bounce', 'domain'] },
   { title: 'Integrations', description: 'Shopify, BookFunnel, and more', route: '/integrations', category: 'Integrations', keywords: ['shopify', 'bookfunnel', 'connect'] },
   { title: 'Settings', description: 'Account, domain, and inbox', route: '/settings', category: 'Settings', keywords: ['account', 'profile', 'password', 'inbox'] },

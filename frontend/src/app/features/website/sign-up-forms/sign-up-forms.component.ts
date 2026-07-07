@@ -94,6 +94,7 @@ interface FormView extends SignUpFormItem {
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
                   </button>
                   <div class="action-menu" *ngIf="openMenuId === form.id" (click)="$event.stopPropagation()">
+                    <button type="button" class="action-menu-item" (click)="useInCampaign(form)">Use in campaign</button>
                     <button type="button" class="action-menu-item" (click)="openEditFormModal(form)">Edit</button>
                     <button type="button" class="action-menu-item" (click)="previewForm(form)">Preview</button>
                     <button type="button" class="action-menu-item danger" (click)="deleteForm(form)">Delete</button>
@@ -450,6 +451,11 @@ export class SignUpFormsComponent implements OnInit {
   previewForm(form: FormView) {
     this.closeMenu();
     window.open(`/website/forms/preview/${form.id}`, '_blank');
+  }
+
+  useInCampaign(form: FormView) {
+    this.closeMenu();
+    void this.router.navigate(['/campaigns'], { queryParams: { useForm: form.id } });
   }
 
   deleteForm(form: FormView) {

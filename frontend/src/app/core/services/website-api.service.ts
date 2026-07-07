@@ -24,6 +24,7 @@ export interface SignUpFormItem {
   description: string;
   buttonText: string;
   thankYouMessage: string;
+  url?: string;
 }
 
 export interface LandingPageItem {

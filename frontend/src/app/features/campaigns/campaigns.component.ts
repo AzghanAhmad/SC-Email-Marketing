@@ -21,7 +21,12 @@ import { collectGuidanceExtras, loadGuidanceExtras } from './campaign-guidance-e
 import { CampaignSenderModalComponent } from './campaign-sender-modal.component';
 import { CampaignDesignModalComponent, AppliedTemplate } from './campaign-design-modal.component';
 import { CampaignRecipientsPanelComponent, CampaignRecipients } from './campaign-recipients-panel.component';
-import { applyPreviewMergeTags } from './campaign-preview.utils';
+import { CampaignEmailEditorComponent } from './campaign-email-editor.component';
+import { applyPreviewMergeTags, buildPreviewOverridesFromExtras } from './campaign-preview.utils';
+import { ContentApiService } from '../../core/services/content-api.service';
+import { SettingsApiService } from '../../core/services/settings-api.service';
+import { WebsiteApiService, LandingPageItem, SignUpFormItem } from '../../core/services/website-api.service';
+import { buildEmailHtmlFromLandingPage, buildEmailHtmlFromSignUpForm } from './campaign-website-email.utils';
 import { userCollectibleMergeTags, mergeTagLabel } from './merge-tag.utils';
 
 type CampaignTab = 'list' | 'create' | 'newsletter' | 'ab-test' | 'calendar';
@@ -57,7 +62,7 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
 @Component({
   selector: 'app-campaigns',
   standalone: true,
-  imports: [CommonModule, FormsModule, CampaignListComponent, CampaignCalendarComponent, CampaignNewsletterComponent, CampaignAbTestComponent, NewsletterSwapGuidanceComponent, FlashSaleGuidanceComponent, PriceDropGuidanceComponent, BoxSetGuidanceComponent, SurveyGuidanceComponent, EventAnnouncementGuidanceComponent, ReaderCommunityGuidanceComponent, BacklistSpotlightGuidanceComponent, CampaignSenderModalComponent, CampaignDesignModalComponent, CampaignRecipientsPanelComponent],
+  imports: [CommonModule, FormsModule, CampaignListComponent, CampaignCalendarComponent, CampaignNewsletterComponent, CampaignAbTestComponent, NewsletterSwapGuidanceComponent, FlashSaleGuidanceComponent, PriceDropGuidanceComponent, BoxSetGuidanceComponent, SurveyGuidanceComponent, EventAnnouncementGuidanceComponent, ReaderCommunityGuidanceComponent, BacklistSpotlightGuidanceComponent, CampaignSenderModalComponent, CampaignDesignModalComponent, CampaignRecipientsPanelComponent, CampaignEmailEditorComponent],
   template: `
     <div class="page-wrapper">
       <div class="page-header">
@@ -450,6 +455,7 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
           (onToast)="showToast($event.message, $event.type)"
           (onCreateAbTest)="createAbTest($event)"
           (onLaunchAbTest)="launchAbTest($event)"
+          (onEndAbTest)="endAbTest($event)"
           (onDeleteAbTest)="deleteAbTest($event)">
         </app-campaign-ab-test>
       </div>
@@ -766,8 +772,8 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
                   <button type="button" class="btn-ghost btn-sm" (click)="showSenderModal.set(true)">Manage</button>
                 </div>
                 <div class="setup-card-body">
-                  <div class="setup-line"><strong>{{ draft.fromName || 'Not set' }}</strong></div>
-                  <div class="setup-line muted">{{ draft.fromEmail || 'Add sender email' }}</div>
+                  <div class="setup-line"><strong>{{ sesSender.fromName || draft.fromName || 'Not set' }}</strong></div>
+                  <div class="setup-line muted">{{ sesSender.fromEmail || draft.fromEmail || 'Configure Amazon SES sender' }}</div>
                 </div>
               </div>
               <div class="setup-card">
@@ -1457,9 +1463,12 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
                 <label class="form-label">Email Content <span class="required">*</span></label>
                 <div *ngIf="isHtmlContent(draft.content)" class="content-visual-wrap">
                   <div class="content-render-box" [innerHTML]="safeDraftContent"></div>
-                  <button type="button" class="btn-ghost btn-sm content-source-toggle" (click)="showHtmlSource = !showHtmlSource">
-                    {{ showHtmlSource ? 'Hide HTML source' : 'Edit HTML source' }}
-                  </button>
+                  <div class="content-edit-actions">
+                    <button type="button" class="btn-ghost btn-sm" (click)="showVisualEditor.set(true)">Edit preview</button>
+                    <button type="button" class="btn-ghost btn-sm" (click)="showHtmlSource = !showHtmlSource">
+                      {{ showHtmlSource ? 'Hide HTML source' : 'Edit HTML source' }}
+                    </button>
+                  </div>
                 </div>
                 <textarea *ngIf="!isHtmlContent(draft.content) || showHtmlSource"
                   class="form-input content-area"
@@ -1562,7 +1571,7 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
                       </div>
                     </div>
                     <div class="phone-email-meta">
-                      <div class="phone-from">{{ draft.fromName || 'Your Name' }}</div>
+                      <div class="phone-from">{{ sesSender.fromName || draft.fromName || 'Your Name' }}</div>
                       <div class="phone-subject">{{ draft.subject || '(no subject)' }}</div>
                     </div>
                     <div class="phone-email-body">
@@ -1763,6 +1772,7 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
                   </label>
                 </div>
               </div>
+              <div class="send-error-banner" *ngIf="sendError" role="alert">{{ sendError }}</div>
               <div class="send-final-actions">
                 <button class="btn-primary send-now-btn" (click)="sendCampaign()" [disabled]="sendingCampaign">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
@@ -1783,11 +1793,17 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
 
         <app-campaign-sender-modal
           [open]="showSenderModal()"
-          [sender]="{ fromName: draft.fromName, fromEmail: draft.fromEmail }"
+          [sender]="sesSender"
           [subject]="draft.subject"
-          (cancel)="showSenderModal.set(false)"
-          (saved)="onSenderSaved($event)">
+          (cancel)="showSenderModal.set(false)">
         </app-campaign-sender-modal>
+
+        <app-campaign-email-editor
+          [open]="showVisualEditor()"
+          [html]="draft.content"
+          (cancel)="showVisualEditor.set(false)"
+          (saved)="onVisualEditorSaved($event)">
+        </app-campaign-email-editor>
 
         <app-campaign-design-modal
           [open]="showDesignModal()"
@@ -1918,7 +1934,7 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
     .content-area-html { margin-top:.75rem; font-family:ui-monospace,Consolas,monospace; font-size:.75rem; }
     .content-visual-wrap { display:flex; flex-direction:column; gap:.75rem; }
     .content-render-box { border:1.5px solid #e2e8f0; border-radius:12px; overflow:hidden; background:#fff; max-height:420px; overflow-y:auto; }
-    .content-source-toggle { align-self:flex-start; }
+    .content-edit-actions { display:flex; flex-wrap:wrap; gap:.5rem; }
     .preview-content-html { color:#334155; font-size:.875rem; line-height:1.6; }
     .preview-content-html.mobile-content { font-size:.8125rem; }
     .char-hint { display:flex; align-items:center; gap:.5rem; margin-top:.3rem; }
@@ -2104,6 +2120,11 @@ const STEPS = ['Write', 'Preview', 'Audience', 'Review', 'Send'] as const;
     .send-choice-desc { font-size:.8125rem; color:#94a3b8; }
     .schedule-picker { display:flex; flex-direction:column; gap:.5rem; margin-bottom:1.5rem; }
     .send-final-actions { display:flex; justify-content:center; }
+    .send-error-banner {
+      display:flex; align-items:flex-start; gap:.625rem; padding:.875rem 1rem; margin-bottom:1rem;
+      background:rgba(239,68,68,0.08); border:1.5px solid rgba(239,68,68,0.25); border-radius:10px;
+      color:#dc2626; font-size:.875rem; line-height:1.45; animation:toastIn .25s ease;
+    }
     .send-now-btn { display:flex; align-items:center; gap:.5rem; padding:.75rem 2rem; font-size:.9375rem; background:linear-gradient(135deg,#059669,#10b981); box-shadow:0 4px 14px rgba(16,185,129,0.25); }
     .send-now-btn:hover { box-shadow:0 8px 24px rgba(16,185,129,0.35); }
     .send-success { display:flex; flex-direction:column; align-items:center; gap:1rem; padding:2rem; text-align:center; }
@@ -2475,6 +2496,8 @@ export class CampaignsComponent implements OnInit {
   loading = false;
   showHtmlSource = false;
   showSenderModal = signal(false);
+  showVisualEditor = signal(false);
+  sesSender = { fromName: '', fromEmail: '' };
   showDesignModal = signal(false);
   recipients: CampaignRecipients = { listIds: [], segmentIds: [], contactIds: [], excludeUnengaged: false };
   searchQuery = '';
@@ -2558,9 +2581,11 @@ export class CampaignsComponent implements OnInit {
   sendMode: 'now' | 'schedule' = 'now';
   sendSuccess = false;
   sendingCampaign = false;
+  sendError = '';
   toastMessage = '';
   toastType: 'success' | 'warn' = 'success';
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
+  private sendErrorTimer: ReturnType<typeof setTimeout> | null = null;
 
   newsletter: NewsletterSchedule = {
     name: 'Monthly Reader Letter',
@@ -2595,6 +2620,9 @@ export class CampaignsComponent implements OnInit {
 
   constructor(
     private campaignApi: CampaignApiService,
+    private contentApi: ContentApiService,
+    private settingsApi: SettingsApiService,
+    private websiteApi: WebsiteApiService,
     private auth: AuthService,
     private cdr: ChangeDetectorRef,
     private route: ActivatedRoute,
@@ -2610,9 +2638,7 @@ export class CampaignsComponent implements OnInit {
   }
 
   ngOnInit() {
-    const fromName = this.auth.user()?.name?.split(' ')[0];
-    if (fromName) this.draft.fromName = fromName;
-    if (this.auth.user()?.email) this.draft.fromEmail = this.auth.user()!.email;
+    this.loadSesSender();
     this.loadCampaignData();
     this.loadAudienceSegments();
     this.route.queryParams.subscribe(params => {
@@ -2638,7 +2664,46 @@ export class CampaignsComponent implements OnInit {
           queryParamsHandling: 'merge',
           replaceUrl: true,
         });
+        return;
       }
+
+      const useLanding = params['useLanding'] as string | undefined;
+      const useForm = params['useForm'] as string | undefined;
+      if (useLanding || useForm) {
+        this.websiteApi.getWebsite().subscribe({
+          next: bundle => {
+            if (useLanding) {
+              const page = bundle.landingPages.find(p => p.id === useLanding);
+              if (page) this.applyLandingPageTemplate(page);
+            }
+            if (useForm) {
+              const form = bundle.forms.find(f => f.id === useForm);
+              if (form) this.applySignUpFormTemplate(form);
+            }
+            this.router.navigate([], {
+              relativeTo: this.route,
+              queryParams: { useLanding: null, useForm: null },
+              queryParamsHandling: 'merge',
+              replaceUrl: true,
+            });
+          },
+        });
+      }
+    });
+  }
+
+  private loadSesSender() {
+    this.settingsApi.getSesStatus().subscribe({
+      next: status => {
+        this.sesSender = {
+          fromEmail: status.fromEmail || '',
+          fromName: status.fromName || '',
+        };
+        if (this.sesSender.fromEmail) this.draft.fromEmail = this.sesSender.fromEmail;
+        if (this.sesSender.fromName) this.draft.fromName = this.sesSender.fromName;
+        this.cdr.detectChanges();
+      },
+      error: () => {},
     });
   }
 
@@ -2677,8 +2742,8 @@ export class CampaignsComponent implements OnInit {
   }
 
   private emptyDraft() {
-    const fromName = this.auth?.user()?.name?.split(' ')[0] || 'Author';
-    const fromEmail = this.auth?.user()?.email || '';
+    const fromName = this.sesSender.fromName || this.auth?.user()?.name?.split(' ')[0] || 'Author';
+    const fromEmail = this.sesSender.fromEmail || '';
     return {
       name: '', fromName, fromEmail, subject: '', previewText: '', sendTo: 'all', content: '',
       bookTitle: '',
@@ -2800,12 +2865,13 @@ export class CampaignsComponent implements OnInit {
   }
 
   get safeDraftContent(): SafeHtml {
-    const overrides: Record<string, string> = {
+    const extras = {
       ...this.draft.mergeFields,
-      book_title: this.draft.mergeFields['book_title'] || this.draft.bookTitle || '',
-      author_name: this.draft.fromName || '',
-      store_link: this.draft.mergeFields['store_link'] || this.draft.directStoreLink || this.draft.amazonLink || '',
+      ...(this.draft.bookTitle.trim() ? { book_title: this.draft.bookTitle.trim() } : {}),
+      directStoreLink: this.draft.directStoreLink,
+      amazonLink: this.draft.amazonLink,
     };
+    const overrides = buildPreviewOverridesFromExtras(extras, this.draft.fromName);
     return this.sanitizer.bypassSecurityTrustHtml(applyPreviewMergeTags(this.draft.content || '', overrides));
   }
 
@@ -2826,8 +2892,8 @@ export class CampaignsComponent implements OnInit {
   }
 
   get senderDisplay(): string {
-    const name = this.draft.fromName || 'Your Name';
-    const email = this.draft.fromEmail;
+    const name = this.sesSender.fromName || this.draft.fromName || 'Your Name';
+    const email = this.sesSender.fromEmail || this.draft.fromEmail;
     return email ? `${name} <${email}>` : name;
   }
 
@@ -2847,11 +2913,35 @@ export class CampaignsComponent implements OnInit {
     return 'Select a list, segment, or contact';
   }
 
-  onSenderSaved(sender: { fromName: string; fromEmail: string }) {
-    this.draft.fromName = sender.fromName;
-    this.draft.fromEmail = sender.fromEmail;
-    this.showSenderModal.set(false);
+  onVisualEditorSaved(html: string) {
+    this.draft.content = html;
+    this.showVisualEditor.set(false);
+    this.showHtmlSource = false;
     this.cdr.detectChanges();
+  }
+
+  applyLandingPageTemplate(page: LandingPageItem) {
+    this.startCreate();
+    this.onDesignApplied({
+      id: `landing-${page.id}`,
+      name: page.name,
+      subjectLine: page.headline || page.name,
+      previewText: page.description || '',
+      htmlBody: buildEmailHtmlFromLandingPage(page),
+      suggestedCampaignType: '',
+    });
+  }
+
+  applySignUpFormTemplate(form: SignUpFormItem) {
+    this.startCreate();
+    this.onDesignApplied({
+      id: `form-${form.id}`,
+      name: form.name,
+      subjectLine: form.headline || form.name,
+      previewText: form.description || '',
+      htmlBody: buildEmailHtmlFromSignUpForm(form),
+      suggestedCampaignType: '',
+    });
   }
 
   onDesignApplied(template: AppliedTemplate | null) {
@@ -2918,6 +3008,18 @@ export class CampaignsComponent implements OnInit {
     this.draft.fromEmail = extras['fromEmail'] || this.draft.fromEmail;
   }
 
+  private resolveTemplateNameIfNeeded() {
+    if (this.draft.templateName?.trim() || !this.draft.templateId?.trim()) return;
+    this.contentApi.getTemplate(this.draft.templateId).subscribe({
+      next: t => {
+        if (t.name?.trim()) {
+          this.draft.templateName = t.name.trim();
+          this.cdr.detectChanges();
+        }
+      },
+    });
+  }
+
   private buildCampaignPayload(status = 'draft') {
     const guidanceExtras = collectGuidanceExtras(this.draft.campaignType, this.guidanceRefs());
     const scheduling = this.sendMode === 'schedule' && status !== 'draft';
@@ -2979,6 +3081,9 @@ export class CampaignsComponent implements OnInit {
     this.recipients = { listIds: [], segmentIds: [], contactIds: [], excludeUnengaged: false };
     this.editingCampaignId = null;
     this.showHtmlSource = false;
+    this.showVisualEditor.set(false);
+    if (this.sesSender.fromEmail) this.draft.fromEmail = this.sesSender.fromEmail;
+    if (this.sesSender.fromName) this.draft.fromName = this.sesSender.fromName;
     this.currentStep.set(0);
     this.sendSuccess = false;
     this.reportCampaign = null;
@@ -3027,6 +3132,7 @@ export class CampaignsComponent implements OnInit {
         };
         this.restoreFromExtras(extras);
         this.restoreRecipientExtras(extras);
+        this.resolveTemplateNameIfNeeded();
         this.currentStep.set(0);
         this.sendSuccess = false;
         this.activeTab.set('create');
@@ -3297,11 +3403,14 @@ export class CampaignsComponent implements OnInit {
     });
   }
 
-  createAbTest(payload: { subjectA: string; subjectB: string; testSize: number; winnerMetric: string; waitHours: number }) {
+  createAbTest(payload: {
+    subjectA: string; subjectB: string; testSize: number; winnerMetric: string; waitHours: number;
+    endsAt?: string | null; content?: string; autoSendWinner?: boolean;
+  }) {
     this.campaignApi.createAbTest(payload).subscribe({
       next: test => {
         this.abTests = [test, ...this.abTests];
-        this.showToast('A/B test saved! Click Launch to open voting.', 'success');
+        this.showToast('A/B test saved! Click Launch to start.', 'success');
         this.cdr.detectChanges();
       },
       error: err => this.showToast(err.message || 'Could not save A/B test', 'warn'),
@@ -3316,6 +3425,24 @@ export class CampaignsComponent implements OnInit {
         this.cdr.detectChanges();
       },
       error: err => this.showToast(err.message || 'Could not launch A/B test', 'warn'),
+    });
+  }
+
+  endAbTest(id: string) {
+    this.campaignApi.endAbTest(id).subscribe({
+      next: test => {
+        this.abTests = this.abTests.map(t => t.id === id ? test : t);
+        const msg = test.winner === 'tie'
+          ? 'Test ended — it\'s a tie, no winner was sent.'
+          : test.winnerSentAt
+            ? `Test ended — Version ${test.winner} won and was sent to the rest of your list.`
+            : test.winner
+              ? `Test ended — Version ${test.winner} won.`
+              : 'Test ended.';
+        this.showToast(msg, 'success');
+        this.cdr.detectChanges();
+      },
+      error: err => this.showToast(err.message || 'Could not end A/B test', 'warn'),
     });
   }
 
@@ -3465,31 +3592,33 @@ export class CampaignsComponent implements OnInit {
     if (this.sendingCampaign) return;
 
     if (!this.draft.name?.trim() || !this.draft.subject?.trim()) {
-      this.showToast('Add a campaign name and subject before sending', 'warn');
+      this.showSendError('Add a campaign name and subject before sending');
       return;
     }
 
     const schedule = this.sendMode === 'schedule';
     if (schedule && !this.draft.scheduledAt) {
-      this.showToast('Choose a date and time to schedule your campaign', 'warn');
+      this.showSendError('Choose a date and time to schedule your campaign');
       return;
     }
 
     if (!this.hasExplicitAudience()) {
-      this.showToast('Select at least one list, segment, or contact in the Audience step', 'warn');
+      this.showSendError('Select at least one list, segment, or contact in the Audience step');
       return;
     }
 
     if (this.estimatedSendCount <= 0) {
-      this.showToast('No recipients match your audience and suppression rules', 'warn');
+      this.showSendError('No recipients match your audience and suppression rules');
       return;
     }
 
+    this.sendError = '';
     this.sendingCampaign = true;
-    const payload = this.buildCampaignPayload(schedule ? 'scheduled' : 'sent');
+    const payload = this.buildCampaignPayload(schedule ? 'scheduled' : 'draft');
 
     const onResult = (result: Campaign) => {
       this.sendingCampaign = false;
+      this.sendError = '';
       const existing = this.campaigns.findIndex(c => c.id === result.id);
       if (existing >= 0) {
         this.campaigns = this.campaigns.map(c => c.id === result.id ? result : c);
@@ -3504,7 +3633,7 @@ export class CampaignsComponent implements OnInit {
 
     const onError = (err: { message?: string }) => {
       this.sendingCampaign = false;
-      this.showToast(err.message || 'Could not send campaign', 'warn');
+      this.showSendError(err.message || 'Could not send campaign');
       this.cdr.detectChanges();
     };
 
@@ -3533,14 +3662,32 @@ export class CampaignsComponent implements OnInit {
     this.currentStep.set(0);
     this.sendSuccess = false;
     this.sendingCampaign = false;
+    this.sendError = '';
     this.sendMode = 'now';
     this.activeTab.set('list');
+  }
+
+  private showSendError(message: string) {
+    this.sendError = message;
+    if (this.sendErrorTimer) clearTimeout(this.sendErrorTimer);
+    this.sendErrorTimer = setTimeout(() => {
+      this.sendError = '';
+      this.sendErrorTimer = null;
+      this.cdr.detectChanges();
+    }, 5000);
+    this.cdr.detectChanges();
   }
 
   showToast(msg: string, type: 'success' | 'warn') {
     this.toastMessage = msg;
     this.toastType = type;
     if (this.toastTimer) clearTimeout(this.toastTimer);
-    this.toastTimer = setTimeout(() => { this.toastMessage = ''; }, 3000);
+    this.cdr.detectChanges();
+    const duration = type === 'warn' ? 5000 : 3500;
+    this.toastTimer = setTimeout(() => {
+      this.toastMessage = '';
+      this.toastTimer = null;
+      this.cdr.detectChanges();
+    }, duration);
   }
 }

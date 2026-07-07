@@ -3,10 +3,13 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
+using ScribeCount.Email.Api.Configuration;
 using ScribeCount.Email.Api.Data;
 using ScribeCount.Email.Api.Middleware;
 using ScribeCount.Email.Api.Serialization;
 using ScribeCount.Email.Api.Services;
+
+DotEnv.Load();
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -47,8 +50,14 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.AddInterceptors(new MySqlPacketSizeInterceptor());
 });
 
+builder.Services.Configure<SesOptions>(builder.Configuration.GetSection(SesOptions.SectionName));
+builder.Services.Configure<SenderOptions>(builder.Configuration.GetSection(SenderOptions.SectionName));
+builder.Services.AddHttpClient("sns");
 builder.Services.AddScoped<JwtTokenService>();
 builder.Services.AddScoped<DatabaseSeeder>();
+builder.Services.AddScoped<SesEmailService>();
+builder.Services.AddScoped<SenderIdentityService>();
+builder.Services.AddScoped<SnsWebhookService>();
 builder.Services.AddScoped<MailboxService>();
 builder.Services.AddScoped<DashboardService>();
 builder.Services.AddScoped<SettingsService>();
@@ -66,7 +75,9 @@ builder.Services.AddHostedService<CampaignFeatureSchedulerService>();
 builder.Services.AddHostedService<MailboxSchedulerService>();
 builder.Services.AddHttpContextAccessor();
 
-var jwtKey = builder.Configuration["Jwt:Key"] ?? "ScribeCount-Dev-Secret-Key-Change-In-Production-32chars!";
+var jwtKey = builder.Configuration["Jwt:Key"];
+if (string.IsNullOrWhiteSpace(jwtKey))
+    jwtKey = "ScribeCount-Dev-Secret-Key-Change-In-Production-32chars!";
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -131,6 +142,26 @@ if (hasFrontend)
     app.UseDefaultFiles();
     app.UseStaticFiles();
 }
+
+var uploadsRoot = Path.Combine(wwwrootPath, "uploads");
+Directory.CreateDirectory(uploadsRoot);
+
+app.MapGet("/uploads/{userId:guid}/{fileName}", (Guid userId, string fileName, IWebHostEnvironment environment) =>
+{
+    if (string.IsNullOrWhiteSpace(fileName)
+        || fileName.Contains("..", StringComparison.Ordinal)
+        || fileName.Contains('/', StringComparison.Ordinal)
+        || fileName.Contains('\\', StringComparison.Ordinal))
+    {
+        return Results.BadRequest();
+    }
+
+    var filePath = Path.Combine(environment.ContentRootPath, "wwwroot", "uploads", userId.ToString(), fileName);
+    if (!System.IO.File.Exists(filePath))
+        return Results.NotFound();
+
+    return Results.File(filePath);
+}).AllowAnonymous();
 
 app.MapControllers();
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));

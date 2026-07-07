@@ -43,6 +43,14 @@ export interface VoteAbTestResponse {
   status: string;
 }
 
+export interface PreferenceCenter {
+  email: string;
+  name: string;
+  brandDomain: string;
+  emailTypes: { key: string; name: string; description: string; enabled: boolean }[];
+  frequencies: { key: string; name: string; description: string; enabled: boolean }[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class PublicCampaignService {
   private api = inject(ApiService);
@@ -57,6 +65,10 @@ export class PublicCampaignService {
 
   getCampaignView(token: string): Observable<CampaignView> {
     return this.api.get<CampaignView>(`/public/campaigns/view?token=${encodeURIComponent(token)}`);
+  }
+
+  getPreferences(token: string): Observable<PreferenceCenter> {
+    return this.api.get<PreferenceCenter>(`/public/campaigns/preferences?token=${encodeURIComponent(token)}`);
   }
 
   getAbTest(id: string): Observable<PublicAbTest> {

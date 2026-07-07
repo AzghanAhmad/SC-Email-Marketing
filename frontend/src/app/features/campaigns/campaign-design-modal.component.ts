@@ -2,6 +2,9 @@ import { Component, EventEmitter, Input, Output, OnInit, inject, signal } from '
 import { CommonModule } from '@angular/common';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { ContentApiService, EmailTemplate } from '../../core/services/content-api.service';
+import { WebsiteApiService, LandingPageItem, SignUpFormItem } from '../../core/services/website-api.service';
+import { buildEmailHtmlFromLandingPage, buildEmailHtmlFromSignUpForm } from './campaign-website-email.utils';
+import { formatPublicUrlForDisplay, signUpFormPreviewUrl } from '../../core/utils/public-site-url';
 
 export interface AppliedTemplate {
   id: string;
@@ -12,9 +15,16 @@ export interface AppliedTemplate {
   suggestedCampaignType: string;
 }
 
-type DesignTab = 'templates' | 'yours' | 'basic' | 'ready';
+type DesignTab = 'templates' | 'yours' | 'basic' | 'ready' | 'landing' | 'forms';
 
 interface TemplateView extends EmailTemplate {
+  safeHtml: SafeHtml;
+}
+
+interface WebsiteTileView {
+  id: string;
+  name: string;
+  urlLabel: string;
   safeHtml: SafeHtml;
 }
 
@@ -31,13 +41,15 @@ interface TemplateView extends EmailTemplate {
         <div class="design-tabs">
           <button class="design-tab" [class.active]="tab() === 'templates'" (click)="tab.set('templates')">Templates</button>
           <button class="design-tab" [class.active]="tab() === 'yours'" (click)="tab.set('yours')">Your templates</button>
+          <button class="design-tab" [class.active]="tab() === 'landing'" (click)="tab.set('landing')">Landing pages</button>
+          <button class="design-tab" [class.active]="tab() === 'forms'" (click)="tab.set('forms')">Sign-up forms</button>
           <button class="design-tab" [class.active]="tab() === 'basic'" (click)="tab.set('basic')">Basic templates</button>
           <button class="design-tab" [class.active]="tab() === 'ready'" (click)="tab.set('ready')">Ready-to-use</button>
         </div>
 
-        <div class="loading" *ngIf="loading">Loading templates…</div>
+        <div class="loading" *ngIf="loading">Loading…</div>
 
-        <div class="template-grid" *ngIf="!loading">
+        <div class="template-grid" *ngIf="!loading && isEmailTab">
           <button type="button" class="template-tile blank-tile" (click)="useBlank()">
             <div class="blank-icon">+</div>
             <span>Start from scratch</span>
@@ -51,8 +63,34 @@ interface TemplateView extends EmailTemplate {
           </button>
         </div>
 
-        <div class="empty" *ngIf="!loading && filteredTemplates.length === 0 && tab() === 'yours'">
+        <div class="template-grid" *ngIf="!loading && tab() === 'landing'">
+          <button type="button" class="template-tile" *ngFor="let p of landingPageTiles" (click)="selectLandingPageById(p.id)">
+            <div class="tile-preview">
+              <div class="tile-html" [innerHTML]="p.safeHtml"></div>
+            </div>
+            <div class="tile-name">{{ p.name }}</div>
+            <div class="tile-cat">{{ p.urlLabel }}</div>
+          </button>
+        </div>
+
+        <div class="template-grid" *ngIf="!loading && tab() === 'forms'">
+          <button type="button" class="template-tile" *ngFor="let f of signUpFormTiles" (click)="selectSignUpFormById(f.id)">
+            <div class="tile-preview">
+              <div class="tile-html" [innerHTML]="f.safeHtml"></div>
+            </div>
+            <div class="tile-name">{{ f.name }}</div>
+            <div class="tile-cat">{{ f.urlLabel }}</div>
+          </button>
+        </div>
+
+        <div class="empty" *ngIf="!loading && tab() === 'yours' && filteredTemplates.length === 0">
           No custom templates yet. Save designs from the Templates page.
+        </div>
+        <div class="empty" *ngIf="!loading && tab() === 'landing' && landingPageTiles.length === 0">
+          No landing pages yet. Create one under Website → Landing Pages.
+        </div>
+        <div class="empty" *ngIf="!loading && tab() === 'forms' && signUpFormTiles.length === 0">
+          No sign-up forms yet. Create one under Website → Sign-up Forms.
         </div>
 
         <div class="modal-actions">
@@ -79,12 +117,13 @@ interface TemplateView extends EmailTemplate {
     .tile-preview { height:140px; overflow:hidden; background:#f8fafc; border-bottom:1px solid #f1f5f9; position:relative; }
     .tile-html { transform:scale(0.35); transform-origin:top left; width:286%; pointer-events:none; }
     .tile-name { padding:.625rem .75rem .15rem; font-size:.8125rem; font-weight:700; color:#0f172a; }
-    .tile-cat { padding:0 .75rem .625rem; font-size:.7rem; color:#94a3b8; text-transform:uppercase; letter-spacing:.03em; }
+    .tile-cat { padding:0 .75rem .625rem; font-size:.7rem; color:#94a3b8; text-transform:none; letter-spacing:0; word-break:break-all; }
     .modal-actions { display:flex; justify-content:flex-end; gap:.75rem; margin-top:1.25rem; }
-  `]
+  `],
 })
 export class CampaignDesignModalComponent implements OnInit {
   private contentApi = inject(ContentApiService);
+  private websiteApi = inject(WebsiteApiService);
   private sanitizer = inject(DomSanitizer);
 
   @Input() open = false;
@@ -93,6 +132,10 @@ export class CampaignDesignModalComponent implements OnInit {
 
   tab = signal<DesignTab>('templates');
   templates: TemplateView[] = [];
+  landingPages: LandingPageItem[] = [];
+  signUpForms: SignUpFormItem[] = [];
+  landingPageTiles: WebsiteTileView[] = [];
+  signUpFormTiles: WebsiteTileView[] = [];
   loading = true;
 
   ngOnInit() {
@@ -102,16 +145,39 @@ export class CampaignDesignModalComponent implements OnInit {
           ...t,
           safeHtml: this.sanitizer.bypassSecurityTrustHtml(t.htmlBody || ''),
         }));
+      },
+      error: () => {},
+    });
+    this.websiteApi.getWebsite().subscribe({
+      next: bundle => {
+        this.landingPages = bundle.landingPages;
+        this.signUpForms = bundle.forms;
+        this.landingPageTiles = bundle.landingPages.map(p => ({
+          id: p.id,
+          name: p.name,
+          urlLabel: formatPublicUrlForDisplay(p.url),
+          safeHtml: this.sanitizer.bypassSecurityTrustHtml(buildEmailHtmlFromLandingPage(p)),
+        }));
+        this.signUpFormTiles = bundle.forms.map(f => ({
+          id: f.id,
+          name: f.name,
+          urlLabel: formatPublicUrlForDisplay(signUpFormPreviewUrl(f.id)),
+          safeHtml: this.sanitizer.bypassSecurityTrustHtml(buildEmailHtmlFromSignUpForm(f)),
+        }));
         this.loading = false;
       },
       error: () => { this.loading = false; },
     });
   }
 
+  get isEmailTab(): boolean {
+    return ['templates', 'yours', 'basic', 'ready'].includes(this.tab());
+  }
+
   get filteredTemplates(): TemplateView[] {
     switch (this.tab()) {
       case 'yours':
-        return [];
+        return this.templates.filter(t => t.isCustom);
       case 'basic':
         return this.templates.filter(t => ['Newsletter', 'Automation', 'Content'].includes(t.category));
       case 'ready':
@@ -119,6 +185,10 @@ export class CampaignDesignModalComponent implements OnInit {
       default:
         return this.templates;
     }
+  }
+
+  displayUrl(url?: string): string {
+    return formatPublicUrlForDisplay(url || '');
   }
 
   useBlank() {
@@ -133,6 +203,38 @@ export class CampaignDesignModalComponent implements OnInit {
       previewText: '',
       htmlBody: t.htmlBody,
       suggestedCampaignType: t.suggestedCampaignType,
+    });
+  }
+
+  selectLandingPageById(id: string) {
+    const page = this.landingPages.find(p => p.id === id);
+    if (page) this.selectLandingPage(page);
+  }
+
+  selectSignUpFormById(id: string) {
+    const form = this.signUpForms.find(f => f.id === id);
+    if (form) this.selectSignUpForm(form);
+  }
+
+  selectLandingPage(page: LandingPageItem) {
+    this.applied.emit({
+      id: `landing-${page.id}`,
+      name: page.name,
+      subjectLine: page.headline || page.name,
+      previewText: page.description || '',
+      htmlBody: buildEmailHtmlFromLandingPage(page),
+      suggestedCampaignType: '',
+    });
+  }
+
+  selectSignUpForm(form: SignUpFormItem) {
+    this.applied.emit({
+      id: `form-${form.id}`,
+      name: form.name,
+      subjectLine: form.headline || form.name,
+      previewText: form.description || '',
+      htmlBody: buildEmailHtmlFromSignUpForm(form),
+      suggestedCampaignType: '',
     });
   }
 }

@@ -1,4 +1,4 @@
-import { Component, OnInit, ChangeDetectorRef, inject } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
@@ -7,7 +7,9 @@ import { AudienceApiService } from '../../core/services/audience-api.service';
 import { ContentApiService } from '../../core/services/content-api.service';
 import {
   applyPreviewMergeTags,
+  buildPreviewOverridesFromExtras,
   campaignTypeLabel,
+  formatCampaignDateTime,
   isHtmlContent,
   resolveAudienceLabel,
 } from './campaign-preview.utils';
@@ -63,7 +65,7 @@ import {
 
         <div class="glass-card notice" *ngIf="campaign.status !== 'sent'">
           <p *ngIf="campaign.status === 'draft'">This campaign is still a draft. Send it to start collecting performance data.</p>
-          <p *ngIf="campaign.status === 'scheduled'">This campaign is scheduled. Stats will appear after it sends on {{ campaign.date }}.</p>
+          <p *ngIf="campaign.status === 'scheduled'">This campaign is scheduled to send on {{ scheduledDisplay }}.</p>
         </div>
 
         <div class="stats-grid">
@@ -84,7 +86,7 @@ import {
             <span class="stat-value">{{ campaign.status === 'sent' ? displayClickRate + '%' : '—' }}</span>
           </div>
           <div class="stat-card">
-            <span class="stat-label">Date</span>
+            <span class="stat-label">{{ campaign.status === 'scheduled' ? 'Scheduled for' : 'Date' }}</span>
             <span class="stat-value">{{ displayDate }}</span>
           </div>
           <div class="stat-card">
@@ -183,7 +185,7 @@ import {
     }
   `]
 })
-export class CampaignReportComponent implements OnInit {
+export class CampaignReportComponent implements OnInit, OnDestroy {
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private campaignApi = inject(CampaignApiService);
@@ -191,6 +193,9 @@ export class CampaignReportComponent implements OnInit {
   private contentApi = inject(ContentApiService);
   private sanitizer = inject(DomSanitizer);
   private cdr = inject(ChangeDetectorRef);
+
+  private refreshTimer: ReturnType<typeof setInterval> | null = null;
+  private campaignId = '';
 
   campaign: Campaign | null = null;
   loading = true;
@@ -208,6 +213,7 @@ export class CampaignReportComponent implements OnInit {
       void this.router.navigate(['/campaigns']);
       return;
     }
+    this.campaignId = id;
 
     this.audienceApi.getListsSegments().subscribe({
       next: bundle => {
@@ -217,16 +223,34 @@ export class CampaignReportComponent implements OnInit {
       },
     });
 
-    this.campaignApi.getCampaign(id).subscribe({
+    this.loadCampaign(true);
+  }
+
+  ngOnDestroy() {
+    if (this.refreshTimer) {
+      clearInterval(this.refreshTimer);
+      this.refreshTimer = null;
+    }
+  }
+
+  private loadCampaign(initial = false) {
+    this.campaignApi.getCampaign(this.campaignId).subscribe({
       next: c => {
         this.campaign = c;
         this.refreshLabels();
-        this.loading = false;
+        if (initial) {
+          this.loading = false;
+          if (c.status === 'sent') {
+            this.refreshTimer = setInterval(() => this.loadCampaign(), 15_000);
+          }
+        }
         this.cdr.detectChanges();
       },
       error: err => {
-        this.error = err.message || 'Could not load campaign report.';
-        this.loading = false;
+        if (initial) {
+          this.error = err.message || 'Could not load campaign report.';
+          this.loading = false;
+        }
         this.cdr.detectChanges();
       },
     });
@@ -245,22 +269,33 @@ export class CampaignReportComponent implements OnInit {
   }
 
   private loadTemplateLabel(extras: Record<string, string>) {
-    if (extras['templateName']) {
-      this.templateLabel = extras['templateName'];
+    const name = extras['templateName']?.trim();
+    if (name) {
+      this.templateLabel = name;
       return;
     }
-    const templateId = extras['emailTemplateId'];
+
+    const templateId = extras['emailTemplateId']?.trim();
     if (!templateId) {
-      this.templateLabel = '—';
+      this.templateLabel = this.campaign?.content?.trim() ? 'Custom content' : '—';
       return;
     }
+
+    this.templateLabel = 'Loading…';
     this.contentApi.getTemplate(templateId).subscribe({
       next: t => {
-        this.templateLabel = t.name;
+        this.templateLabel = t.name?.trim() || 'Email template';
         this.cdr.detectChanges();
       },
-      error: () => { this.templateLabel = 'Email template'; },
+      error: () => {
+        this.templateLabel = 'Email template';
+        this.cdr.detectChanges();
+      },
     });
+  }
+
+  get previewOverrides(): Record<string, string> {
+    return buildPreviewOverridesFromExtras(this.campaign?.extras, this.campaign?.fromName);
   }
 
   get typeLabel(): string {
@@ -268,11 +303,11 @@ export class CampaignReportComponent implements OnInit {
   }
 
   get resolvedSubject(): string {
-    return applyPreviewMergeTags(this.campaign?.subject || '');
+    return applyPreviewMergeTags(this.campaign?.subject || '', this.previewOverrides);
   }
 
   get resolvedContent(): string {
-    return applyPreviewMergeTags(this.campaign?.content || '');
+    return applyPreviewMergeTags(this.campaign?.content || '', this.previewOverrides);
   }
 
   get safePreviewContent(): SafeHtml {
@@ -294,13 +329,12 @@ export class CampaignReportComponent implements OnInit {
   }
 
   get displayDate(): string {
-    if (!this.campaign) return '—';
-    const raw = this.campaign.sentAt || this.campaign.date;
-    if (!raw) return '—';
-    const d = new Date(raw);
-    return Number.isNaN(d.getTime())
-      ? this.campaign.date
-      : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    return formatCampaignDateTime(this.campaign);
+  }
+
+  get scheduledDisplay(): string {
+    if (!this.campaign?.scheduledAt) return this.displayDate;
+    return formatCampaignDateTime({ ...this.campaign, status: 'scheduled' });
   }
 
   get uniqueOpens(): string {

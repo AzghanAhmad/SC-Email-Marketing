@@ -51,6 +51,14 @@ export interface IntegrationItem {
   comingSoon: boolean;
 }
 
+export interface PreferenceFooter {
+  subscriptionLine: string;
+  physicalAddress: string;
+  managePreferencesLabel: string;
+  unsubscribeLabel: string;
+  viewInBrowserLabel: string;
+}
+
 export interface UserSettings {
   notifications: NotificationSetting[];
   preferenceEmailTypes: PreferenceEmailType[];
@@ -58,6 +66,7 @@ export interface UserSettings {
   integrations: IntegrationItem[];
   store: StoreConnection;
   brandDomain?: string | null;
+  preferenceFooter: PreferenceFooter;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -72,8 +81,17 @@ export class SettingsApiService {
     return this.api.put<UserSettings>('/settings/notifications', { notifications });
   }
 
-  updatePreferences(emailTypes: PreferenceEmailType[], frequencies: PreferenceFrequency[]): Observable<UserSettings> {
-    return this.api.put<UserSettings>('/settings/preferences', { emailTypes, frequencies });
+  updatePreferences(
+    emailTypes: PreferenceEmailType[],
+    frequencies: PreferenceFrequency[],
+    footer: PreferenceFooter,
+    brandDomain: string,
+  ): Observable<UserSettings> {
+    return this.api.put<UserSettings>('/settings/preferences', { emailTypes, frequencies, footer, brandDomain });
+  }
+
+  applyFooterToCampaigns(campaignIds: string[]): Observable<{ updatedCount: number; message: string }> {
+    return this.api.post<{ updatedCount: number; message: string }>('/settings/preferences/apply-footer', { campaignIds });
   }
 
   updateStore(payload: { connected: boolean; storeUrl: string; events: StoreEventSettings }): Observable<UserSettings> {
@@ -91,4 +109,69 @@ export class SettingsApiService {
   testStore(): Observable<UserSettings> {
     return this.api.post<UserSettings>('/settings/store/test', {});
   }
+
+  getSesStatus(): Observable<SesStatus> {
+    return this.api.get<SesStatus>('/deliverability/ses/status');
+  }
+
+  verifySesIdentity(value: string): Observable<SesIdentityStatus> {
+    const q = encodeURIComponent(value.trim());
+    return this.api.get<SesIdentityStatus>(`/deliverability/ses/verify-identity?value=${q}`);
+  }
+
+  sendSesTest(toEmail: string): Observable<{ message: string; toEmail: string; sesMessageId?: string; success?: boolean }> {
+    return this.api.post('/deliverability/ses/test-send', { toEmail });
+  }
+
+  getSenderIdentity(): Observable<SenderIdentity> {
+    return this.api.get<SenderIdentity>('/settings/sender');
+  }
+
+  requestSenderOtp(fromEmail: string, fromName: string): Observable<SenderOtpResponse> {
+    return this.api.post<SenderOtpResponse>('/settings/sender/request-otp', { fromEmail, fromName });
+  }
+
+  verifySenderOtp(code: string): Observable<SenderOtpResponse> {
+    return this.api.post<SenderOtpResponse>('/settings/sender/verify-otp', { code });
+  }
+}
+
+export interface SenderIdentity {
+  fromEmail: string;
+  fromName: string;
+  verified: boolean;
+  verifiedAt?: string | null;
+  pendingEmail: string;
+  hasPendingOtp: boolean;
+  defaultFromEmail: string;
+  usingDefault: boolean;
+  message: string;
+}
+
+export interface SenderOtpResponse {
+  success: boolean;
+  message: string;
+  identity: SenderIdentity;
+}
+
+export interface SesIdentityStatus {
+  identity: string;
+  identityType: string;
+  foundInAccount: boolean;
+  verified: boolean;
+  verificationStatus: string;
+  message: string;
+}
+
+export interface SesStatus {
+  enabled: boolean;
+  configured: boolean;
+  region: string;
+  fromEmail: string;
+  fromName: string;
+  configurationSetName: string;
+  hasCredentials: boolean;
+  message: string;
+  checklist: string[];
+  fromIdentity?: SesIdentityStatus | null;
 }

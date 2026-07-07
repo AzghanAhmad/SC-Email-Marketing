@@ -8,7 +8,7 @@ namespace ScribeCount.Email.Api.Controllers;
 [ApiController]
 [AllowAnonymous]
 [Route("api/v1/public/campaigns")]
-public class PublicCampaignController(CampaignService campaigns, IHttpContextAccessor httpContext) : ControllerBase
+public class PublicCampaignController(CampaignService campaigns, SettingsService settings, IHttpContextAccessor httpContext) : ControllerBase
 {
     private static readonly byte[] TransparentGif =
     [
@@ -25,6 +25,15 @@ public class PublicCampaignController(CampaignService campaigns, IHttpContextAcc
         return File(TransparentGif, "image/gif");
     }
 
+    [HttpGet("click")]
+    public async Task<IActionResult> TrackClick([FromQuery] string token, [FromQuery] string u)
+    {
+        var destination = await campaigns.RecordCampaignClickAsync(token, u);
+        return destination is null
+            ? BadRequest(new { message = "This link is invalid or has expired." })
+            : Redirect(destination);
+    }
+
     [HttpGet("unsubscribe")]
     public async Task<ActionResult<UnsubscribePreviewDto>> GetUnsubscribePreview([FromQuery] string token)
     {
@@ -39,6 +48,13 @@ public class PublicCampaignController(CampaignService campaigns, IHttpContextAcc
         return result is null
             ? BadRequest(new { message = "Could not process unsubscribe request." })
             : Ok(result);
+    }
+
+    [HttpGet("preferences")]
+    public async Task<ActionResult<PreferenceCenterDto>> GetPreferences([FromQuery] string token)
+    {
+        var center = await settings.GetPreferenceCenterAsync(token);
+        return center is null ? NotFound(new { message = "This preference link is invalid or has expired." }) : Ok(center);
     }
 
     [HttpGet("view")]

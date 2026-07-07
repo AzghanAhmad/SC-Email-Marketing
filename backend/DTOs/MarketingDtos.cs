@@ -81,6 +81,21 @@ public record GrowthToolsBundleDto(List<GrowthToolDto> Tools);
 
 public record SaveGrowthToolConfigRequest(string ConfigJson);
 
+public record ImportContactRow(
+    string Email, string? Name, string? FirstName, string? LastName,
+    List<string>? Tags, string? Status);
+
+public record ImportSubscribersRequest(
+    List<ImportContactRow> Contacts,
+    Guid? ListId,
+    string? NewListName,
+    string? DuplicateMode,
+    List<string>? Tags);
+
+public record ImportSubscribersResult(
+    int TotalRows, int Imported, int Updated, int Skipped, int Invalid, int Duplicates,
+    string? ListId, string? ListName, List<string> Errors);
+
 public record EmailTemplateDto(
     string Id, string Name, string Category, string Preview, string Description,
     string SubjectLine, string PreviewText, string HtmlBody, string IconKey, string SuggestedCampaignType,
@@ -126,7 +141,7 @@ public record CreateBrandAssetRequest(string Name, string FileType, long SizeByt
 public record SignUpFormDto(
     string Id, string Name, string Type, string Status, int Submissions,
     decimal ConversionRate, string TargetList, string? TargetListId, string LastModified, string IconKey,
-    string Headline, string Description, string ButtonText, string ThankYouMessage);
+    string Headline, string Description, string ButtonText, string ThankYouMessage, string Url);
 
 public record SignUpFormStatsDto(string Label, string Value, double Change);
 

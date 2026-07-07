@@ -1,10 +1,12 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, inject, signal, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { AuthService } from '../../core/services/auth.service';
-import { SettingsApiService, UserSettings, NotificationSetting } from '../../core/services/settings-api.service';
+import { SettingsApiService, UserSettings, NotificationSetting, PreferenceFooter, SesStatus, SesIdentityStatus, SenderIdentity } from '../../core/services/settings-api.service';
+import { CampaignApiService, Campaign } from '../../core/services/campaign-api.service';
+import { ApiService } from '../../core/services/api.service';
 import { NAV_ICONS } from '../../core/constants/nav-icons';
 import { InboxConnectionComponent } from './inbox-connection.component';
 
@@ -13,7 +15,7 @@ type SettingsTab = 'account' | 'domain' | 'inbox' | 'store' | 'notifications' | 
 @Component({
   selector: 'app-settings',
   standalone: true,
-  imports: [CommonModule, FormsModule, InboxConnectionComponent],
+  imports: [CommonModule, FormsModule, RouterModule, InboxConnectionComponent],
   template: `
     <div class="page-wrapper">
       <div class="page-header">
@@ -26,7 +28,7 @@ type SettingsTab = 'account' | 'domain' | 'inbox' | 'store' | 'notifications' | 
       <div class="settings-layout">
         <!-- Nav -->
         <nav class="settings-nav">
-          <button *ngFor="let s of sections" class="snav-item" [class.active]="activeTab() === s.id" (click)="activeTab.set(s.id)">
+          <button *ngFor="let s of sections" class="snav-item" [class.active]="activeTab() === s.id" (click)="switchTab(s.id)">
             <span class="snav-icon" [innerHTML]="s.icon"></span>
             {{ s.label }}
           </button>
@@ -36,7 +38,7 @@ type SettingsTab = 'account' | 'domain' | 'inbox' | 'store' | 'notifications' | 
         <div class="settings-content">
 
           <!-- Account -->
-          <div *ngIf="activeTab() === 'account'">
+          <div *ngIf="activeTab() === 'account'" class="settings-tab-stack">
             <div class="glass-card settings-card">
               <h2 class="sc-title">Account Information</h2>
               <p class="sc-sub">Update your personal details and preferences</p>
@@ -90,38 +92,146 @@ type SettingsTab = 'account' | 'domain' | 'inbox' | 'store' | 'notifications' | 
             </div>
           </div>
 
-          <!-- Domain -->
-          <div *ngIf="activeTab() === 'domain'">
+          <!-- Domain / Amazon SES -->
+          <div *ngIf="activeTab() === 'domain'" class="domain-tab-stack">
             <div class="glass-card settings-card">
-              <h2 class="sc-title">Sending Domain</h2>
-              <p class="sc-sub">Set up a custom sending domain to improve deliverability</p>
-              <div class="domain-status">
-                <div class="domain-badge unverified">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                  Not configured
+              <h2 class="sc-title">Your sending address</h2>
+              <p class="sc-sub">Send campaigns from any email address you own. You must verify ownership with a one-time code sent to that inbox before it becomes your From address. Each address can only be claimed by one account.</p>
+
+              <div class="sender-current" *ngIf="sender">
+                <div class="domain-badge" [class.verified]="sender.verified && !sender.usingDefault" [class.unverified]="sender.usingDefault">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                  {{ sender.verified && !sender.usingDefault ? 'Verified sender' : 'Using platform default' }}
+                </div>
+                <div class="ses-meta">
+                  <div class="ses-row"><span>Sending from</span><strong>{{ (sender.verified && !sender.usingDefault ? sender.fromEmail : sender.defaultFromEmail) || '—' }}</strong></div>
+                  <div class="ses-row" *ngIf="sender.verified && !sender.usingDefault && sender.verifiedAt"><span>Verified</span><strong>{{ sender.verifiedAt }}</strong></div>
                 </div>
               </div>
-              <div class="form-group">
-                <label class="form-label">Your Domain <span class="info-icon" data-tooltip="Enter the domain you want to send emails from, e.g. yourdomain.com">?</span></label>
+
+              <!-- Step 1: request code -->
+              <div class="form-group" *ngIf="senderStage !== 'code'">
+                <label class="form-label">From email address <span class="info-icon" data-tooltip="We'll email a verification code to this address">?</span></label>
                 <div class="domain-input-row">
-                  <input type="text" class="form-input" [(ngModel)]="domain.name" placeholder="yourdomain.com" />
-                  <button class="btn-primary" data-tooltip="Verify domain ownership via DNS records">Verify Domain</button>
+                  <input type="email" class="form-input" [(ngModel)]="senderEmailInput" placeholder="you@yourdomain.com" />
+                  <button class="btn-primary" type="button" [disabled]="senderBusy || !senderEmailInput.trim()" (click)="requestSenderOtp()">
+                    {{ senderBusy ? 'Sending…' : 'Send code' }}
+                  </button>
                 </div>
+                <div class="form-group" style="margin-top:.75rem;">
+                  <label class="form-label">From name (optional)</label>
+                  <input type="text" class="form-input" [(ngModel)]="senderNameInput" placeholder="e.g. Jane Austen" />
+                </div>
+              </div>
+
+              <!-- Step 2: enter code -->
+              <div class="form-group" *ngIf="senderStage === 'code'">
+                <label class="form-label">Enter the 6-digit code sent to {{ sender?.pendingEmail }}</label>
+                <div class="domain-input-row">
+                  <input type="text" inputmode="numeric" maxlength="6" class="form-input" [(ngModel)]="senderCodeInput" placeholder="123456" />
+                  <button class="btn-primary" type="button" [disabled]="senderBusy || senderCodeInput.trim().length < 6" (click)="verifySenderOtp()">
+                    {{ senderBusy ? 'Verifying…' : 'Verify' }}
+                  </button>
+                </div>
+                <div class="sender-code-actions">
+                  <button class="btn-ghost btn-sm" type="button" [disabled]="senderBusy" (click)="requestSenderOtp()">Resend code</button>
+                  <button class="btn-ghost btn-sm" type="button" (click)="cancelSenderVerification()">Use a different address</button>
+                </div>
+              </div>
+
+              <div class="ses-test-result" [class.success]="senderMsgSuccess" [class.error]="!senderMsgSuccess" *ngIf="senderMessage">
+                <div class="ses-test-result-icon" aria-hidden="true">
+                  <svg *ngIf="senderMsgSuccess" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                  <svg *ngIf="!senderMsgSuccess" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                </div>
+                <div class="ses-test-result-body">
+                  <span class="ses-test-result-detail">{{ senderMessage }}</span>
+                </div>
+              </div>
+            </div>
+            <div class="glass-card settings-card">
+              <h2 class="sc-title">Amazon SES sending</h2>
+              <p class="sc-sub">Campaigns, flows, and platform mail send through Amazon SES. Bounce, complaint, and delivery events arrive via SNS.</p>
+              <div class="domain-status">
+                <div class="domain-badge" [class.unverified]="!sesStatus?.configured" [class.verified]="sesStatus?.configured">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  {{ sesStatus?.configured ? 'SES configured' : 'SES not configured' }}
+                </div>
+              </div>
+              <p class="field-help" *ngIf="sesStatus">{{ sesStatus.message }}</p>
+              <div class="ses-identity-block" *ngIf="sesStatus?.fromIdentity as fromId">
+                <span class="ses-identity-label">From identity ({{ fromId.identity }})</span>
+                <div class="domain-badge" [class.verified]="fromId.verified" [class.unverified]="!fromId.verified">
+                  {{ fromId.verified ? 'Verified in Amazon SES' : (fromId.foundInAccount ? 'In SES — not verified' : 'Not in your SES account') }}
+                </div>
+                <p class="field-help">{{ fromId.message }}</p>
+              </div>
+              <div class="ses-meta" *ngIf="sesStatus">
+                <div class="ses-row"><span>Region</span><strong>{{ sesStatus.region || '—' }}</strong></div>
+                <div class="ses-row"><span>From</span><strong>{{ sesStatus.fromEmail || '—' }}</strong></div>
+                <div class="ses-row"><span>Configuration set</span><strong>{{ sesStatus.configurationSetName || '—' }}</strong></div>
+              </div>
+              <ul class="ses-checklist" *ngIf="sesStatus?.checklist?.length">
+                <li *ngFor="let item of sesStatus!.checklist">{{ item }}</li>
+              </ul>
+              <div class="form-group ses-test-group" *ngIf="sesStatus?.configured">
+                <label class="form-label">Send SES test email <span class="info-icon" data-tooltip="Sends a test message through Amazon SES to confirm credentials and identity">?</span></label>
+                <div class="domain-input-row">
+                  <input type="email" class="form-input" [(ngModel)]="sesTestEmail" placeholder="you@example.com" />
+                  <button class="btn-primary" type="button" [disabled]="sesTestBusy" (click)="sendSesTest()">{{ sesTestBusy ? 'Sending…' : 'Send test' }}</button>
+                </div>
+                <div class="ses-test-result success" *ngIf="sesTestSuccess">
+                  <div class="ses-test-result-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                  </div>
+                  <div class="ses-test-result-body">
+                    <span class="ses-test-result-title">{{ sesTestSuccess.title }}</span>
+                    <span class="ses-test-result-detail">{{ sesTestSuccess.detail }}</span>
+                  </div>
+                </div>
+                <div class="ses-test-result error" *ngIf="sesTestFailed">
+                  <div class="ses-test-result-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                  </div>
+                  <div class="ses-test-result-body">
+                    <span class="ses-test-result-title">{{ sesTestFailedTitle }}</span>
+                    <span class="ses-test-result-detail">{{ sesTestFailedDetail }}</span>
+                  </div>
+                </div>
+              </div>
+              <p class="field-help config-hint">
+                Connect your own AWS account using our step-by-step guide.
+                <a routerLink="/settings/amazon-ses-setup" class="setup-guide-link">Open Amazon SES + SNS setup guide →</a>
+              </p>
+            </div>
+            <div class="glass-card settings-card">
+              <h2 class="sc-title">DNS / domain notes</h2>
+              <p class="sc-sub">Verify your sending domain in the AWS SES console, then add the SPF, DKIM, and DMARC records AWS shows you.</p>
+              <div class="form-group">
+                <label class="form-label">Your Domain <span class="info-icon" data-tooltip="The domain verified in Amazon SES, e.g. yourdomain.com">?</span></label>
+                <div class="domain-input-row">
+                  <input type="text" class="form-input" [(ngModel)]="domain.name" placeholder="yourdomain.com" (blur)="checkDomainInSes()" />
+                  <button type="button" class="btn-secondary btn-sm" [disabled]="domainVerifyBusy || !domain.name.trim()" (click)="checkDomainInSes()">
+                    {{ domainVerifyBusy ? 'Checking…' : 'Check in AWS' }}
+                  </button>
+                </div>
+              </div>
+              <div class="ses-identity-block" *ngIf="domainIdentity">
+                <div class="domain-badge" [class.verified]="domainIdentity.verified" [class.unverified]="!domainIdentity.verified">
+                  {{ domainIdentity.verified ? 'Verified in Amazon SES' : (domainIdentity.foundInAccount ? 'In SES — not verified' : 'Not in your SES account') }}
+                </div>
+                <p class="field-help">{{ domainIdentity.message }}</p>
               </div>
               <div class="dns-records" *ngIf="domain.name">
-                <h3 class="dns-title">DNS Records to Add</h3>
-                <p class="dns-sub">Add these records to your DNS provider to verify ownership</p>
+                <h3 class="dns-title">Typical record types (use values from AWS SES)</h3>
                 <div class="dns-table">
                   <div class="dns-row header">
-                    <span>Type</span><span>Name</span><span>Value</span><span></span>
+                    <span>Type</span><span>Name</span><span>Purpose</span>
                   </div>
                   <div class="dns-row" *ngFor="let r of dnsRecords">
                     <span class="dns-type">{{ r.type }}</span>
                     <span class="dns-name">{{ r.name }}</span>
                     <span class="dns-val">{{ r.value }}</span>
-                    <button class="btn-ghost btn-sm btn-icon" data-tooltip="Copy to clipboard">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                    </button>
                   </div>
                 </div>
               </div>
@@ -134,7 +244,7 @@ type SettingsTab = 'account' | 'domain' | 'inbox' | 'store' | 'notifications' | 
           </div>
 
           <!-- Store Connection (Shopify) -->
-          <div *ngIf="activeTab() === 'store'">
+          <div *ngIf="activeTab() === 'store'" class="settings-tab-stack">
 
             <!-- Connection Status Card -->
             <div class="glass-card settings-card">
@@ -455,7 +565,6 @@ type SettingsTab = 'account' | 'domain' | 'inbox' | 'store' | 'notifications' | 
                 <p>A preference center is linked from the footer of every email you send. Readers tell you what they want — and your segmentation updates automatically, with no manual list management.</p>
               </div>
 
-              <!-- Preference options -->
               <h3 class="pref-section-title">Email Types Readers Can Choose</h3>
               <div class="pref-options-list">
                 <div class="pref-option" *ngFor="let opt of prefOptions">
@@ -464,16 +573,15 @@ type SettingsTab = 'account' | 'domain' | 'inbox' | 'store' | 'notifications' | 
                       <input type="checkbox" [(ngModel)]="opt.enabled" />
                       <span class="toggle-slider"></span>
                     </label>
-                    <div class="pref-opt-info">
-                      <span class="pref-opt-name">{{ opt.name }}</span>
-                      <span class="pref-opt-desc">{{ opt.description }}</span>
+                    <div class="pref-opt-info pref-opt-editable">
+                      <input type="text" class="pref-edit-title" [(ngModel)]="opt.name" placeholder="Option name" />
+                      <input type="text" class="pref-edit-desc" [(ngModel)]="opt.description" placeholder="Description readers see" />
                     </div>
                   </div>
                   <span class="pref-opt-count">{{ opt.subscriberCount | number }} subscribers</span>
                 </div>
               </div>
 
-              <!-- Frequency options -->
               <h3 class="pref-section-title" style="margin-top:1.5rem">Frequency Options Readers Can Choose</h3>
               <div class="pref-freq-grid">
                 <div class="pref-freq-card" *ngFor="let freq of prefFrequencies" [class.pref-freq-active]="freq.enabled">
@@ -482,27 +590,62 @@ type SettingsTab = 'account' | 'domain' | 'inbox' | 'store' | 'notifications' | 
                     <span class="toggle-slider"></span>
                   </label>
                   <span class="nav-icon pref-freq-icon" [innerHTML]="freq.safeIcon"></span>
-                  <div class="pref-freq-name">{{ freq.name }}</div>
-                  <div class="pref-freq-desc">{{ freq.description }}</div>
+                  <input type="text" class="pref-edit-title" [(ngModel)]="freq.name" placeholder="Frequency name" />
+                  <input type="text" class="pref-edit-desc" [(ngModel)]="freq.description" placeholder="Frequency description" />
                 </div>
               </div>
 
-              <!-- Footer link preview -->
               <h3 class="pref-section-title" style="margin-top:1.5rem">Footer Link Preview</h3>
-              <div class="pref-footer-preview">
-                <div class="pfp-inner">
-                  <p class="pfp-text">You're receiving this because you subscribed at <strong>{{ brandDomain }}</strong>.</p>
-                  <div class="pfp-links">
-                    <a class="pfp-link">Manage preferences</a>
-                    <span class="pfp-sep">·</span>
-                    <a class="pfp-link">Unsubscribe</a>
-                    <span class="pfp-sep">·</span>
-                    <a class="pfp-link">View in browser</a>
+              <p class="pref-domain-note">Connected sending domain: <strong>{{ brandDomain }}</strong></p>
+              <div class="pref-footer-edit">
+                <label class="form-label">Subscription line</label>
+                <input type="text" class="form-input" [(ngModel)]="prefFooter.subscriptionLine" placeholder="You're receiving this because you subscribed at {domain}." />
+                <label class="form-label">Physical address (CAN-SPAM)</label>
+                <input type="text" class="form-input" [(ngModel)]="prefFooter.physicalAddress" />
+                <div class="pref-link-labels">
+                  <div>
+                    <label class="form-label">Manage preferences label</label>
+                    <input type="text" class="form-input" [(ngModel)]="prefFooter.managePreferencesLabel" />
                   </div>
-                  <p class="pfp-address">123 Author Lane, New York, NY 10001</p>
+                  <div>
+                    <label class="form-label">Unsubscribe label</label>
+                    <input type="text" class="form-input" [(ngModel)]="prefFooter.unsubscribeLabel" />
+                  </div>
+                  <div>
+                    <label class="form-label">View in browser label</label>
+                    <input type="text" class="form-input" [(ngModel)]="prefFooter.viewInBrowserLabel" />
+                  </div>
                 </div>
               </div>
-              <p class="pref-footer-note">The "Manage preferences" link is automatically added to every email footer and links to your preference center page.</p>
+              <div class="pref-footer-preview">
+                <div class="pfp-inner">
+                  <p class="pfp-text" [innerHTML]="footerPreviewLine"></p>
+                  <div class="pfp-links">
+                    <a class="pfp-link" [href]="previewPreferenceUrl" target="_blank" rel="noopener">{{ prefFooter.managePreferencesLabel }}</a>
+                    <span class="pfp-sep">·</span>
+                    <a class="pfp-link" [href]="previewUnsubscribeUrl" target="_blank" rel="noopener">{{ prefFooter.unsubscribeLabel }}</a>
+                    <span class="pfp-sep">·</span>
+                    <a class="pfp-link" [href]="previewViewUrl" target="_blank" rel="noopener">{{ prefFooter.viewInBrowserLabel }}</a>
+                  </div>
+                  <p class="pfp-address">{{ prefFooter.physicalAddress }}</p>
+                </div>
+              </div>
+
+              <h3 class="pref-section-title" style="margin-top:1.5rem">Apply Footer to Campaigns</h3>
+              <p class="pref-footer-note">Adds this footer to the end of selected campaign content. Sent campaigns use live links for each recipient.</p>
+              <div class="campaign-apply-list" *ngIf="campaignsForFooter.length > 0">
+                <label class="campaign-apply-item" *ngFor="let c of campaignsForFooter">
+                  <input type="checkbox" [checked]="selectedCampaignIds.has(c.id)" (change)="toggleCampaignFooter(c.id, $event)" />
+                  <span>
+                    <span class="cap-name">{{ c.name }}</span>
+                    <span class="cap-meta">{{ c.status }} · {{ c.sent > 0 ? (c.sent + ' sent') : 'not sent yet' }}</span>
+                  </span>
+                </label>
+              </div>
+              <p class="pref-footer-note" *ngIf="campaignsForFooter.length === 0">No campaigns found yet.</p>
+              <button type="button" class="btn-secondary" style="margin-top:.75rem" (click)="applyFooterToCampaigns()" [disabled]="selectedCampaignIds.size === 0 || applyingFooter">
+                {{ applyingFooter ? 'Applying…' : 'Apply footer to selected campaigns' }}
+              </button>
 
               <button class="btn-primary" style="margin-top:1.25rem" (click)="savePreferences()">Save Preference Center Settings</button>
             </div>
@@ -528,6 +671,7 @@ type SettingsTab = 'account' | 'domain' | 'inbox' | 'store' | 'notifications' | 
     .snav-icon :global(svg) { width:16px; height:16px; }
 
     .settings-content { display:flex; flex-direction:column; gap:1.25rem; }
+    .settings-tab-stack, .domain-tab-stack { display:flex; flex-direction:column; gap:1.25rem; }
     .settings-card { padding:1.75rem; }
     .sc-title { font-size:1.125rem; font-weight:700; color:#0f172a; margin:0 0 .35rem; }
     .sc-sub { font-size:.875rem; color:#94a3b8; margin:0 0 1.5rem; }
@@ -539,6 +683,50 @@ type SettingsTab = 'account' | 'domain' | 'inbox' | 'store' | 'notifications' | 
     .domain-badge { display:inline-flex; align-items:center; gap:.375rem; padding:.35rem .75rem; border-radius:8px; font-size:.8rem; font-weight:600; }
     .domain-badge.unverified { background:rgba(245,158,11,0.1); color:#d97706; border:1px solid rgba(245,158,11,0.2); }
     .domain-badge.verified { background:rgba(16,185,129,0.1); color:#059669; border:1px solid rgba(16,185,129,0.2); }
+    .ses-meta { display:flex; flex-direction:column; gap:.35rem; margin:.75rem 0; }
+    .ses-row { display:flex; justify-content:space-between; gap:1rem; font-size:.8125rem; color:var(--text-secondary); }
+    .ses-row strong { color:var(--text-primary); font-weight:600; text-align:right; word-break:break-all; }
+    .ses-checklist { margin:.5rem 0 0; padding-left:1.1rem; font-size:.8rem; color:var(--text-secondary); line-height:1.5; }
+    .ses-checklist li { margin-bottom:.25rem; }
+    .sender-current { margin:.5rem 0 1.25rem; padding-bottom:1rem; border-bottom:1px solid var(--border, #e2e8f0); }
+    .sender-code-actions { display:flex; gap:1rem; margin-top:.75rem; }
+    .ses-identity-block { margin:.75rem 0 1rem; display:flex; flex-direction:column; gap:.35rem; align-items:flex-start; }
+    .ses-identity-label { font-size:.75rem; font-weight:600; color:#64748b; }
+    .ses-test-group { margin-top:1rem; margin-bottom:0; }
+    .ses-test-result {
+      display:flex; align-items:flex-start; gap:.75rem;
+      margin-top:.75rem; padding:.875rem 1rem;
+      border-radius:10px; border:1px solid transparent;
+    }
+    .ses-test-result.success {
+      background:linear-gradient(135deg, rgba(16,185,129,0.08) 0%, rgba(5,150,105,0.04) 100%);
+      border-color:rgba(16,185,129,0.25);
+      color:#065f46;
+    }
+    .ses-test-result.error {
+      background:linear-gradient(135deg, rgba(239,68,68,0.08) 0%, rgba(220,38,38,0.04) 100%);
+      border-color:rgba(239,68,68,0.25);
+      color:#991b1b;
+    }
+    .ses-test-result-icon {
+      flex-shrink:0; width:32px; height:32px;
+      display:flex; align-items:center; justify-content:center;
+      border-radius:50%;
+    }
+    .ses-test-result.success .ses-test-result-icon {
+      background:rgba(16,185,129,0.15); color:#059669;
+    }
+    .ses-test-result.error .ses-test-result-icon {
+      background:rgba(239,68,68,0.15); color:#dc2626;
+    }
+    .ses-test-result-icon svg { width:18px; height:18px; }
+    .ses-test-result-body { display:flex; flex-direction:column; gap:.2rem; min-width:0; }
+    .ses-test-result-title { font-size:.875rem; font-weight:700; line-height:1.35; }
+    .ses-test-result-detail { font-size:.78rem; font-weight:500; line-height:1.45; opacity:.9; }
+    .config-hint { margin-top:1rem; }
+    .setup-guide-link { display:inline-block; margin-top:.35rem; color:#2563eb; font-weight:600; text-decoration:none; }
+    .setup-guide-link:hover { text-decoration:underline; }
+    code { font-size:.78rem; background:var(--bg-subtle); padding:.1rem .35rem; border-radius:4px; }
     .domain-input-row { display:flex; gap:.75rem; }
     .domain-input-row .form-input { flex:1; }
     .dns-records { margin-top:1.5rem; }
@@ -735,6 +923,18 @@ type SettingsTab = 'account' | 'domain' | 'inbox' | 'store' | 'notifications' | 
     .pfp-sep { color:#cbd5e1; font-size:.75rem; }
     .pfp-address { font-size:.75rem; color:#94a3b8; margin:0; }
     .pref-footer-note { font-size:.75rem; color:#94a3b8; line-height:1.5; }
+    .pref-domain-note { font-size:.8125rem; color:#64748b; margin:0 0 .75rem; }
+    .pref-footer-edit { display:flex; flex-direction:column; gap:.75rem; margin-bottom:1rem; }
+    .pref-link-labels { display:grid; grid-template-columns:repeat(3,1fr); gap:.75rem; }
+    .pref-edit-title { width:100%; border:none; background:transparent; font-size:.875rem; font-weight:600; color:#0f172a; outline:none; padding:0; margin-bottom:.2rem; }
+    .pref-edit-desc { width:100%; border:none; background:transparent; font-size:.78rem; color:#64748b; outline:none; padding:0; }
+    .pref-opt-editable { flex:1; min-width:0; }
+    .campaign-apply-list { display:flex; flex-direction:column; gap:.5rem; max-height:220px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:10px; padding:.5rem; }
+    .campaign-apply-item { display:flex; align-items:flex-start; gap:.625rem; padding:.5rem .625rem; border-radius:8px; cursor:pointer; }
+    .campaign-apply-item:hover { background:#f8fafc; }
+    .cap-name { display:block; font-size:.8125rem; font-weight:600; color:#0f172a; }
+    .cap-meta { display:block; font-size:.72rem; color:#94a3b8; text-transform:capitalize; }
+    @media(max-width:700px) { .pref-link-labels { grid-template-columns:1fr; } }
     /* Toggle for preference center (reuse from campaigns) */
     .toggle-wrap { position:relative; display:inline-flex; align-items:center; cursor:pointer; flex-shrink:0; }
     .toggle-wrap input { opacity:0; width:0; height:0; position:absolute; }
@@ -747,11 +947,27 @@ type SettingsTab = 'account' | 'domain' | 'inbox' | 'store' | 'notifications' | 
 })
 export class SettingsComponent implements OnInit {
   private settingsApi = inject(SettingsApiService);
+  private campaignApi = inject(CampaignApiService);
   private sanitizer = inject(DomSanitizer);
+  private cdr = inject(ChangeDetectorRef);
+  private router = inject(Router);
 
   activeTab = signal<SettingsTab>('account');
   showToast = signal(false);
   brandDomain = 'yourdomain.com';
+  prefFooter: PreferenceFooter = {
+    subscriptionLine: "You're receiving this because you subscribed at {domain}.",
+    physicalAddress: '123 Author Lane, New York, NY 10001',
+    managePreferencesLabel: 'Manage preferences',
+    unsubscribeLabel: 'Unsubscribe',
+    viewInBrowserLabel: 'View in browser',
+  };
+  campaignsForFooter: Campaign[] = [];
+  selectedCampaignIds = new Set<string>();
+  applyingFooter = false;
+  readonly previewPreferenceUrl = '/preferences?token=preview';
+  readonly previewUnsubscribeUrl = '/unsubscribe?token=preview';
+  readonly previewViewUrl = '/email/view?token=preview';
 
   account = {
     firstName: 'Jane', lastName: 'Austen',
@@ -759,6 +975,24 @@ export class SettingsComponent implements OnInit {
   };
   passwords = { current: '', next: '', confirm: '' };
   domain = { name: '' };
+  sesStatus: SesStatus | null = null;
+  sesTestEmail = '';
+  sesTestBusy = false;
+  sesTestSuccess: { title: string; detail: string } | null = null;
+  sesTestFailed = false;
+  sesTestFailedTitle = 'SES test send failed';
+  sesTestFailedDetail = 'The test email could not be sent. In SES sandbox, both the From address and recipient must be verified in your AWS account.';
+  domainIdentity: SesIdentityStatus | null = null;
+  domainVerifyBusy = false;
+
+  sender: SenderIdentity | null = null;
+  senderStage: 'request' | 'code' = 'request';
+  senderEmailInput = '';
+  senderNameInput = '';
+  senderCodeInput = '';
+  senderBusy = false;
+  senderMessage = '';
+  senderMsgSuccess = false;
 
   sections = [
     { id: 'account' as SettingsTab, label: 'Account', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>' },
@@ -770,9 +1004,9 @@ export class SettingsComponent implements OnInit {
   ];
 
   dnsRecords = [
-    { type: 'TXT', name: '@', value: 'v=spf1 include:scribecount.com ~all' },
-    { type: 'CNAME', name: 'em._domainkey', value: 'em._domainkey.scribecount.com' },
-    { type: 'CNAME', name: 'mail', value: 'mail.scribecount.com' },
+    { type: 'TXT', name: '@', value: 'SPF (include amazonses.com — copy exact value from SES)' },
+    { type: 'CNAME', name: '*._domainkey', value: 'DKIM CNAMEs from SES identity' },
+    { type: 'TXT', name: '_dmarc', value: 'DMARC policy (e.g. v=DMARC1; p=none;)' },
   ];
 
   shopify = {
@@ -806,7 +1040,8 @@ export class SettingsComponent implements OnInit {
   ];
 
   notifications: NotificationSetting[] = [];
-  notificationsLoading = signal(true);
+  notificationsLoading = signal(false);
+  notificationGroups: { label: string; items: NotificationSetting[] }[] = [];
 
   private static readonly DEFAULT_NOTIFICATIONS: NotificationSetting[] = [
     { key: 'campaign_sent', title: 'Campaign sent', description: 'When a campaign finishes sending to your list', enabled: true },
@@ -829,8 +1064,58 @@ export class SettingsComponent implements OnInit {
     { label: 'Account', keys: ['product_updates'] },
   ];
 
-  get notificationGroups(): { label: string; items: NotificationSetting[] }[] {
-    return SettingsComponent.NOTIFICATION_GROUP_KEYS
+  get notificationGroupsView(): { label: string; items: NotificationSetting[] }[] {
+    return this.notificationGroups;
+  }
+
+  get footerPreviewLine(): string {
+    const line = (this.prefFooter.subscriptionLine || '').replace(/\{domain\}/gi, this.brandDomain);
+    return line.replace(this.brandDomain, `<strong>${this.brandDomain}</strong>`);
+  }
+
+  switchTab(tab: SettingsTab) {
+    this.activeTab.set(tab);
+    if (tab === 'domain') {
+      if (!this.router.url.split('?')[0].endsWith('/settings/domain')) {
+        void this.router.navigate(['/settings/domain']);
+      }
+    } else if (this.router.url.split('?')[0].endsWith('/settings/domain')) {
+      void this.router.navigate(['/settings'], { queryParams: tab === 'account' ? {} : { tab } });
+    }
+    if (tab === 'preferences' && this.campaignsForFooter.length === 0) {
+      this.loadCampaignsForFooter();
+    }
+    this.cdr.detectChanges();
+  }
+
+  private loadCampaignsForFooter() {
+    this.campaignApi.getBundle().subscribe({
+      next: b => { this.campaignsForFooter = b.campaigns ?? []; },
+      error: () => { this.campaignsForFooter = []; },
+    });
+  }
+
+  toggleCampaignFooter(id: string, event: Event) {
+    const checked = (event.target as HTMLInputElement).checked;
+    if (checked) this.selectedCampaignIds.add(id);
+    else this.selectedCampaignIds.delete(id);
+  }
+
+  applyFooterToCampaigns() {
+    if (this.selectedCampaignIds.size === 0) return;
+    this.applyingFooter = true;
+    this.settingsApi.applyFooterToCampaigns([...this.selectedCampaignIds]).subscribe({
+      next: res => {
+        this.applyingFooter = false;
+        this.toast();
+        alert(res.message);
+      },
+      error: () => { this.applyingFooter = false; },
+    });
+  }
+
+  private rebuildNotificationGroups() {
+    this.notificationGroups = SettingsComponent.NOTIFICATION_GROUP_KEYS
       .map(group => ({
         label: group.label,
         items: group.keys
@@ -844,14 +1129,11 @@ export class SettingsComponent implements OnInit {
 
   prefFrequencies: { key: string; name: string; description: string; enabled: boolean; iconKey: string; safeIcon: SafeHtml }[] = [];
 
-  constructor(public auth: AuthService, private route: ActivatedRoute) {
-    this.applyTabFromRoute(this.route.snapshot.queryParamMap.get('tab'));
-  }
+  constructor(public auth: AuthService, private route: ActivatedRoute) {}
 
   ngOnInit() {
-    this.route.queryParamMap.subscribe(params => {
-      this.applyTabFromRoute(params.get('tab'));
-    });
+    this.syncTabFromRoute();
+    this.route.queryParamMap.subscribe(() => this.syncTabFromRoute());
     const user = this.auth.user();
     if (user) {
       const parts = user.name.split(' ');
@@ -860,6 +1142,180 @@ export class SettingsComponent implements OnInit {
       this.account.email = user.email;
     }
     this.loadSettings();
+    this.loadSesStatus();
+    this.loadSenderIdentity();
+    this.sesTestEmail = user?.email ?? '';
+  }
+
+  private loadSenderIdentity() {
+    this.settingsApi.getSenderIdentity().subscribe({
+      next: s => {
+        this.sender = s;
+        this.senderStage = s.hasPendingOtp ? 'code' : 'request';
+        if (!this.senderEmailInput) {
+          this.senderEmailInput = s.verified && !s.usingDefault ? s.fromEmail : s.pendingEmail;
+        }
+        if (!this.senderNameInput) this.senderNameInput = s.fromName || '';
+        this.cdr.detectChanges();
+      },
+      error: () => { this.sender = null; },
+    });
+  }
+
+  requestSenderOtp() {
+    const email = this.senderEmailInput.trim();
+    if (!email) return;
+    this.senderBusy = true;
+    this.senderMessage = '';
+    this.cdr.detectChanges();
+    this.settingsApi.requestSenderOtp(email, this.senderNameInput.trim()).subscribe({
+      next: res => {
+        this.senderBusy = false;
+        this.sender = res.identity;
+        this.senderMsgSuccess = res.success;
+        this.senderMessage = res.message;
+        if (res.success) {
+          this.senderStage = 'code';
+          this.senderCodeInput = '';
+        }
+        this.cdr.detectChanges();
+      },
+      error: err => {
+        this.senderBusy = false;
+        this.senderMsgSuccess = false;
+        this.senderMessage = err?.error?.message || err?.message || 'Could not send the verification code.';
+        this.cdr.detectChanges();
+      },
+    });
+  }
+
+  verifySenderOtp() {
+    const code = this.senderCodeInput.trim();
+    if (code.length < 6) return;
+    this.senderBusy = true;
+    this.senderMessage = '';
+    this.cdr.detectChanges();
+    this.settingsApi.verifySenderOtp(code).subscribe({
+      next: res => {
+        this.senderBusy = false;
+        this.sender = res.identity;
+        this.senderMsgSuccess = res.success;
+        this.senderMessage = res.message;
+        if (res.success) {
+          this.senderStage = 'request';
+          this.senderCodeInput = '';
+          this.loadSesStatus();
+        }
+        this.cdr.detectChanges();
+      },
+      error: err => {
+        this.senderBusy = false;
+        this.senderMsgSuccess = false;
+        this.senderMessage = err?.error?.message || err?.message || 'Could not verify the code.';
+        this.cdr.detectChanges();
+      },
+    });
+  }
+
+  cancelSenderVerification() {
+    this.senderStage = 'request';
+    this.senderCodeInput = '';
+    this.senderMessage = '';
+    this.senderEmailInput = '';
+    this.senderNameInput = this.sender?.fromName || '';
+    this.cdr.detectChanges();
+  }
+
+  private loadSesStatus() {
+    this.settingsApi.getSesStatus().subscribe({
+      next: s => {
+        this.sesStatus = s;
+        if (s.fromEmail && !this.domain.name) {
+          const at = s.fromEmail.indexOf('@');
+          if (at > 0) this.domain.name = s.fromEmail.slice(at + 1);
+        }
+        if (this.domain.name.trim()) this.checkDomainInSes();
+        this.syncBrandDomainFromConnected();
+      },
+      error: () => {
+        this.sesStatus = {
+          enabled: false,
+          configured: false,
+          region: '',
+          fromEmail: '',
+          fromName: '',
+          configurationSetName: '',
+          hasCredentials: false,
+          message: 'Could not load SES status from the API.',
+          checklist: [],
+        };
+      },
+    });
+  }
+
+  sendSesTest() {
+    const to = this.sesTestEmail.trim();
+    if (!to) {
+      this.sesTestSuccess = null;
+      this.sesTestFailed = false;
+      return;
+    }
+    this.sesTestBusy = true;
+    this.sesTestSuccess = null;
+    this.sesTestFailed = false;
+    this.settingsApi.sendSesTest(to).subscribe({
+      next: res => {
+        this.sesTestBusy = false;
+        this.sesTestFailed = false;
+        this.sesTestSuccess = {
+          title: 'Test email sent successfully',
+          detail: `A test message was sent to ${to}. Check your inbox (and spam folder) — delivery can take up to a minute.`,
+        };
+      },
+      error: err => {
+        this.sesTestBusy = false;
+        this.sesTestSuccess = null;
+        this.sesTestFailed = true;
+        const body = err?.error;
+        if (body && typeof body === 'object') {
+          this.sesTestFailedTitle = typeof body.title === 'string' && body.title.trim()
+            ? body.title.trim()
+            : 'SES test send failed';
+          this.sesTestFailedDetail = typeof body.detail === 'string' && body.detail.trim()
+            ? body.detail.trim()
+            : ApiService.mapError(err).message;
+        } else {
+          this.sesTestFailedTitle = 'SES test send failed';
+          this.sesTestFailedDetail = ApiService.mapError(err).message;
+        }
+      },
+    });
+  }
+
+  checkDomainInSes() {
+    const value = this.domain.name.trim();
+    if (!value) {
+      this.domainIdentity = null;
+      return;
+    }
+    this.domainVerifyBusy = true;
+    this.settingsApi.verifySesIdentity(value).subscribe({
+      next: status => {
+        this.domainIdentity = status;
+        this.domainVerifyBusy = false;
+      },
+      error: () => {
+        this.domainIdentity = {
+          identity: value,
+          identityType: 'domain',
+          foundInAccount: false,
+          verified: false,
+          verificationStatus: 'error',
+          message: 'Could not check this domain in Amazon SES.',
+        };
+        this.domainVerifyBusy = false;
+      },
+    });
   }
 
   private loadSettings() {
@@ -871,6 +1327,7 @@ export class SettingsComponent implements OnInit {
       },
       error: () => {
         this.notifications = this.mergeNotifications([]);
+        this.rebuildNotificationGroups();
         this.notificationsLoading.set(false);
       },
     });
@@ -888,12 +1345,16 @@ export class SettingsComponent implements OnInit {
 
   private applySettings(s: UserSettings) {
     this.notifications = this.mergeNotifications(s.notifications ?? []);
+    this.rebuildNotificationGroups();
     this.prefOptions = s.preferenceEmailTypes;
     this.prefFrequencies = s.preferenceFrequencies.map(f => ({
       ...f,
       safeIcon: this.sanitizer.bypassSecurityTrustHtml(NAV_ICONS[f.iconKey] ?? NAV_ICONS['calendar']),
     }));
-    this.brandDomain = s.brandDomain || 'yourdomain.com';
+    this.brandDomain = s.brandDomain?.trim() || this.domain.name?.trim() || 'yourdomain.com';
+    if (s.preferenceFooter) {
+      this.prefFooter = { ...s.preferenceFooter };
+    }
     this.shopify = {
       connected: s.store.connected,
       storeUrl: s.store.storeUrl,
@@ -910,9 +1371,23 @@ export class SettingsComponent implements OnInit {
     };
   }
 
-  private applyTabFromRoute(tab: string | null) {
+  private syncTabFromRoute() {
+    const path = this.router.url.split('?')[0];
+    const tab = path.endsWith('/settings/domain')
+      ? 'domain'
+      : this.route.snapshot.queryParamMap.get('tab');
     if (tab && this.sections.some(s => s.id === tab)) {
       this.activeTab.set(tab as SettingsTab);
+      if (tab === 'preferences' && this.campaignsForFooter.length === 0) {
+        this.loadCampaignsForFooter();
+      }
+    }
+  }
+
+  private syncBrandDomainFromConnected() {
+    const connected = this.domain.name?.trim();
+    if (connected && (!this.brandDomain || this.brandDomain === 'yourdomain.com')) {
+      this.brandDomain = connected;
     }
   }
 
@@ -930,7 +1405,9 @@ export class SettingsComponent implements OnInit {
   savePreferences() {
     this.settingsApi.updatePreferences(
       this.prefOptions,
-      this.prefFrequencies.map(({ key, name, description, enabled, iconKey }) => ({ key, name, description, enabled, iconKey }))
+      this.prefFrequencies.map(({ key, name, description, enabled, iconKey }) => ({ key, name, description, enabled, iconKey })),
+      this.prefFooter,
+      this.brandDomain,
     ).subscribe(s => {
       this.applySettings(s);
       this.toast();

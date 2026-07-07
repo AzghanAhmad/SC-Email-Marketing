@@ -74,6 +74,10 @@ export class CampaignApiService {
     winnerMetric: string;
     waitHours: number;
     name?: string;
+    endsAt?: string | null;
+    content?: string;
+    sendToSegment?: string;
+    autoSendWinner?: boolean;
   }): Observable<AbTest> {
     return this.api.post<AbTest>('/campaigns/ab-tests', payload);
   }
@@ -130,5 +134,9 @@ export class CampaignApiService {
 
   launchAbTest(id: string): Observable<AbTest> {
     return this.api.post<AbTest>(`/campaigns/ab-tests/${id}/launch`, {});
+  }
+
+  endAbTest(id: string): Observable<AbTest> {
+    return this.api.post<AbTest>(`/campaigns/ab-tests/${id}/end`, {});
   }
 }

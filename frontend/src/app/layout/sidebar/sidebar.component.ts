@@ -1,4 +1,4 @@
-import { Component, OnDestroy } from '@angular/core';
+import { Component, OnDestroy, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule, Router, NavigationEnd } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
@@ -14,9 +14,9 @@ interface NavItem {
 }
 
 interface NavGroup {
+  key: string;
   label: string;
   icon: SafeHtml;
-  expanded: boolean;
   children: NavItem[];
 }
 
@@ -62,17 +62,17 @@ interface NavGroup {
           <span class="nav-label">{{ item.label }}</span>
         </a>
 
-        <div class="nav-group" *ngFor="let group of marketingGroups">
-          <button class="nav-group-header" (click)="group.expanded = !group.expanded"
-                  [class.expanded]="group.expanded">
+        <div class="nav-group" *ngFor="let group of marketingGroups; trackBy: trackGroup">
+          <button type="button" class="nav-group-header" (click)="toggleGroup(group.key, $event)"
+                  [class.expanded]="isExpanded(group.key)">
             <span class="nav-icon" [innerHTML]="group.icon"></span>
             <span class="nav-label">{{ group.label }}</span>
             <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                 [class.rotated]="group.expanded">
+                 [class.rotated]="isExpanded(group.key)">
               <polyline points="9 18 15 12 9 6"/>
             </svg>
           </button>
-          <div class="nav-group-children" [class.open]="group.expanded">
+          <div class="nav-group-children" [class.open]="isExpanded(group.key)">
             <a *ngFor="let child of group.children"
                [routerLink]="child.route" routerLinkActive="active" class="nav-child-item"
                (click)="onNavClick()">
@@ -86,18 +86,18 @@ interface NavGroup {
         <div class="nav-divider"></div>
         <div class="nav-section-label">Analytics</div>
 
-        <div class="nav-group">
-          <button class="nav-group-header" (click)="analyticsGroup.expanded = !analyticsGroup.expanded"
-                  [class.expanded]="analyticsGroup.expanded">
-            <span class="nav-icon" [innerHTML]="analyticsGroup.icon"></span>
-            <span class="nav-label">{{ analyticsGroup.label }}</span>
+        <div class="nav-group" *ngFor="let group of analyticsGroups; trackBy: trackGroup">
+          <button type="button" class="nav-group-header" (click)="toggleGroup(group.key, $event)"
+                  [class.expanded]="isExpanded(group.key)">
+            <span class="nav-icon" [innerHTML]="group.icon"></span>
+            <span class="nav-label">{{ group.label }}</span>
             <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                 [class.rotated]="analyticsGroup.expanded">
+                 [class.rotated]="isExpanded(group.key)">
               <polyline points="9 18 15 12 9 6"/>
             </svg>
           </button>
-          <div class="nav-group-children" [class.open]="analyticsGroup.expanded">
-            <a *ngFor="let child of analyticsGroup.children"
+          <div class="nav-group-children" [class.open]="isExpanded(group.key)">
+            <a *ngFor="let child of group.children"
                [routerLink]="child.route" routerLinkActive="active" class="nav-child-item"
                (click)="onNavClick()">
               <span class="child-icon" [innerHTML]="child.icon"></span>
@@ -195,8 +195,8 @@ interface NavGroup {
     .nav-group-header:hover .nav-icon,.nav-group-header.expanded .nav-icon { opacity:1; }
     .chevron { width:15px; height:15px; margin-left:auto; flex-shrink:0; transition:transform .25s cubic-bezier(.4,0,.2,1); opacity:.35; stroke-width:2.5; }
     .chevron.rotated { transform:rotate(90deg); opacity:.6; }
-    .nav-group-children { max-height:0; overflow:hidden; transition:max-height .3s cubic-bezier(.4,0,.2,1); }
-    .nav-group-children.open { max-height:400px; }
+    .nav-group-children { display:none; }
+    .nav-group-children.open { display:block; }
     .nav-child-item {
       display:flex; align-items:center; gap:.625rem; padding:.55rem 1rem .55rem 2.75rem;
       border-radius:8px; color:rgba(255,255,255,0.42); text-decoration:none;
@@ -242,15 +242,16 @@ export class SidebarComponent implements OnDestroy {
   inboxItem!: NavItem;
   marketingItems: NavItem[] = [];
   marketingGroups: NavGroup[] = [];
-  analyticsGroup!: NavGroup;
+  analyticsGroups: NavGroup[] = [];
   standaloneItems: NavItem[] = [];
+  private readonly expandedGroups = signal<Record<string, boolean>>({});
   private routerSub: Subscription;
 
   constructor(
     public auth: AuthService,
     private router: Router,
     private sanitizer: DomSanitizer,
-    public layout: LayoutService
+    public layout: LayoutService,
   ) {
     const s = (svg: string): SafeHtml => this.sanitizer.bypassSecurityTrustHtml(svg);
 
@@ -266,7 +267,8 @@ export class SidebarComponent implements OnDestroy {
 
     this.marketingGroups = [
       {
-        label: 'Audience', expanded: false,
+        key: 'audience',
+        label: 'Audience',
         icon: s('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>'),
         children: [
           { label: 'Growth Tools', route: '/audience/growth-tools', icon: s('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="14" height="14"><polyline points="4 14 9 9 13 13 20 6"/><polyline points="20 12 20 6 14 6"/></svg>') },
@@ -275,7 +277,8 @@ export class SidebarComponent implements OnDestroy {
         ]
       },
       {
-        label: 'Content', expanded: false,
+        key: 'content',
+        label: 'Content',
         icon: s('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>'),
         children: [
           { label: 'Templates', route: '/content/templates', icon: s('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="14" height="14"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="13" x2="14" y2="13"/></svg>') },
@@ -284,7 +287,8 @@ export class SidebarComponent implements OnDestroy {
         ]
       },
       {
-        label: 'Website', expanded: false,
+        key: 'website',
+        label: 'Website',
         icon: s('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>'),
         children: [
           { label: 'Sign-up Forms', route: '/website/sign-up-forms', icon: s('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="14" height="14"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="7" y1="9" x2="17" y2="9"/><line x1="7" y1="13" x2="14" y2="13"/></svg>') },
@@ -293,30 +297,69 @@ export class SidebarComponent implements OnDestroy {
       }
     ];
 
-    this.analyticsGroup = {
-      label: 'Analytics', expanded: false,
-      icon: s('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>'),
-      children: [
-        { label: 'Overview', route: '/dashboard', icon: s('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="14" height="14"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>') },
-        { label: 'Dashboards', route: '/analytics/dashboards', icon: s('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="14" height="14"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="5" rx="1"/><rect x="13" y="10" width="8" height="11" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/></svg>') },
-        { label: 'Metrics', route: '/analytics/metrics', icon: s('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="14" height="14"><line x1="4" y1="20" x2="20" y2="20"/><line x1="8" y1="16" x2="8" y2="9"/><line x1="12" y1="16" x2="12" y2="5"/><line x1="16" y1="16" x2="16" y2="12"/></svg>') },
-        { label: 'Benchmarks', route: '/analytics/benchmarks', icon: s('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="14" height="14"><path d="M22 12h-4l-3 8-6-16-3 8H2"/></svg>') },
-        { label: 'Deliverability', route: '/analytics/deliverability', icon: s('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="14" height="14"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>') },
-        { label: 'List Health', route: '/analytics/list-health', icon: s('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="14" height="14"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>') },
-        { label: 'Custom Reports', route: '/analytics/custom-reports', icon: s('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="14" height="14"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>') },
-        { label: 'Marketing Analytics', route: '/marketing-analytics', icon: s('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="14" height="14"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>') }
-      ]
-    };
+    this.analyticsGroups = [
+      {
+        key: 'analytics',
+        label: 'Analytics',
+        icon: s('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>'),
+        children: [
+          { label: 'Overview', route: '/dashboard', icon: s('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="14" height="14"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>') },
+          { label: 'Dashboards', route: '/analytics/dashboards', icon: s('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="14" height="14"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="5" rx="1"/><rect x="13" y="10" width="8" height="11" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/></svg>') },
+          { label: 'Metrics', route: '/analytics/metrics', icon: s('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="14" height="14"><line x1="4" y1="20" x2="20" y2="20"/><line x1="8" y1="16" x2="8" y2="9"/><line x1="12" y1="16" x2="12" y2="5"/><line x1="16" y1="16" x2="16" y2="12"/></svg>') },
+          { label: 'Benchmarks', route: '/analytics/benchmarks', icon: s('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="14" height="14"><path d="M22 12h-4l-3 8-6-16-3 8H2"/></svg>') },
+          { label: 'Deliverability', route: '/analytics/deliverability', icon: s('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="14" height="14"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>') },
+          { label: 'List Health', route: '/analytics/list-health', icon: s('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="14" height="14"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>') },
+          { label: 'Custom Reports', route: '/analytics/custom-reports', icon: s('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="14" height="14"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>') },
+          { label: 'Marketing Analytics', route: '/marketing-analytics', icon: s('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="14" height="14"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>') }
+        ]
+      }
+    ];
+
+    this.syncExpandedGroups();
 
     this.standaloneItems = [
       { label: 'Integrations', route: '/integrations', icon: s('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>') },
       { label: 'Settings', route: '/settings', icon: s('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="20" height="20"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>') }
     ];
 
-    // Auto-close sidebar on navigation (mobile)
+    this.syncExpandedGroups();
+
     this.routerSub = this.router.events.pipe(
       filter(e => e instanceof NavigationEnd)
-    ).subscribe(() => this.layout.close());
+    ).subscribe(() => {
+      this.syncExpandedGroups();
+      this.layout.close();
+    });
+  }
+
+  trackGroup = (_index: number, group: NavGroup) => group.key;
+
+  isExpanded(key: string): boolean {
+    return !!this.expandedGroups()[key];
+  }
+
+  toggleGroup(key: string, event: Event): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.expandedGroups.update(state => ({
+      ...state,
+      [key]: !state[key],
+    }));
+  }
+
+  private syncExpandedGroups(): void {
+    const url = this.router.url.split('?')[0];
+    this.expandedGroups.update(state => {
+      const next = { ...state };
+      for (const group of [...this.marketingGroups, ...this.analyticsGroups]) {
+        const active = group.children.some(child =>
+          url === child.route || url.startsWith(`${child.route}/`));
+        if (active) {
+          next[group.key] = true;
+        }
+      }
+      return next;
+    });
   }
 
   ngOnDestroy(): void {

@@ -16,6 +16,10 @@ export const routes: Routes = [
     loadComponent: () => import('./features/public/unsubscribe.component').then(m => m.UnsubscribeComponent)
   },
   {
+    path: 'preferences',
+    loadComponent: () => import('./features/public/preferences.component').then(m => m.PreferencesComponent)
+  },
+  {
     path: 'email/view',
     loadComponent: () => import('./features/public/campaign-email-view.component').then(m => m.CampaignEmailViewComponent)
   },
@@ -30,6 +34,10 @@ export const routes: Routes = [
   {
     path: 'p/:slug',
     loadComponent: () => import('./features/public/landing-page-public.component').then(m => m.LandingPagePublicComponent)
+  },
+  {
+    path: 'f/:id',
+    loadComponent: () => import('./features/public/sign-up-form-public.component').then(m => m.SignUpFormPublicComponent)
   },
   {
     path: 'website/forms/preview/:id',
@@ -77,6 +85,10 @@ export const routes: Routes = [
       {
         path: 'audience',
         loadComponent: () => import('./features/audience/audience.component').then(m => m.AudienceComponent)
+      },
+      {
+        path: 'audience/import',
+        loadComponent: () => import('./features/audience/import-wizard/import-wizard.component').then(m => m.ImportWizardComponent)
       },
       {
         path: 'audience/growth-tools',
@@ -168,6 +180,14 @@ export const routes: Routes = [
       {
         path: 'settings',
         loadComponent: () => import('./features/settings/settings.component').then(m => m.SettingsComponent)
+      },
+      {
+        path: 'settings/domain',
+        loadComponent: () => import('./features/settings/settings.component').then(m => m.SettingsComponent)
+      },
+      {
+        path: 'settings/amazon-ses-setup',
+        loadComponent: () => import('./features/settings/ses-sns-setup-guide.component').then(m => m.SesSnsSetupGuideComponent)
       },
       {
         path: 'about',

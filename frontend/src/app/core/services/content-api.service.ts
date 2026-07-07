@@ -147,8 +147,19 @@ export class ContentApiService {
 
   assetFullUrl(asset: BrandAsset): string | null {
     if (!asset.url) return null;
-    if (asset.url.startsWith('http')) return asset.url;
-    const origin = environment.apiUrl.replace(/\/api\/v1\/?$/, '');
-    return `${origin}${asset.url}`;
+    if (asset.url.startsWith('http://') || asset.url.startsWith('https://')) return asset.url;
+
+    const path = asset.url.startsWith('/') ? asset.url : `/${asset.url}`;
+
+    if (environment.apiUrl.startsWith('http')) {
+      const origin = environment.apiUrl.replace(/\/api\/v1\/?$/, '');
+      return `${origin}${path}`;
+    }
+
+    if (typeof window !== 'undefined' && window.location?.origin) {
+      return `${window.location.origin}${path}`;
+    }
+
+    return path;
   }
 }

@@ -58,11 +58,19 @@ public class AnalyticsService(AppDbContext db, IndustryBenchmarkService industry
         var prevUnsubRatePeriod = prevSentActs > 0 ? Math.Round(prevUnsubs * 100.0 / prevSentActs, 2) : 0;
         var unsubChange = PctChange(prevUnsubRatePeriod, unsubRatePeriod);
 
-        var periodBounces = periodCampaigns.Sum(c => Math.Max(0, c.SentCount - (int)(c.SentCount * 0.975)));
-        var prevBounces = prevCampaigns.Sum(c => Math.Max(0, c.SentCount - (int)(c.SentCount * 0.975)));
+        var deliveryEvents = await db.DeliveryEvents
+            .Where(e => e.UserId == userId && e.OccurredAt >= prevStart && e.OccurredAt <= periodEnd)
+            .ToListAsync();
+        var periodDeliveryEvents = deliveryEvents.Where(e => e.OccurredAt >= periodStart).ToList();
+        var prevDeliveryEvents = deliveryEvents.Where(e => e.OccurredAt < periodStart).ToList();
+
+        var periodBounces = periodDeliveryEvents.Count(e => e.EventType == "bounce");
+        var prevBounces = prevDeliveryEvents.Count(e => e.EventType == "bounce");
+        var periodComplaints = periodDeliveryEvents.Count(e => e.EventType == "complaint");
         var bounceRatePeriod = periodSentActs > 0 ? Math.Round(periodBounces * 100.0 / periodSentActs, 2) : 0;
         var prevBounceRatePeriod = prevSentActs > 0 ? Math.Round(prevBounces * 100.0 / prevSentActs, 2) : 0;
         var bounceChange = PctChange(prevBounceRatePeriod, bounceRatePeriod);
+        var complaintRatePeriod = periodSentActs > 0 ? Math.Round(periodComplaints * 100.0 / periodSentActs, 3) : 0;
 
         var bounceRate = subscribers.Count == 0 ? 0 : subscribers.Count(s => s.Status == "bounced") / (double)subscribers.Count * 100;
         var unsubRate = subscribers.Count == 0 ? 0 : subscribers.Count(s => s.Status == "unsubscribed") / (double)subscribers.Count * 100;
@@ -125,7 +133,7 @@ public class AnalyticsService(AppDbContext db, IndustryBenchmarkService industry
             new("Total Opens", totalOpens.ToString("N0"), prevOpensCount.ToString("N0"), PctChange(prevOpensCount, totalOpens), StatusForChange(PctChange(prevOpensCount, totalOpens))),
             new("Unique Clicks", totalClicks.ToString("N0"), prevClicksCount.ToString("N0"), PctChange(prevClicksCount, totalClicks), StatusForChange(PctChange(prevClicksCount, totalClicks))),
             new("Deliverability", $"{100 - bounceRate:0.0}%", "—", 0, bounceRate <= 2 ? "Healthy" : "Needs attention"),
-            new("Spam Complaints", "0.00%", "—", 0, "Healthy"),
+            new("Spam Complaints", $"{complaintRatePeriod:0.000}%", "—", 0, complaintRatePeriod < 0.01 ? "Healthy" : "Needs attention"),
             new("Revenue (Total)", totalRevenue > 0 ? $"${totalRevenue:0,0}" : "$0", prevRevenue > 0 ? $"${prevRevenue:0,0}" : "$0", revenueChange, StatusForChange(revenueChange))
         };
 
@@ -143,32 +151,68 @@ public class AnalyticsService(AppDbContext db, IndustryBenchmarkService industry
             new("Click rate", $"{clickRate:0.2}%", "greater than 1.20%", clickRate >= 1.2 ? "good" : clickRate >= 0.5 ? "warning" : "danger"),
             new("Bounce rate", $"{bounceRate:0.2}%", "less than 1.00%", bounceRate <= 1 ? "good" : bounceRate <= 2.5 ? "warning" : "danger"),
             new("Unsubscribe rate", $"{unsubRate:0.2}%", "less than 0.30%", unsubRate <= 0.3 ? "good" : unsubRate <= 0.75 ? "warning" : "danger"),
-            new("Spam complaint rate", "0.00%", "less than 0.01%", "good")
+            new("Spam complaint rate", $"{complaintRatePeriod:0.000}%", "less than 0.01%",
+                complaintRatePeriod < 0.01 ? "good" : complaintRatePeriod < 0.05 ? "warning" : "danger")
         };
 
         var deliveryReports = periodCampaigns.Take(10).Select(c =>
         {
-            var delivered = (int)(c.SentCount * 0.975);
-            var bounced = c.SentCount - delivered;
+            var campaignEvents = periodDeliveryEvents.Where(e => e.CampaignId == c.Id).ToList();
+            var delivered = campaignEvents.Count(e => e.EventType == "delivery");
+            var bounced = campaignEvents.Count(e => e.EventType == "bounce");
+            if (delivered == 0 && bounced == 0 && c.SentCount > 0)
+            {
+                // No SNS events yet — show sent as pending delivery confirmation
+                delivered = 0;
+                bounced = 0;
+            }
             var rate = c.SentCount == 0 ? 0 : Math.Round(delivered / (double)c.SentCount * 100, 1);
             return new DeliveryReportRowDto(c.Name, c.SentCount, delivered, bounced, rate);
         }).ToList();
 
+        var hardBounces = periodDeliveryEvents.Count(e =>
+            e.EventType == "bounce" && e.BounceType.Equals("Permanent", StringComparison.OrdinalIgnoreCase));
+        var softBounces = periodDeliveryEvents.Count(e =>
+            e.EventType == "bounce" && !e.BounceType.Equals("Permanent", StringComparison.OrdinalIgnoreCase));
         var bouncedCount = subscribers.Count(s => s.Status == "bounced");
-        var suppressedCount = subscribers.Count(s => s.Status is "suppressed" or "inactive");
+        var complainedCount = subscribers.Count(s => s.Status == "complained");
+        var suppressedCount = subscribers.Count(s => s.Status is "suppressed" or "inactive" or "bounced" or "complained");
         var bounceStats = new List<BounceStatDto>
         {
-            new("Hard Bounces", bouncedCount.ToString(), subscribers.Count == 0 ? "0" : $"{bouncedCount / (double)subscribers.Count * 100:0.00}", "hard-bounce"),
-            new("Soft Bounces", "0", "0.00", "soft-bounce"),
-            new("Suppressed", suppressedCount.ToString(), subscribers.Count == 0 ? "0" : $"{suppressedCount / (double)subscribers.Count * 100:0.00}", "suppressed"),
-            new("Complaints", "0", "0.00", "complaint")
+            new("Hard Bounces", hardBounces > 0 ? hardBounces.ToString() : bouncedCount.ToString(),
+                subscribers.Count == 0 ? "0" : $"{(hardBounces > 0 ? hardBounces : bouncedCount) / (double)subscribers.Count * 100:0.00}", "hard-bounce"),
+            new("Soft Bounces", softBounces.ToString(),
+                subscribers.Count == 0 ? "0" : $"{softBounces / (double)subscribers.Count * 100:0.00}", "soft-bounce"),
+            new("Suppressed", suppressedCount.ToString(),
+                subscribers.Count == 0 ? "0" : $"{suppressedCount / (double)subscribers.Count * 100:0.00}", "suppressed"),
+            new("Complaints", periodComplaints > 0 ? periodComplaints.ToString() : complainedCount.ToString(),
+                subscribers.Count == 0 ? "0" : $"{(periodComplaints > 0 ? periodComplaints : complainedCount) / (double)subscribers.Count * 100:0.00}", "complaint")
         };
 
-        var bouncedEmails = subscribers
-            .Where(s => s.Status == "bounced")
+        var bouncedEmails = periodDeliveryEvents
+            .Where(e => e.EventType is "bounce" or "complaint")
+            .OrderByDescending(e => e.OccurredAt)
             .Take(10)
-            .Select(s => new BouncedEmailRowDto(s.Email, "hard", "Mailbox does not exist", s.JoinedAt.ToString("MMM d, yyyy")))
+            .Select(e => new BouncedEmailRowDto(
+                e.Email,
+                e.EventType == "complaint" ? "complaint"
+                    : e.BounceType.Equals("Permanent", StringComparison.OrdinalIgnoreCase) ? "hard" : "soft",
+                string.IsNullOrWhiteSpace(e.DiagnosticCode) ? e.EventType : e.DiagnosticCode,
+                e.OccurredAt.ToString("MMM d, yyyy")))
             .ToList();
+
+        if (bouncedEmails.Count == 0)
+        {
+            bouncedEmails = subscribers
+                .Where(s => s.Status is "bounced" or "complained")
+                .Take(10)
+                .Select(s => new BouncedEmailRowDto(
+                    s.Email,
+                    s.Status == "complained" ? "complaint" : "hard",
+                    s.Status == "complained" ? "Spam complaint" : "Hard bounce",
+                    s.JoinedAt.ToString("MMM d, yyyy")))
+                .ToList();
+        }
 
         var benchmarks = await BuildBenchmarksAsync(openRate, clickRate, bounceRate, unsubRate, revenuePerEmail);
         var listHealth = BuildListHealth(subscribers, activities, periodStart);

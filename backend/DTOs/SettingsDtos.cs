@@ -18,17 +18,38 @@ public record StoreConnectionDto(
 
 public record IntegrationItemDto(string Key, string Name, string Description, bool Connected, string IconKey, bool ComingSoon);
 
+public record PreferenceFooterDto(
+    string SubscriptionLine,
+    string PhysicalAddress,
+    string ManagePreferencesLabel,
+    string UnsubscribeLabel,
+    string ViewInBrowserLabel);
+
 public record UserSettingsDto(
     List<NotificationSettingDto> Notifications,
     List<PreferenceEmailTypeDto> PreferenceEmailTypes,
     List<PreferenceFrequencyDto> PreferenceFrequencies,
     List<IntegrationItemDto> Integrations,
     StoreConnectionDto Store,
-    string? BrandDomain);
+    string? BrandDomain,
+    PreferenceFooterDto PreferenceFooter);
 
 public record UpdateNotificationsRequest(List<NotificationSettingDto> Notifications);
 
 public record UpdatePreferencesRequest(
+    List<PreferenceEmailTypeDto> EmailTypes,
+    List<PreferenceFrequencyDto> Frequencies,
+    PreferenceFooterDto? Footer,
+    string? BrandDomain);
+
+public record ApplyFooterToCampaignsRequest(IReadOnlyList<string> CampaignIds);
+
+public record ApplyFooterResultDto(int UpdatedCount, string Message);
+
+public record PreferenceCenterDto(
+    string Email,
+    string Name,
+    string BrandDomain,
     List<PreferenceEmailTypeDto> EmailTypes,
     List<PreferenceFrequencyDto> Frequencies);
 

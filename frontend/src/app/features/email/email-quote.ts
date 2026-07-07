@@ -1,5 +1,6 @@
 import { Email } from './email.service';
 import { formatEmailDetailDate } from './email-datetime.utils';
+import { sanitizeEmailHtml } from '../../core/utils/html-sanitize';
 
 function escapeHtml(text: string): string {
   return text
@@ -11,7 +12,7 @@ function escapeHtml(text: string): string {
 
 function formatBodyHtml(body: string): string {
   if (!body?.trim()) return '<p>&nbsp;</p>';
-  if (/<[a-z][\s\S]*>/i.test(body)) return body;
+  if (/<[a-z][\s\S]*>/i.test(body)) return sanitizeEmailHtml(body);
   return body
     .split('\n')
     .map(line => `<p>${line.trim() ? escapeHtml(line) : '&nbsp;'}</p>`)

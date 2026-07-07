@@ -197,6 +197,8 @@ export class GrowthToolsComponent implements OnInit {
       this.router.navigate(['/website/sign-up-forms']);
     } else if (tool.key === 'landing-builder') {
       this.router.navigate(['/website/landing-pages']);
+    } else if (tool.key === 'import') {
+      this.router.navigate(['/audience/import']);
     } else {
       this.activeModalTool.set(tool);
       try {

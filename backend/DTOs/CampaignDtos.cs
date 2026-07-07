@@ -93,11 +93,18 @@ public record AbTestDto(
     string Status,
     decimal? OpenRateA,
     decimal? OpenRateB,
+    decimal? ClickRateA,
+    decimal? ClickRateB,
     string? Winner,
     int VotesA,
     int VotesB,
     DateTime? StartedAt,
     DateTime? CompletedAt,
+    DateTime? EndsAt,
+    string? Content,
+    string SendToSegment,
+    bool AutoSendWinner,
+    DateTime? WinnerSentAt,
     string? PublicUrl = null
 );
 
@@ -133,7 +140,11 @@ public record CreateAbTestRequest(
     int TestSize,
     string WinnerMetric,
     int WaitHours,
-    string? Name
+    string? Name,
+    DateTime? EndsAt = null,
+    string? Content = null,
+    string? SendToSegment = null,
+    bool AutoSendWinner = true
 );
 
 public record CampaignsBundleDto(

@@ -144,6 +144,35 @@ export interface GrowthTool {
   configJson?: string;
 }
 
+export interface ImportContactRow {
+  email: string;
+  name?: string;
+  firstName?: string;
+  lastName?: string;
+  tags?: string[];
+  status?: string;
+}
+
+export interface ImportSubscribersRequest {
+  contacts: ImportContactRow[];
+  listId?: string;
+  newListName?: string;
+  duplicateMode?: 'skip' | 'update';
+  tags?: string[];
+}
+
+export interface ImportSubscribersResult {
+  totalRows: number;
+  imported: number;
+  updated: number;
+  skipped: number;
+  invalid: number;
+  duplicates: number;
+  listId?: string;
+  listName?: string;
+  errors: string[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class AudienceApiService {
   constructor(private api: ApiService) {}
@@ -179,6 +208,10 @@ export class AudienceApiService {
     listIds?: string[]; note?: string;
   }): Observable<SubscriberProfile> {
     return this.api.post<SubscriberProfile>('/audience/profiles', body);
+  }
+
+  importSubscribers(body: ImportSubscribersRequest): Observable<ImportSubscribersResult> {
+    return this.api.post<ImportSubscribersResult>('/audience/import', body);
   }
 
   getListsSegments(): Observable<ListsSegmentsBundle> {

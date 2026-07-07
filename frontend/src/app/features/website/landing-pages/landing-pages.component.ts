@@ -6,6 +6,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { WebsiteApiService, LandingPageItem } from '../../../core/services/website-api.service';
 import { ContentApiService } from '../../../core/services/content-api.service';
 import { LANDING_PAGE_ICONS, NAV_ICONS } from '../../../core/constants/nav-icons';
+import { formatPublicUrlForDisplay, landingPagePublicUrl } from '../../../core/utils/public-site-url';
 
 interface PageView extends LandingPageItem {
   safeIcon: SafeHtml;
@@ -69,6 +70,7 @@ const THEME_PRESETS = [
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
                   </button>
                   <div class="action-menu" *ngIf="openMenuId === page.id" (click)="$event.stopPropagation()">
+                    <button type="button" class="action-menu-item" (click)="useInCampaign(page)">Use in campaign</button>
                     <button type="button" class="action-menu-item" (click)="openEditPageModal(page)">Edit</button>
                     <button type="button" class="action-menu-item" (click)="previewPage(page)">Preview</button>
                     <button type="button" class="action-menu-item danger" (click)="deletePage(page)">Delete</button>
@@ -76,7 +78,7 @@ const THEME_PRESETS = [
                 </div>
               </div>
             </div>
-            <p class="pg-url">{{ page.url }}</p>
+            <a class="pg-url" [href]="pageHref(page)" target="_blank" rel="noopener noreferrer" (click)="$event.stopPropagation()">{{ pageUrlDisplay(page) }}</a>
             <div class="pg-stats">
               <div class="pg-stat">
                 <span class="pgs-val">{{ page.visits | number }}</span>
@@ -94,6 +96,7 @@ const THEME_PRESETS = [
             <div class="pg-actions">
               <button class="btn-primary btn-sm" (click)="openEditPageModal(page)">Edit</button>
               <button class="btn-ghost btn-sm" (click)="previewPage(page)">Preview</button>
+              <button class="btn-ghost btn-sm" (click)="useInCampaign(page)">Use in campaign</button>
             </div>
           </div>
         </div>
@@ -191,7 +194,7 @@ const THEME_PRESETS = [
             <div class="setup-field">
               <label>URL Slug</label>
               <input type="text" [(ngModel)]="editPage.slug" class="text-input" placeholder="my-landing-page">
-              <span class="field-hint">Public URL: scribecount.com/p/{{ editPage.slug || 'slug' }}</span>
+              <span class="field-hint">Public URL: {{ editPageUrlDisplay() }}</span>
             </div>
             <div class="setup-field">
               <label>Page Icon</label>
@@ -274,7 +277,8 @@ const THEME_PRESETS = [
     .action-menu-item.danger { color:#dc2626; }
     .action-menu-item.danger:hover { background:rgba(239,68,68,0.08); }
     .pg-name { font-size:.9375rem; font-weight:700; color:#0f172a; margin:0; }
-    .pg-url { font-size:.72rem; color:#94a3b8; margin:0 0 1rem; font-family:monospace; }
+    .pg-url { display:block; font-size:.72rem; color:#2563eb; margin:0 0 1rem; font-family:monospace; text-decoration:none; }
+    .pg-url:hover { text-decoration:underline; }
     .pg-stats { display:flex; gap:1.5rem; margin-bottom:1rem; }
     .pg-stat { display:flex; flex-direction:column; }
     .pgs-val { font-size:1.0625rem; font-weight:700; color:#0f172a; }
@@ -475,6 +479,23 @@ export class LandingPagesComponent implements OnInit {
   previewPage(page: PageView) {
     this.closeMenu();
     window.open(`/website/landing-pages/preview/${page.id}`, '_blank');
+  }
+
+  pageHref(page: PageView): string {
+    return page.url?.includes('://') ? page.url : landingPagePublicUrl(page.slug);
+  }
+
+  pageUrlDisplay(page: PageView): string {
+    return formatPublicUrlForDisplay(this.pageHref(page));
+  }
+
+  editPageUrlDisplay(): string {
+    return formatPublicUrlForDisplay(landingPagePublicUrl(this.editPage.slug || 'slug'));
+  }
+
+  useInCampaign(page: PageView) {
+    this.closeMenu();
+    void this.router.navigate(['/campaigns'], { queryParams: { useLanding: page.id } });
   }
 
   deletePage(page: PageView) {

@@ -3,13 +3,21 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { StoreConnectionGuideComponent } from './store-connection/store-connection-guide.component';
+import { IntegrationSetupGuideComponent } from './integration-setup-guide.component';
+import {
+  SHOPIFY_GUIDE_CHECKLIST,
+  SHOPIFY_GUIDE_CHECKLIST_WARNING,
+  SHOPIFY_GUIDE_PARTS,
+  SHOPIFY_GUIDE_TROUBLESHOOTING,
+} from './shopify-integration.guide';
+import { WOO_GUIDE_PARTS, WOO_GUIDE_TROUBLESHOOTING } from './woocommerce-integration.guide';
 import { SettingsApiService, IntegrationItem } from '../../core/services/settings-api.service';
 import { NAV_ICONS } from '../../core/constants/nav-icons';
 
 @Component({
   selector: 'app-integrations',
   standalone: true,
-  imports: [CommonModule, FormsModule, StoreConnectionGuideComponent],
+  imports: [CommonModule, FormsModule, StoreConnectionGuideComponent, IntegrationSetupGuideComponent],
   template: `
     <div class="page-wrapper">
 
@@ -45,6 +53,20 @@ import { NAV_ICONS } from '../../core/constants/nav-icons';
 
         <!-- NOT CONNECTED -->
         <div *ngIf="!woo.connected">
+
+          <div class="glass-card shop-card">
+            <h2 class="shop-section-title">What the WooCommerce Integration Does</h2>
+            <p class="shop-section-sub">The ScribeCount plugin sends store events to your email flows in real time via secure webhooks</p>
+            <div class="event-overview-list">
+              <div class="eo-row" *ngFor="let e of eventOverview">
+                <span class="eo-svg" [innerHTML]="e.icon"></span>
+                <div class="eo-body">
+                  <div class="eo-title">{{ e.title }}</div>
+                  <div class="eo-desc">{{ e.desc }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
 
           <!-- Technical Requirements -->
           <div class="glass-card shop-card">
@@ -140,6 +162,15 @@ import { NAV_ICONS } from '../../core/constants/nav-icons';
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
               Authorize Connection
             </button>
+          </div>
+
+          <div class="glass-card shop-card">
+            <h2 class="shop-section-title">Complete Setup Guide</h2>
+            <p class="shop-section-sub">Step-by-step instructions from plugin install through testing, activation, and troubleshooting</p>
+            <app-integration-setup-guide
+              [parts]="wooGuideParts"
+              [troubleshooting]="wooGuideTroubleshooting">
+            </app-integration-setup-guide>
           </div>
 
         </div>
@@ -296,6 +327,15 @@ import { NAV_ICONS } from '../../core/constants/nav-icons';
             </div>
           </div>
 
+          <div class="glass-card shop-card">
+            <h2 class="shop-section-title">Setup Guide Reference</h2>
+            <p class="shop-section-sub">Full integration steps, segmentation tips, and troubleshooting</p>
+            <app-integration-setup-guide
+              [parts]="wooGuideParts"
+              [troubleshooting]="wooGuideTroubleshooting">
+            </app-integration-setup-guide>
+          </div>
+
         </div>
       </div>
 
@@ -332,31 +372,33 @@ import { NAV_ICONS } from '../../core/constants/nav-icons';
         <!-- NOT CONNECTED -->
         <div *ngIf="!shopify.connected">
           <div class="glass-card shop-card">
-            <h2 class="shop-section-title">Connect Your Shopify Store</h2>
-            <p class="shop-section-sub">Follow these steps to link your store and start triggering email flows automatically</p>
-            <div class="setup-steps">
-              <div class="setup-step">
-                <div class="ss-num">1</div>
-                <div class="ss-body">
-                  <div class="ss-title">Install the ScribeCount app in Shopify</div>
-                  <div class="ss-desc">Go to your Shopify admin → Apps → search for "ScribeCount Email" → click Add App and grant the requested permissions</div>
-                </div>
-              </div>
-              <div class="setup-step">
-                <div class="ss-num">2</div>
-                <div class="ss-body">
-                  <div class="ss-title">Enter your Shopify store URL below</div>
-                  <div class="ss-desc">Your store's myshopify.com address — e.g. yourstore.myshopify.com</div>
-                </div>
-              </div>
-              <div class="setup-step">
-                <div class="ss-num">3</div>
-                <div class="ss-body">
-                  <div class="ss-title">Click Authorize Connection</div>
-                  <div class="ss-desc">ScribeCount will verify the connection and show a green status indicator when confirmed</div>
+            <h2 class="shop-section-title">What the Shopify Integration Does</h2>
+            <div class="event-overview-list">
+              <div class="eo-row" *ngFor="let e of eventOverview">
+                <span class="eo-svg" [innerHTML]="e.icon"></span>
+                <div class="eo-body">
+                  <div class="eo-title">{{ e.title }}</div>
+                  <div class="eo-desc">{{ e.desc }}</div>
                 </div>
               </div>
             </div>
+          </div>
+
+          <div class="glass-card shop-card">
+            <h2 class="shop-section-title">Complete Setup Guide</h2>
+            <p class="shop-section-sub">Follow every step from app install through testing, activation, and go-live</p>
+            <app-integration-setup-guide
+              [checklist]="shopifyGuideChecklist"
+              checklistIntro="Confirm you have the following before starting:"
+              [checklistWarning]="shopifyGuideChecklistWarning"
+              [parts]="shopifyGuideParts"
+              [troubleshooting]="shopifyGuideTroubleshooting">
+            </app-integration-setup-guide>
+          </div>
+
+          <div class="glass-card shop-card">
+            <h2 class="shop-section-title">Authorize Your Store</h2>
+            <p class="shop-section-sub">After installing the app in Shopify (Part 1, Step 2), enter your store URL to complete the connection</p>
             <div class="store-url-group">
               <label class="shop-label">Your Shopify Store URL</label>
               <div class="store-url-row">
@@ -370,18 +412,6 @@ import { NAV_ICONS } from '../../core/constants/nav-icons';
             <div class="permissions-note">
               <svg viewBox="0 0 20 20" fill="#059669" width="16" height="16"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd"/></svg>
               ScribeCount only requests read access to orders, customers, and products. It never modifies orders, changes prices, or accesses payment information.
-            </div>
-          </div>
-          <div class="glass-card shop-card">
-            <h2 class="shop-section-title">What the Shopify Integration Does</h2>
-            <div class="event-overview-grid">
-              <div class="eo-item" *ngFor="let e of eventOverview">
-                <div class="eo-icon" [style.background]="e.bg"><span [innerHTML]="e.icon"></span></div>
-                <div class="eo-body">
-                  <div class="eo-title">{{ e.title }}</div>
-                  <div class="eo-desc">{{ e.desc }}</div>
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -481,6 +511,18 @@ import { NAV_ICONS } from '../../core/constants/nav-icons';
               </div>
             </div>
           </div>
+
+          <div class="glass-card shop-card">
+            <h2 class="shop-section-title">Setup Guide Reference</h2>
+            <p class="shop-section-sub">Full integration steps, segmentation tips, and troubleshooting</p>
+            <app-integration-setup-guide
+              [checklist]="shopifyGuideChecklist"
+              checklistIntro="Confirm you have the following before starting:"
+              [checklistWarning]="shopifyGuideChecklistWarning"
+              [parts]="shopifyGuideParts"
+              [troubleshooting]="shopifyGuideTroubleshooting">
+            </app-integration-setup-guide>
+          </div>
         </div>
       </div>
 
@@ -498,8 +540,6 @@ import { NAV_ICONS } from '../../core/constants/nav-icons';
           </div>
         </div>
 
-        <app-store-connection-guide></app-store-connection-guide>
-
         <div class="int-sections" *ngFor="let section of sections">
           <h2 class="section-heading">{{ section.title }}</h2>
           <div class="int-grid">
@@ -512,18 +552,28 @@ import { NAV_ICONS } from '../../core/constants/nav-icons';
                     <svg viewBox="0 0 20 20" fill="#059669" width="12" height="12"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd"/></svg>
                     Connected
                   </span>
+                  <span class="int-soon-badge" *ngIf="int.comingSoon">Coming Soon</span>
                 </div>
                 <p class="int-desc">{{ int.description }}</p>
               </div>
-              <button class="int-action-btn"
-                [class.connected]="int.connected && !int.comingSoon"
-                [class.disconnected]="!int.connected || int.comingSoon"
+              <button type="button" class="int-action-btn"
+                *ngIf="!int.comingSoon"
+                [class.connected]="int.connected"
+                [class.disconnected]="!int.connected"
                 (click)="handleIntegrationClick(int)">
-                {{ int.connected && !int.comingSoon ? 'Manage' : 'Connect' }}
+                {{ int.connected ? 'Manage' : 'Connect' }}
+              </button>
+              <button type="button" class="int-action-btn coming-soon" *ngIf="int.comingSoon" (click)="handleIntegrationClick(int)">
+                Coming Soon
               </button>
             </div>
           </div>
         </div>
+
+        <details class="store-guide-details">
+          <summary class="store-guide-summary">How store integration works</summary>
+          <app-store-connection-guide></app-store-connection-guide>
+        </details>
       </div>
 
     </div>
@@ -531,6 +581,16 @@ import { NAV_ICONS } from '../../core/constants/nav-icons';
   styles: [`
     /* Integrations list */
     .int-sections { margin-bottom:2rem; }
+    .int-sections:first-of-type { margin-top:0; }
+    .store-guide-details { margin-top:.5rem; }
+    .store-guide-summary {
+      cursor:pointer; font-size:.875rem; font-weight:600; color:#3b82f6;
+      padding:.75rem 0; list-style:none; user-select:none;
+    }
+    .store-guide-summary::-webkit-details-marker { display:none; }
+    .store-guide-summary::before { content:'▸ '; display:inline-block; transition:transform .15s; }
+    .store-guide-details[open] .store-guide-summary::before { transform:rotate(90deg); }
+    .store-guide-details app-store-connection-guide { display:block; margin-top:.5rem; }
     .section-heading { font-size:.8rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:#94a3b8; margin:0 0 .875rem; }
     .int-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:1rem; }
     .int-card { padding:1.25rem; display:flex; align-items:center; gap:1rem; }
@@ -540,12 +600,15 @@ import { NAV_ICONS } from '../../core/constants/nav-icons';
     .int-name-row { display:flex; align-items:center; gap:.5rem; margin-bottom:.25rem; }
     .int-name { font-size:.9375rem; font-weight:700; color:#0f172a; margin:0; }
     .int-connected-badge { display:inline-flex; align-items:center; gap:.25rem; font-size:.7rem; font-weight:600; color:#059669; background:rgba(5,150,105,0.08); padding:.15rem .5rem; border-radius:100px; }
+    .int-soon-badge { display:inline-block; font-size:.7rem; font-weight:600; color:#6366f1; background:rgba(99,102,241,0.1); padding:.15rem .5rem; border-radius:100px; }
     .int-desc { font-size:.8rem; color:#94a3b8; margin:0; line-height:1.4; }
     .int-action-btn { padding:.45rem 1rem; border-radius:9px; font-size:.8125rem; font-weight:600; font-family:inherit; cursor:pointer; transition:all .15s; white-space:nowrap; border:1.5px solid; }
     .int-action-btn.disconnected { background:#f8fafc; color:#374151; border-color:#e2e8f0; }
     .int-action-btn.disconnected:hover { background:#eff6ff; color:#3b82f6; border-color:#bfdbfe; }
     .int-action-btn.connected { background:rgba(5,150,105,0.06); color:#059669; border-color:rgba(5,150,105,0.2); }
     .int-action-btn.connected:hover { background:rgba(5,150,105,0.12); }
+    .int-action-btn.coming-soon { background:#f8fafc; color:#94a3b8; border-color:#e2e8f0; cursor:not-allowed; opacity:.85; }
+    .int-action-btn.coming-soon:hover { background:#f8fafc; color:#94a3b8; border-color:#e2e8f0; }
 
     /* Shopify detail */
     .back-header { display:flex; flex-direction:column; gap:.875rem; }
@@ -581,9 +644,10 @@ import { NAV_ICONS } from '../../core/constants/nav-icons';
     .shop-select { flex:none; width:100%; }
     .permissions-note { display:flex; align-items:flex-start; gap:.625rem; padding:.875rem 1rem; background:rgba(5,150,105,0.06); border:1px solid rgba(5,150,105,0.15); border-radius:10px; font-size:.8125rem; color:#374151; line-height:1.5; }
 
-    .event-overview-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:1rem; }
-    .eo-item { display:flex; align-items:flex-start; gap:.875rem; padding:1rem; background:#f8fafc; border-radius:12px; border:1px solid #f1f5f9; }
-    .eo-icon { width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .event-overview-list { display:flex; flex-direction:column; gap:1rem; }
+    .eo-row { display:flex; align-items:flex-start; gap:.75rem; }
+    .eo-svg { display:flex; align-items:center; justify-content:center; flex-shrink:0; width:22px; height:22px; margin-top:.1rem; }
+    .eo-svg :global(svg) { width:20px; height:20px; display:block; }
     .eo-title { font-size:.875rem; font-weight:600; color:#0f172a; margin-bottom:.2rem; }
     .eo-desc { font-size:.78rem; color:#64748b; line-height:1.4; }
 
@@ -637,7 +701,7 @@ import { NAV_ICONS } from '../../core/constants/nav-icons';
     .al-ok { color:#059669; }
     .al-warn { color:#d97706; }
 
-    @media(max-width:900px) { .int-grid { grid-template-columns:1fr; } .event-overview-grid { grid-template-columns:1fr; } .test-grid { grid-template-columns:1fr; } .al-row { grid-template-columns:1fr 1fr; } }
+    @media(max-width:900px) { .int-grid { grid-template-columns:1fr; } .test-grid { grid-template-columns:1fr; } .al-row { grid-template-columns:1fr 1fr; } }
 
     /* WooCommerce-specific */
     .req-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:.75rem; margin-bottom:1.25rem; }
@@ -705,6 +769,13 @@ export class IntegrationsComponent implements OnInit {
   toastMsg = signal('');
   toastType = signal('ok');
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
+
+  readonly shopifyGuideChecklist = SHOPIFY_GUIDE_CHECKLIST;
+  readonly shopifyGuideChecklistWarning = SHOPIFY_GUIDE_CHECKLIST_WARNING;
+  readonly shopifyGuideParts = SHOPIFY_GUIDE_PARTS;
+  readonly shopifyGuideTroubleshooting = SHOPIFY_GUIDE_TROUBLESHOOTING;
+  readonly wooGuideParts = WOO_GUIDE_PARTS;
+  readonly wooGuideTroubleshooting = WOO_GUIDE_TROUBLESHOOTING;
 
   shopify = { connected: false, storeUrl: '' };
 
@@ -918,24 +989,38 @@ export class IntegrationsComponent implements OnInit {
   sections: { title: string; items: { id: string; name: string; description: string; connected: boolean; iconKey: string; comingSoon: boolean; safeIcon: SafeHtml }[] }[] = [];
 
   ngOnInit() {
-    this.settingsApi.getSettings().subscribe(s => {
-      this.shopify.connected = s.store.connected;
-      this.shopify.storeUrl = s.store.storeUrl;
-      this.buildSections(s.integrations);
+    this.settingsApi.getSettings().subscribe({
+      next: s => {
+        this.shopify.connected = s.store.connected;
+        this.shopify.storeUrl = s.store.storeUrl;
+        this.buildSections(s.integrations);
+      },
+      error: () => this.buildSections([]),
     });
   }
 
   private buildSections(integrations: IntegrationItem[]) {
     const byKey = Object.fromEntries(integrations.map(i => [i.key, i]));
-    const item = (id: string, fallbackName: string, fallbackDesc: string, iconKey: string) => {
+    const item = (
+      id: string,
+      fallbackName: string,
+      fallbackDesc: string,
+      iconKey: string,
+      available = false,
+    ) => {
       const api = byKey[id];
+      const connected = id === 'shopify'
+        ? this.shopify.connected
+        : id === 'woocommerce'
+          ? this.woo.connected
+          : (api?.connected ?? false);
       return {
         id,
         name: api?.name ?? fallbackName,
         description: api?.description ?? fallbackDesc,
-        connected: api?.connected ?? false,
+        connected,
         iconKey: api?.iconKey ?? iconKey,
-        comingSoon: api?.comingSoon ?? false,
+        comingSoon: !available,
         safeIcon: this.icon(api?.iconKey ?? iconKey),
       };
     };
@@ -943,8 +1028,11 @@ export class IntegrationsComponent implements OnInit {
       {
         title: 'Store Platforms',
         items: [
-          item('shopify', 'Shopify', 'Connect your store for purchase flows, abandoned cart recovery, and subscriber capture', 'checkout'),
-          item('woocommerce', 'WooCommerce', 'Connect your WooCommerce store for the same automation flows as Shopify', 'checkout'),
+          item('shopify', 'Shopify', 'Connect your Shopify store for purchase flows, abandoned cart recovery, and subscriber capture', 'checkout', true),
+          item('woocommerce', 'WooCommerce', 'Connect your WordPress/WooCommerce store via the ScribeCount plugin', 'checkout', true),
+          item('gumroad', 'Gumroad', 'Sync direct sales and deliver reader magnets from Gumroad purchases', 'dollar'),
+          item('payhip', 'Payhip', 'Import buyers and trigger post-purchase email flows from Payhip', 'dollar'),
+          item('stripe', 'Stripe', 'Connect Stripe Checkout for direct author sales and billing events', 'dollar'),
         ],
       },
       {
@@ -952,6 +1040,7 @@ export class IntegrationsComponent implements OnInit {
         items: [
           item('bookfunnel', 'BookFunnel', 'Sync reader magnet downloads and trigger welcome sequences automatically', 'book'),
           item('storyorigin', 'StoryOrigin', 'Import subscribers from newsletter swaps and group promotions', 'form'),
+          item('prolificworks', 'Prolific Works', 'Capture giveaway entrants and add them to your list with consent tags', 'form'),
         ],
       },
       {
@@ -959,12 +1048,14 @@ export class IntegrationsComponent implements OnInit {
         items: [
           item('google_analytics', 'Google Analytics', 'Track email campaign traffic and conversions in GA4', 'chart'),
           item('facebook_pixel', 'Facebook Pixel', 'Retarget email subscribers with Facebook and Instagram ads', 'link'),
+          item('mailchimp', 'Mailchimp', 'Import your existing Mailchimp audience and migration history', 'email'),
         ],
       },
       {
         title: 'Automation',
         items: [
           item('zapier', 'Zapier', 'Connect ScribeCount Email with 5,000+ apps via Zapier', 'trend'),
+          item('make', 'Make (Integromat)', 'Build custom automations between ScribeCount and your author stack', 'integration'),
         ],
       },
     ];
@@ -974,7 +1065,7 @@ export class IntegrationsComponent implements OnInit {
     return this.sanitizer.bypassSecurityTrustHtml(NAV_ICONS[key] ?? NAV_ICONS['integration']);
   }
 
-  handleIntegrationClick(int: { id: string; comingSoon: boolean; connected: boolean }) {
+  handleIntegrationClick(int: { id: string; comingSoon: boolean }) {
     if (int.comingSoon) {
       this.showToast('Coming soon — this integration is not available yet.', 'info');
       return;

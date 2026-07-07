@@ -2,6 +2,7 @@ import { Component, Output, EventEmitter, Input, OnChanges, OnInit, SimpleChange
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ComposePayload, EmailAttachment } from './email.service';
+import { sanitizeEmailHtml } from '../../core/utils/html-sanitize';
 
 @Component({
   selector: 'app-compose-modal',
@@ -149,12 +150,6 @@ import { ComposePayload, EmailAttachment } from './email.service';
 
       <div class="compose-footer">
         <div class="footer-left">
-          <button class="btn-primary" [disabled]="isBusy" (click)="send()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-              <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-            </svg>
-            {{ isBusy && actionType === 'send' ? 'Sending…' : 'Send' }}
-          </button>
           <button class="btn-secondary btn-sm" [disabled]="isBusy" (click)="saveDraft()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
               <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
@@ -164,13 +159,25 @@ import { ComposePayload, EmailAttachment } from './email.service';
           </button>
         </div>
         <div class="footer-right">
-          <input type="datetime-local" class="schedule-input" [(ngModel)]="scheduledAtLocal" [min]="minScheduleAt" [disabled]="isBusy">
-          <button class="btn-ghost btn-sm schedule-btn" [disabled]="isBusy" (click)="schedule()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-          </svg>
-          Schedule
-          </button>
+          <div class="send-mode-toggle">
+            <button type="button" class="mode-btn" [class.active]="sendMode === 'now'" [disabled]="isBusy" (click)="sendNow()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+              </svg>
+              {{ isBusy && actionType === 'send' ? 'Sending…' : 'Send Now' }}
+            </button>
+            <button type="button" class="mode-btn" [class.active]="sendMode === 'schedule'" [disabled]="isBusy" (click)="onScheduleClick()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+              </svg>
+              {{ isBusy && actionType === 'schedule' ? 'Scheduling…' : 'Schedule' }}
+            </button>
+          </div>
+          <div class="schedule-picker" *ngIf="sendMode === 'schedule'">
+            <label class="schedule-label">Send on</label>
+            <input type="datetime-local" class="schedule-input" [(ngModel)]="scheduledAtLocal" [min]="minScheduleAt" [disabled]="isBusy">
+            <span class="schedule-hint">Choose a date and time, then click Schedule again to confirm.</span>
+          </div>
         </div>
       </div>
     </div>
@@ -528,22 +535,74 @@ import { ComposePayload, EmailAttachment } from './email.service';
       align-items: center;
       gap: .625rem;
     }
-    .schedule-btn {
-      gap: .375rem !important;
-    }
     .footer-right {
       display: flex;
-      align-items: center;
+      flex-direction: column;
+      align-items: flex-end;
       gap: .5rem;
+      min-width: 0;
+    }
+    .send-mode-toggle {
+      display: flex;
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      background: var(--surface);
+      flex-shrink: 0;
+    }
+    .mode-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: .375rem;
+      padding: .5rem .875rem;
+      font-size: .8125rem;
+      font-weight: 600;
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: background .15s, color .15s;
+      white-space: nowrap;
+    }
+    .mode-btn:not(:last-child) {
+      border-right: 1px solid var(--border);
+    }
+    .mode-btn.active {
+      background: #3b82f6;
+      color: #fff;
+    }
+    .mode-btn:disabled {
+      opacity: .6;
+      cursor: not-allowed;
+    }
+    .schedule-picker {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: .25rem;
+      width: 100%;
+    }
+    .schedule-label {
+      font-size: .72rem;
+      font-weight: 600;
+      color: var(--text-muted);
     }
     .schedule-input {
       border: 1px solid var(--border);
       border-radius: 8px;
-      padding: .35rem .55rem;
-      font-size: .75rem;
+      padding: .45rem .65rem;
+      font-size: .8125rem;
       font-family: inherit;
-      color: var(--text-secondary);
+      color: var(--text-primary);
       background: var(--surface);
+      min-width: 210px;
+    }
+    .schedule-hint {
+      font-size: .68rem;
+      color: var(--text-muted);
+      text-align: right;
+      max-width: 260px;
+      line-height: 1.35;
     }
     .send-error {
       margin: 0 1.5rem .75rem;
@@ -634,6 +693,7 @@ export class ComposeModalComponent implements OnChanges, OnInit, AfterViewInit {
   subject = '';
   body = '';
   quotedHtml = '';
+  sendMode: 'now' | 'schedule' = 'now';
   scheduledAtLocal = '';
   sendError = '';
   attachments: EmailAttachment[] = [];
@@ -709,6 +769,20 @@ export class ComposeModalComponent implements OnChanges, OnInit, AfterViewInit {
   onEditorInput() {
     this.syncBodyFromEditor();
     this.recalculateScore();
+  }
+
+  sendNow() {
+    this.sendMode = 'now';
+    this.send();
+  }
+
+  onScheduleClick() {
+    if (this.sendMode !== 'schedule') {
+      this.sendMode = 'schedule';
+      if (!this.scheduledAtLocal) this.defaultScheduleTime();
+      return;
+    }
+    this.schedule();
   }
 
   send() {
@@ -809,8 +883,13 @@ export class ComposeModalComponent implements OnChanges, OnInit, AfterViewInit {
     if (!editor) return;
     const url = window.prompt('Enter link URL', 'https://');
     if (!url?.trim()) return;
+    const trimmed = url.trim();
+    if (/^\s*javascript:/i.test(trimmed)) {
+      this.sendError = 'JavaScript links are not allowed.';
+      return;
+    }
     editor.focus();
-    document.execCommand('createLink', false, url.trim());
+    document.execCommand('createLink', false, trimmed);
     this.syncBodyFromEditor();
     this.recalculateScore();
   }
@@ -860,11 +939,13 @@ export class ComposeModalComponent implements OnChanges, OnInit, AfterViewInit {
     this.attachments = [...(this.initialAttachments || [])];
     if (this.initialScheduledAt) {
       this.scheduledAtLocal = this.initialScheduledAt;
+      this.sendMode = 'schedule';
+    } else {
+      this.sendMode = 'now';
+      this.defaultScheduleTime();
     }
-    this.attachments = [];
     this.showScorePanel = false;
     this.sendError = '';
-    this.defaultScheduleTime();
     this.recalculateScore();
   }
 
@@ -886,7 +967,7 @@ export class ComposeModalComponent implements OnChanges, OnInit, AfterViewInit {
 
   private buildFullBody(): string {
     const editor = this.messageEditor?.nativeElement;
-    const userHtml = editor?.innerHTML.trim() ?? '';
+    const userHtml = sanitizeEmailHtml(editor?.innerHTML.trim() ?? '');
     if (!this.quotedHtml) return userHtml;
     if (!userHtml) return this.quotedHtml;
     return `${userHtml}<br><br>${this.quotedHtml}`;
@@ -895,10 +976,11 @@ export class ComposeModalComponent implements OnChanges, OnInit, AfterViewInit {
   private setEditorHtml(value: string) {
     const editor = this.messageEditor?.nativeElement;
     if (!editor) return;
-    if (value && /<[a-z][\s\S]*>/i.test(value)) {
-      editor.innerHTML = value;
+    const safe = sanitizeEmailHtml(value);
+    if (safe && /<[a-z][\s\S]*>/i.test(safe)) {
+      editor.innerHTML = safe;
     } else {
-      editor.innerHTML = value ? this.toEditorHtml(value) : '';
+      editor.innerHTML = safe ? this.toEditorHtml(safe) : '';
     }
     this.body = this.buildFullBody();
   }

@@ -32,6 +32,73 @@ const PREVIEW_MERGE_TAGS: Record<string, string> = {
   store_link: 'https://books.example.com',
 };
 
+export function buildPreviewOverridesFromExtras(
+  extras: Record<string, string> | undefined,
+  fromName?: string,
+): Record<string, string> {
+  const e = extras ?? {};
+  const overrides: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(e)) {
+    if (value?.trim() && /^[a-z_][\w]*$/i.test(key)) {
+      overrides[key] = value.trim();
+    }
+  }
+
+  const bookTitle =
+    overrides['book_title'] ||
+    e['flashSale_title']?.trim() ||
+    e['backlist_title']?.trim() ||
+    e['priceDrop_title']?.trim() ||
+    e['boxSet_title']?.trim() ||
+    e['event_name']?.trim() ||
+    '';
+  if (bookTitle) overrides['book_title'] = bookTitle;
+
+  if (fromName?.trim()) {
+    overrides['author_name'] = fromName.trim();
+  }
+
+  const storeLink =
+    overrides['store_link'] ||
+    e['directStoreLink']?.trim() ||
+    e['amazonLink']?.trim() ||
+    '';
+  if (storeLink) overrides['store_link'] = storeLink;
+
+  return overrides;
+}
+
+export function formatCampaignDateTime(campaign: {
+  status?: string;
+  scheduledAt?: string | null;
+  sentAt?: string | null;
+  date?: string;
+} | null | undefined): string {
+  if (!campaign) return '—';
+
+  const format = (raw: string) => {
+    const d = new Date(raw);
+    return Number.isNaN(d.getTime())
+      ? raw
+      : d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  };
+
+  if (campaign.status === 'scheduled' && campaign.scheduledAt) {
+    return format(campaign.scheduledAt);
+  }
+
+  if (campaign.sentAt) {
+    return format(campaign.sentAt);
+  }
+
+  if (campaign.scheduledAt) {
+    return format(campaign.scheduledAt);
+  }
+
+  return campaign.date || '—';
+}
+
 export function campaignTypeLabel(id?: string): string {
   if (!id) return '—';
   return CAMPAIGN_TYPE_LABELS[id] ?? id.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());

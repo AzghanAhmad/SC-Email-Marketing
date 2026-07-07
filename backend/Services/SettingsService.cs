@@ -6,16 +6,91 @@ using ScribeCount.Email.Api.Entities;
 
 namespace ScribeCount.Email.Api.Services;
 
-public class SettingsService(AppDbContext db)
+public class SettingsService(AppDbContext db, CampaignTrackingService tracking)
 {
     private static readonly JsonSerializerOptions JsonOpts = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+
+    public async Task<(PreferenceFooterDto Footer, string BrandDomain)> GetUserFooterAsync(Guid userId)
+    {
+        try
+        {
+            var stored = await LoadStoredAsync(userId);
+            var domain = await ResolveBrandDomainAsync(userId, stored);
+            return (MapFooterFromStored(stored.PreferenceFooter, domain), domain);
+        }
+        catch (Exception)
+        {
+            var domain = await ResolveBrandDomainAsync(userId, DefaultStored());
+            return (PreferenceFooterHelper.DefaultFooter(domain), domain);
+        }
+    }
 
     public async Task<UserSettingsDto> GetAsync(Guid userId)
     {
         var stored = await LoadStoredAsync(userId);
         var subscriberCount = await db.Subscribers.CountAsync(s => s.UserId == userId && s.Status == "active");
-        return BuildDto(stored, subscriberCount);
+        return await BuildDtoAsync(userId, stored, subscriberCount);
     }
+
+    public async Task<PreferenceCenterDto?> GetPreferenceCenterAsync(string token)
+    {
+        if (!tracking.TryParseToken(token, out _, out var subscriberId, out var userId)) return null;
+
+        var subscriber = await db.Subscribers.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == subscriberId && s.UserId == userId);
+        if (subscriber is null) return null;
+
+        var stored = await LoadStoredAsync(userId);
+        var count = await db.Subscribers.CountAsync(s => s.UserId == userId && s.Status == "active");
+        var settings = await BuildDtoAsync(userId, stored, count);
+
+        return new PreferenceCenterDto(
+            subscriber.Email,
+            subscriber.Name,
+            settings.BrandDomain ?? "yourdomain.com",
+            settings.PreferenceEmailTypes.Where(t => t.Enabled).ToList(),
+            settings.PreferenceFrequencies.Where(f => f.Enabled).ToList());
+    }
+
+    private async Task<UserSettingsDto> BuildDtoAsync(Guid userId, StoredSettings stored, int subscriberCount)
+    {
+        var domain = await ResolveBrandDomainAsync(userId, stored);
+        return BuildDto(stored, subscriberCount, domain);
+    }
+
+    private async Task<string> ResolveBrandDomainAsync(Guid userId, StoredSettings stored)
+    {
+        if (!string.IsNullOrWhiteSpace(stored.BrandDomain))
+            return stored.BrandDomain.Trim();
+
+        var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
+        if (!string.IsNullOrWhiteSpace(user?.Email))
+        {
+            var at = user.Email.IndexOf('@');
+            if (at > 0) return user.Email[(at + 1)..];
+        }
+
+        return "yourdomain.com";
+    }
+
+    private static PreferenceFooterDto MapFooterFromStored(StoredPreferenceFooter? footer, string domain) =>
+        footer is null
+            ? PreferenceFooterHelper.DefaultFooter(domain)
+            : new PreferenceFooterDto(
+                string.IsNullOrWhiteSpace(footer.SubscriptionLine)
+                    ? PreferenceFooterHelper.DefaultFooter(domain).SubscriptionLine
+                    : footer.SubscriptionLine,
+                footer.PhysicalAddress ?? "",
+                footer.ManagePreferencesLabel ?? "Manage preferences",
+                footer.UnsubscribeLabel ?? "Unsubscribe",
+                footer.ViewInBrowserLabel ?? "View in browser");
+
+    private static StoredPreferenceFooter MapFooterToStored(PreferenceFooterDto footer) => new(
+        footer.SubscriptionLine,
+        footer.PhysicalAddress,
+        footer.ManagePreferencesLabel,
+        footer.UnsubscribeLabel,
+        footer.ViewInBrowserLabel);
 
     public async Task<UserSettingsDto> UpdateNotificationsAsync(Guid userId, UpdateNotificationsRequest request)
     {
@@ -23,17 +98,52 @@ public class SettingsService(AppDbContext db)
         stored.Notifications = request.Notifications.Select(n => new StoredNotification(n.Key, n.Enabled)).ToList();
         await SaveStoredAsync(userId, stored);
         var count = await db.Subscribers.CountAsync(s => s.UserId == userId && s.Status == "active");
-        return BuildDto(stored, count);
+        return await BuildDtoAsync(userId, stored, count);
     }
 
     public async Task<UserSettingsDto> UpdatePreferencesAsync(Guid userId, UpdatePreferencesRequest request)
     {
         var stored = await LoadStoredAsync(userId);
-        stored.PreferenceEmailTypes = request.EmailTypes.Select(e => new StoredPrefEmailType(e.Key, e.Enabled)).ToList();
-        stored.PreferenceFrequencies = request.Frequencies.Select(f => new StoredPrefFrequency(f.Key, f.Enabled)).ToList();
+        stored.PreferenceEmailTypes = request.EmailTypes.Select(e => new StoredPrefEmailType(
+            e.Key, e.Enabled, e.Name, e.Description)).ToList();
+        stored.PreferenceFrequencies = request.Frequencies.Select(f => new StoredPrefFrequency(
+            f.Key, f.Enabled, f.Name, f.Description, f.IconKey)).ToList();
+        if (request.Footer is not null)
+            stored.PreferenceFooter = MapFooterToStored(request.Footer);
+        if (!string.IsNullOrWhiteSpace(request.BrandDomain))
+            stored.BrandDomain = request.BrandDomain.Trim();
         await SaveStoredAsync(userId, stored);
         var count = await db.Subscribers.CountAsync(s => s.UserId == userId && s.Status == "active");
-        return BuildDto(stored, count);
+        return await BuildDtoAsync(userId, stored, count);
+    }
+
+    public async Task<int> ApplyFooterToCampaignsAsync(Guid userId, ApplyFooterToCampaignsRequest request)
+    {
+        if (request.CampaignIds.Count == 0) return 0;
+
+        var stored = await LoadStoredAsync(userId);
+        var domain = await ResolveBrandDomainAsync(userId, stored);
+        var footer = MapFooterFromStored(stored.PreferenceFooter, domain);
+        var ids = request.CampaignIds
+            .Select(id => Guid.TryParse(id, out var g) ? g : Guid.Empty)
+            .Where(g => g != Guid.Empty)
+            .Distinct()
+            .ToList();
+
+        var campaigns = await db.Campaigns
+            .Where(c => c.UserId == userId && ids.Contains(c.Id))
+            .ToListAsync();
+
+        foreach (var campaign in campaigns)
+        {
+            campaign.Content = PreferenceFooterHelper.AppendFooter(campaign.Content ?? "", footer, domain);
+            campaign.UpdatedAt = DateTime.UtcNow;
+        }
+
+        if (campaigns.Count > 0)
+            await db.SaveChangesAsync();
+
+        return campaigns.Count;
     }
 
     public async Task<UserSettingsDto> UpdateStoreAsync(Guid userId, UpdateStoreConnectionRequest request)
@@ -54,7 +164,7 @@ public class SettingsService(AppDbContext db)
         stored.Integrations["shopify"] = request.Connected;
         await SaveStoredAsync(userId, stored);
         var count = await db.Subscribers.CountAsync(s => s.UserId == userId && s.Status == "active");
-        return BuildDto(stored, count);
+        return await BuildDtoAsync(userId, stored, count);
     }
 
     public async Task<UserSettingsDto> ConnectStoreAsync(Guid userId, ConnectStoreRequest request)
@@ -75,7 +185,7 @@ public class SettingsService(AppDbContext db)
         stored.Integrations["shopify"] = false;
         await SaveStoredAsync(userId, stored);
         var count = await db.Subscribers.CountAsync(s => s.UserId == userId && s.Status == "active");
-        return BuildDto(stored, count);
+        return await BuildDtoAsync(userId, stored, count);
     }
 
     public async Task<UserSettingsDto> TestStoreConnectionAsync(Guid userId)
@@ -85,15 +195,15 @@ public class SettingsService(AppDbContext db)
         stored.Store = stored.Store with { EventsReceived = stored.Store.EventsReceived + 1, LastEvent = $"{DateTime.UtcNow:MMM d, yyyy 'at' h:mm tt} — connection.test" };
         await SaveStoredAsync(userId, stored);
         var count = await db.Subscribers.CountAsync(s => s.UserId == userId && s.Status == "active");
-        return BuildDto(stored, count);
+        return await BuildDtoAsync(userId, stored, count);
     }
 
     private async Task<StoredSettings> LoadStoredAsync(Guid userId)
     {
-        var row = await db.UserSettings.FindAsync(userId);
-        if (row is null || string.IsNullOrWhiteSpace(row.Json)) return DefaultStored();
         try
         {
+            var row = await db.UserSettings.FindAsync(userId);
+            if (row is null || string.IsNullOrWhiteSpace(row.Json)) return DefaultStored();
             return JsonSerializer.Deserialize<StoredSettings>(row.Json, JsonOpts) ?? DefaultStored();
         }
         catch
@@ -118,7 +228,7 @@ public class SettingsService(AppDbContext db)
         await db.SaveChangesAsync();
     }
 
-    private static UserSettingsDto BuildDto(StoredSettings stored, int subscriberCount)
+    private static UserSettingsDto BuildDto(StoredSettings stored, int subscriberCount, string brandDomain)
     {
         var notifications = DefaultNotifications().Select(d =>
         {
@@ -137,13 +247,25 @@ public class SettingsService(AppDbContext db)
                 "community" => (int)(subscriberCount * 0.18),
                 _ => 0
             };
-            return d with { Enabled = saved?.Enabled ?? d.Enabled, SubscriberCount = Math.Max(count, 0) };
+            return d with
+            {
+                Enabled = saved?.Enabled ?? d.Enabled,
+                SubscriberCount = Math.Max(count, 0),
+                Name = string.IsNullOrWhiteSpace(saved?.Name) ? d.Name : saved!.Name,
+                Description = string.IsNullOrWhiteSpace(saved?.Description) ? d.Description : saved!.Description,
+            };
         }).ToList();
 
         var frequencies = DefaultFrequencies().Select(d =>
         {
             var saved = stored.PreferenceFrequencies.FirstOrDefault(f => f.Key == d.Key);
-            return d with { Enabled = saved?.Enabled ?? d.Enabled };
+            return d with
+            {
+                Enabled = saved?.Enabled ?? d.Enabled,
+                Name = string.IsNullOrWhiteSpace(saved?.Name) ? d.Name : saved!.Name,
+                Description = string.IsNullOrWhiteSpace(saved?.Description) ? d.Description : saved!.Description,
+                IconKey = string.IsNullOrWhiteSpace(saved?.IconKey) ? d.IconKey : saved!.IconKey,
+            };
         }).ToList();
 
         var integrations = DefaultIntegrations().Select(d =>
@@ -162,14 +284,18 @@ public class SettingsService(AppDbContext db)
                 stored.Store.Events.OptIn,
                 stored.Store.Events.AutoAddPurchasers));
 
-        return new UserSettingsDto(notifications, emailTypes, frequencies, integrations, store, "yourdomain.com");
+        var footer = MapFooterFromStored(stored.PreferenceFooter, brandDomain);
+
+        return new UserSettingsDto(notifications, emailTypes, frequencies, integrations, store, brandDomain, footer);
     }
 
     private static StoredSettings DefaultStored() => new()
     {
         Notifications = DefaultNotifications().Select(n => new StoredNotification(n.Key, n.Enabled)).ToList(),
-        PreferenceEmailTypes = DefaultEmailTypes().Select(e => new StoredPrefEmailType(e.Key, e.Enabled)).ToList(),
-        PreferenceFrequencies = DefaultFrequencies().Select(f => new StoredPrefFrequency(f.Key, f.Enabled)).ToList(),
+        PreferenceEmailTypes = DefaultEmailTypes().Select(e => new StoredPrefEmailType(e.Key, e.Enabled, e.Name, e.Description)).ToList(),
+        PreferenceFrequencies = DefaultFrequencies().Select(f => new StoredPrefFrequency(f.Key, f.Enabled, f.Name, f.Description, f.IconKey)).ToList(),
+        PreferenceFooter = null,
+        BrandDomain = "",
         Integrations = DefaultIntegrations().ToDictionary(i => i.Key, i => i.Connected),
         Store = new StoredStore(false, "", null, 0, null, new StoredStoreEvents(true, true, true, true, true))
     };
@@ -207,12 +333,19 @@ public class SettingsService(AppDbContext db)
 
     private static List<IntegrationItemDto> DefaultIntegrations() =>
     [
+        new("shopify", "Shopify", "Connect your Shopify store for purchase flows and abandoned cart recovery", false, "checkout", false),
+        new("woocommerce", "WooCommerce", "Connect your WordPress/WooCommerce store via the ScribeCount plugin", false, "checkout", false),
+        new("gumroad", "Gumroad", "Sync direct sales and reader magnet delivery from Gumroad", false, "dollar", true),
+        new("payhip", "Payhip", "Import Payhip buyers and trigger post-purchase email flows", false, "dollar", true),
+        new("stripe", "Stripe", "Connect Stripe Checkout for direct author sales", false, "dollar", true),
         new("bookfunnel", "BookFunnel", "Sync reader magnet downloads to your list", false, "book", true),
-        new("shopify", "Shopify", "Connect your store for purchase flows and abandoned cart recovery", false, "checkout", false),
-        new("google_analytics", "Google Analytics", "Track email campaign traffic in GA4", false, "chart", true),
-        new("zapier", "Zapier", "Connect with 5,000+ apps via Zapier", false, "trend", true),
         new("storyorigin", "StoryOrigin", "Import subscribers from StoryOrigin newsletter swaps", false, "form", true),
+        new("prolificworks", "Prolific Works", "Capture giveaway entrants with consent tags", false, "form", true),
+        new("google_analytics", "Google Analytics", "Track email campaign traffic in GA4", false, "chart", true),
         new("facebook_pixel", "Facebook Pixel", "Retarget email subscribers on Facebook", false, "link", true),
+        new("mailchimp", "Mailchimp", "Import your existing Mailchimp audience", false, "email", true),
+        new("zapier", "Zapier", "Connect with 5,000+ apps via Zapier", false, "trend", true),
+        new("make", "Make (Integromat)", "Build custom automations with Make", false, "integration", true),
     ];
 
     private sealed class StoredSettings
@@ -220,13 +353,21 @@ public class SettingsService(AppDbContext db)
         public List<StoredNotification> Notifications { get; set; } = [];
         public List<StoredPrefEmailType> PreferenceEmailTypes { get; set; } = [];
         public List<StoredPrefFrequency> PreferenceFrequencies { get; set; } = [];
+        public StoredPreferenceFooter? PreferenceFooter { get; set; }
+        public string BrandDomain { get; set; } = "";
         public Dictionary<string, bool> Integrations { get; set; } = new(StringComparer.OrdinalIgnoreCase);
         public StoredStore Store { get; set; } = new(false, "", null, 0, null, new StoredStoreEvents(true, true, true, true, true));
     }
 
     private sealed record StoredNotification(string Key, bool Enabled);
-    private sealed record StoredPrefEmailType(string Key, bool Enabled);
-    private sealed record StoredPrefFrequency(string Key, bool Enabled);
+    private sealed record StoredPrefEmailType(string Key, bool Enabled, string? Name = null, string? Description = null);
+    private sealed record StoredPrefFrequency(string Key, bool Enabled, string? Name = null, string? Description = null, string? IconKey = null);
+    private sealed record StoredPreferenceFooter(
+        string SubscriptionLine,
+        string PhysicalAddress,
+        string ManagePreferencesLabel,
+        string UnsubscribeLabel,
+        string ViewInBrowserLabel);
     private sealed record StoredStoreEvents(bool Purchase, bool AbandonedCart, bool AbandonedCheckout, bool OptIn, bool AutoAddPurchasers);
     private sealed record StoredStore(bool Connected, string StoreUrl, string? ConnectedSince, int EventsReceived, string? LastEvent, StoredStoreEvents Events);
 }

@@ -80,7 +80,7 @@ import { MilestoneCelebrationDetailPanelComponent } from './milestone-celebratio
 
         <!-- Steps canvas -->
         <div class="steps-canvas">
-          <p class="steps-reorder-hint" *ngIf="flow.steps.length > 1">Drag steps to reorder</p>
+          <p class="steps-reorder-hint" *ngIf="flow.steps.length > 1">Use ↑↓ to reorder, or drag. Double-click a step to edit.</p>
           <div class="step-wrapper"
                *ngFor="let step of flow.steps; let i = index; let last = last"
                [class.drag-over-above]="dragOverIndex === i && dragOverPosition === 'above'"
@@ -90,11 +90,16 @@ import { MilestoneCelebrationDetailPanelComponent } from './milestone-celebratio
                (drop)="onStepDrop($event, i)">
 
             <div class="flow-step"
-                 [ngClass]="['step-' + step.type, selectedStep?.id === step.id ? 'selected' : '', canDragStep(step) ? 'draggable' : '', draggedStepIndex === i ? 'dragging' : '']"
+                 [ngClass]="['step-' + step.type, selectedStep?.id === step.id ? 'selected' : '', highlightedStepId === step.id ? 'highlighted' : '', canDragStep(step) ? 'draggable' : '', draggedStepIndex === i ? 'dragging' : '']"
                  [attr.draggable]="canDragStep(step) ? true : null"
                  (dragstart)="onDragStart($event, i)"
                  (dragend)="onDragEnd()"
-                 (click)="selectStep(step)">
+                 (click)="highlightStep(step)"
+                 (dblclick)="openStepDetail(step, $event)">
+              <div class="step-reorder-btns" *ngIf="canDragStep(step)">
+                <button type="button" class="reorder-btn" title="Move up" [disabled]="!canMoveStepUp(i)" (click)="moveStepUp(i, $event)">↑</button>
+                <button type="button" class="reorder-btn" title="Move down" [disabled]="!canMoveStepDown(i)" (click)="moveStepDown(i, $event)">↓</button>
+              </div>
               <button type="button"
                       class="drag-handle"
                       *ngIf="canDragStep(step)"
@@ -606,6 +611,28 @@ import { MilestoneCelebrationDetailPanelComponent } from './milestone-celebratio
     .flow-step:hover { border-color: #bfdbfe; transform: translateX(3px); box-shadow: 0 4px 12px rgba(59,130,246,.08); }
     .flow-step.dragging:hover { transform: scale(1.01); }
     .flow-step.selected { border-color: #3b82f6; background: #f0f7ff; box-shadow: 0 0 0 3px rgba(59,130,246,.12); }
+    .flow-step.highlighted { border-color: #93c5fd; }
+    .step-reorder-btns {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      flex-shrink: 0;
+    }
+    .reorder-btn {
+      width: 22px;
+      height: 18px;
+      padding: 0;
+      border: 1px solid #e2e8f0;
+      border-radius: 4px;
+      background: #f8fafc;
+      color: #64748b;
+      font-size: .7rem;
+      line-height: 1;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .reorder-btn:hover:not(:disabled) { border-color: #93c5fd; color: #3b82f6; background: #eff6ff; }
+    .reorder-btn:disabled { opacity: .35; cursor: not-allowed; }
     .step-goal-exit { border-style: dashed; border-color: #10b981; }
     .step-goal-exit:hover { border-color: #059669; }
     .step-goal-exit.selected { border-color: #059669; background: #f0fdf4; box-shadow: 0 0 0 3px rgba(16,185,129,.12); }
@@ -1019,6 +1046,7 @@ export class FlowBuilderComponent {
   constructor(private flowApi: FlowApiService) {}
 
   selectedStep: FlowStep | null = null;
+  highlightedStepId: string | null = null;
   showAddStepSelector = false;
   showTriggerToast = false;
   showResults = false;
@@ -1262,6 +1290,15 @@ export class FlowBuilderComponent {
   }
 
   selectStep(step: FlowStep) {
+    this.openStepDetail(step);
+  }
+
+  highlightStep(step: FlowStep) {
+    this.highlightedStepId = step.id;
+  }
+
+  openStepDetail(step: FlowStep, event?: Event) {
+    event?.stopPropagation();
     if (step.type === 'form' && step.formFields) {
       for (const field of step.formFields) {
         if (field.type === 'select' && !field.options?.length) {
@@ -1269,7 +1306,34 @@ export class FlowBuilderComponent {
         }
       }
     }
-    this.selectedStep = this.selectedStep?.id === step.id ? null : step;
+    this.highlightedStepId = step.id;
+    this.selectedStep = step;
+  }
+
+  canMoveStepUp(index: number): boolean {
+    return index > this.minReorderIndex();
+  }
+
+  canMoveStepDown(index: number): boolean {
+    return index < this.flow.steps.length - 1 && this.canDragStep(this.flow.steps[index]);
+  }
+
+  moveStepUp(index: number, event: Event) {
+    event.stopPropagation();
+    if (!this.canMoveStepUp(index)) return;
+    const steps = [...this.flow.steps];
+    [steps[index - 1], steps[index]] = [steps[index], steps[index - 1]];
+    this.flow.steps = steps;
+    this.persistFlow();
+  }
+
+  moveStepDown(index: number, event: Event) {
+    event.stopPropagation();
+    if (!this.canMoveStepDown(index)) return;
+    const steps = [...this.flow.steps];
+    [steps[index], steps[index + 1]] = [steps[index + 1], steps[index]];
+    this.flow.steps = steps;
+    this.persistFlow();
   }
 
   canDragStep(step: FlowStep): boolean {

@@ -46,6 +46,11 @@ public class AudienceController(AudienceService audience) : ControllerBase
         return deleted ? NoContent() : NotFound();
     }
 
+    [HttpPost("import")]
+    public async Task<ActionResult<ImportSubscribersResult>> ImportSubscribers(
+        [FromBody] ImportSubscribersRequest request) =>
+        Ok(await audience.ImportSubscribersAsync(UserId, request));
+
     [HttpGet("lists-segments")]
     public async Task<ActionResult<ListsSegmentsBundleDto>> GetListsSegments() =>
         Ok(await audience.GetListsSegmentsAsync(UserId));

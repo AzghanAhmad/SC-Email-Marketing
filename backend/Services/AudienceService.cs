@@ -53,7 +53,12 @@ public class AudienceService(AppDbContext db)
             }
         }
 
-        return rows.Select(MapSubscriber).ToList();
+        return rows
+            .GroupBy(s => s.Email.Trim().ToLowerInvariant())
+            .Select(g => g.OrderByDescending(s => s.JoinedAt).First())
+            .OrderByDescending(s => s.JoinedAt)
+            .Select(MapSubscriber)
+            .ToList();
     }
 
     public async Task<int> CountAudienceRecipientsAsync(
@@ -90,13 +95,19 @@ public class AudienceService(AppDbContext db)
 
     public async Task<SubscriberProfileDto> CreateProfileAsync(Guid userId, CreateSubscriberRequest request)
     {
+        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+        var existing = await db.Subscribers
+            .FirstOrDefaultAsync(s => s.UserId == userId && s.Email == normalizedEmail);
+        if (existing is not null)
+            throw new InvalidOperationException($"A profile with email {normalizedEmail} already exists.");
+
         var listIds = ResolveListIds(request.ListIds, request.ListId);
         var subscriber = new Subscriber
         {
             Id = Guid.NewGuid(),
             UserId = userId,
             Name = request.Name.Trim(),
-            Email = request.Email.Trim().ToLowerInvariant(),
+            Email = normalizedEmail,
             Status = string.IsNullOrWhiteSpace(request.Status) ? "active" : request.Status,
             TagsJson = JsonSerializer.Serialize(request.Tags ?? [], JsonOptions),
             ListIdsJson = JsonSerializer.Serialize(listIds.Select(id => id.ToString()).ToList(), JsonOptions),
@@ -120,6 +131,194 @@ public class AudienceService(AppDbContext db)
         });
         await db.SaveChangesAsync();
         return MapSubscriber(subscriber);
+    }
+
+    public async Task<ImportSubscribersResult> ImportSubscribersAsync(Guid userId, ImportSubscribersRequest request)
+    {
+        var errors = new List<string>();
+        var contacts = request.Contacts ?? [];
+
+        // Resolve target list: create a new one if a name was supplied, otherwise use the selected list.
+        AudienceList? targetList = null;
+        if (!string.IsNullOrWhiteSpace(request.NewListName))
+        {
+            var now = DateTime.UtcNow;
+            targetList = new AudienceList
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                Name = request.NewListName.Trim(),
+                Description = "Imported subscribers",
+                Color = "#3b82f6",
+                OptInMethod = "Single",
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            db.AudienceLists.Add(targetList);
+            await db.SaveChangesAsync();
+        }
+        else if (request.ListId.HasValue)
+        {
+            targetList = await db.AudienceLists
+                .FirstOrDefaultAsync(l => l.Id == request.ListId.Value && l.UserId == userId);
+            if (targetList is null)
+                errors.Add("Selected list was not found; contacts were imported without a list.");
+        }
+
+        var globalTags = (request.Tags ?? [])
+            .Select(t => t.Trim())
+            .Where(t => t.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var duplicateMode = string.IsNullOrWhiteSpace(request.DuplicateMode)
+            ? "skip"
+            : request.DuplicateMode.Trim().ToLowerInvariant();
+
+        var existing = await db.Subscribers.Where(s => s.UserId == userId).ToListAsync();
+        var byEmail = new Dictionary<string, Subscriber>(StringComparer.OrdinalIgnoreCase);
+        foreach (var s in existing)
+            byEmail.TryAdd(s.Email.Trim().ToLowerInvariant(), s);
+
+        var seenInFile = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        int imported = 0, updated = 0, skipped = 0, invalid = 0, duplicatesInFile = 0;
+        var now2 = DateTime.UtcNow;
+
+        foreach (var row in contacts)
+        {
+            var email = (row.Email ?? "").Trim().ToLowerInvariant();
+            if (!IsValidEmail(email))
+            {
+                invalid++;
+                continue;
+            }
+
+            if (!seenInFile.Add(email))
+            {
+                duplicatesInFile++;
+                continue;
+            }
+
+            var name = ResolveContactName(row);
+            var rowTags = MergeTags(globalTags, row.Tags);
+            var status = NormalizeStatus(row.Status);
+
+            if (byEmail.TryGetValue(email, out var existingSub))
+            {
+                if (duplicateMode == "skip")
+                {
+                    skipped++;
+                    continue;
+                }
+
+                // update mode: merge into the existing subscriber
+                if (!string.IsNullOrWhiteSpace(name)) existingSub.Name = name;
+                if (rowTags.Count > 0)
+                {
+                    var merged = ParseTags(existingSub.TagsJson)
+                        .Concat(rowTags)
+                        .Select(t => t.Trim())
+                        .Where(t => t.Length > 0)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+                    existingSub.TagsJson = JsonSerializer.Serialize(merged, JsonOptions);
+                }
+                if (targetList is not null)
+                {
+                    var listIds = ParseListIds(existingSub);
+                    if (!listIds.Contains(targetList.Id))
+                    {
+                        listIds.Add(targetList.Id);
+                        existingSub.ListIdsJson = JsonSerializer.Serialize(
+                            listIds.Select(id => id.ToString()).ToList(), JsonOptions);
+                        existingSub.ListId ??= targetList.Id;
+                    }
+                }
+                updated++;
+                continue;
+            }
+
+            var listIdsForNew = targetList is not null ? new List<Guid> { targetList.Id } : new List<Guid>();
+            var subscriber = new Subscriber
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                Name = string.IsNullOrWhiteSpace(name) ? email.Split('@')[0] : name,
+                Email = email,
+                Status = status,
+                TagsJson = JsonSerializer.Serialize(rowTags, JsonOptions),
+                ListIdsJson = JsonSerializer.Serialize(listIdsForNew.Select(id => id.ToString()).ToList(), JsonOptions),
+                Note = "",
+                OpenRate = 0,
+                ClickRate = 0,
+                ListId = listIdsForNew.FirstOrDefault(),
+                JoinedAt = now2
+            };
+            db.Subscribers.Add(subscriber);
+            db.SubscriberActivities.Add(new SubscriberActivity
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                SubscriberId = subscriber.Id,
+                ActivityType = "profile_added",
+                Title = "Imported",
+                Description = $"Imported on {now2:MMMM d, yyyy}",
+                Status = "completed",
+                OccurredAt = now2
+            });
+            byEmail[email] = subscriber;
+            imported++;
+        }
+
+        if (targetList is not null)
+            targetList.UpdatedAt = now2;
+
+        await db.SaveChangesAsync();
+
+        return new ImportSubscribersResult(
+            contacts.Count, imported, updated, skipped, invalid, duplicatesInFile,
+            targetList?.Id.ToString(), targetList?.Name, errors);
+    }
+
+    private static string ResolveContactName(ImportContactRow row)
+    {
+        if (!string.IsNullOrWhiteSpace(row.Name)) return row.Name.Trim();
+        var joined = string.Join(" ", new[] { row.FirstName, row.LastName }
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Select(p => p!.Trim()));
+        return joined;
+    }
+
+    private static List<string> MergeTags(List<string> globalTags, List<string>? rowTags)
+    {
+        return globalTags
+            .Concat(rowTags ?? [])
+            .Select(t => t.Trim())
+            .Where(t => t.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static string NormalizeStatus(string? status)
+    {
+        var s = (status ?? "").Trim().ToLowerInvariant();
+        return s switch
+        {
+            "active" or "subscribed" or "confirmed" => "active",
+            "unsubscribed" or "unsub" or "opted_out" or "opted out" => "unsubscribed",
+            "bounced" or "bounce" => "bounced",
+            "inactive" => "inactive",
+            _ => "active"
+        };
+    }
+
+    private static bool IsValidEmail(string email)
+    {
+        if (string.IsNullOrWhiteSpace(email)) return false;
+        var at = email.IndexOf('@');
+        if (at <= 0 || at != email.LastIndexOf('@')) return false;
+        var dot = email.IndexOf('.', at);
+        return dot > at + 1 && dot < email.Length - 1;
     }
 
     public async Task<SubscriberProfileDetailDto?> GetProfileDetailAsync(Guid userId, Guid id)

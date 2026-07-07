@@ -12,8 +12,20 @@ public class CampaignTrackingService(IConfiguration configuration)
     public string PublicAppBaseUrl =>
         (configuration["App:PublicBaseUrl"] ?? "http://localhost:4200").TrimEnd('/');
 
-    public string PublicApiBaseUrl =>
-        (configuration["App:ApiBaseUrl"] ?? "http://localhost:5065/api/v1").TrimEnd('/');
+    /// <summary>
+    /// Public API base used in outbound email tracking links (open pixel, click redirects).
+    /// Defaults to {PublicBaseUrl}/api/v1 so links work behind the same domain reverse proxy.
+    /// </summary>
+    public string TrackingApiBaseUrl
+    {
+        get
+        {
+            var configured = configuration["App:ApiBaseUrl"]?.TrimEnd('/');
+            if (!string.IsNullOrWhiteSpace(configured))
+                return configured;
+            return $"{PublicAppBaseUrl}/api/v1";
+        }
+    }
 
     public string CreateToken(Guid campaignId, Guid subscriberId, Guid userId)
     {
@@ -59,9 +71,38 @@ public class CampaignTrackingService(IConfiguration configuration)
 
     public string UnsubscribeUrl(string token) => $"{PublicAppBaseUrl}/unsubscribe?token={Uri.EscapeDataString(token)}";
 
+    public string PreferenceUrl(string token) => $"{PublicAppBaseUrl}/preferences?token={Uri.EscapeDataString(token)}";
+
     public string ViewInBrowserUrl(string token) => $"{PublicAppBaseUrl}/email/view?token={Uri.EscapeDataString(token)}";
 
-    public string OpenTrackingUrl(string token) => $"{PublicApiBaseUrl}/public/campaigns/open.gif?token={Uri.EscapeDataString(token)}";
+    public string OpenTrackingUrl(string token) =>
+        $"{TrackingApiBaseUrl}/public/campaigns/open.gif?token={Uri.EscapeDataString(token)}";
+
+    public string ClickTrackingUrl(string token, string destinationUrl)
+    {
+        var encoded = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(destinationUrl));
+        return $"{TrackingApiBaseUrl}/public/campaigns/click?token={Uri.EscapeDataString(token)}&u={encoded}";
+    }
+
+    public bool TryDecodeClickDestination(string? encodedUrl, out string destination)
+    {
+        destination = "";
+        if (string.IsNullOrWhiteSpace(encodedUrl)) return false;
+
+        try
+        {
+            destination = Encoding.UTF8.GetString(WebEncoders.Base64UrlDecode(encodedUrl));
+        }
+        catch
+        {
+            return false;
+        }
+
+        if (!Uri.TryCreate(destination, UriKind.Absolute, out var uri))
+            return false;
+
+        return uri.Scheme is "http" or "https";
+    }
 
     private byte[] ComputeHmac(byte[] payload)
     {

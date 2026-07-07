@@ -28,8 +28,31 @@ namespace ScribeCount.Email.Api.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("char(36)");
 
+                    b.Property<bool>("AutoSendWinner")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<Guid?>("CampaignIdA")
+                        .HasColumnType("char(36)");
+
+                    b.Property<Guid?>("CampaignIdB")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime?>("EndsAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("HeldSubscriberIdsJson")
+                        .IsRequired()
+                        .HasColumnType("longtext");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -40,6 +63,13 @@ namespace ScribeCount.Email.Api.Data.Migrations
 
                     b.Property<decimal?>("OpenRateB")
                         .HasColumnType("decimal(65,30)");
+
+                    b.Property<string>("SendToSegment")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("datetime(6)");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -59,21 +89,235 @@ namespace ScribeCount.Email.Api.Data.Migrations
                     b.Property<Guid>("UserId")
                         .HasColumnType("char(36)");
 
+                    b.Property<int>("VotesA")
+                        .HasColumnType("int");
+
+                    b.Property<int>("VotesB")
+                        .HasColumnType("int");
+
                     b.Property<int>("WaitHours")
                         .HasColumnType("int");
 
                     b.Property<string>("Winner")
                         .HasColumnType("longtext");
 
+                    b.Property<Guid?>("WinnerCampaignId")
+                        .HasColumnType("char(36)");
+
                     b.Property<string>("WinnerMetric")
                         .IsRequired()
                         .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("WinnerSentAt")
+                        .HasColumnType("datetime(6)");
 
                     b.HasKey("Id");
 
                     b.HasIndex("UserId");
 
                     b.ToTable("AbTests");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.AbTestVote", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)");
+
+                    b.Property<Guid>("AbTestId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Variant")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("VoterKey")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AbTestId", "VoterKey")
+                        .IsUnique();
+
+                    b.ToTable("AbTestVotes");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.AudienceFolder", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("char(36)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Kind");
+
+                    b.ToTable("AudienceFolders");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.AudienceList", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("Color")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<Guid?>("FolderId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("OptInMethod")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("char(36)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FolderId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("AudienceLists");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.AudienceSegmentItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("Color")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<Guid?>("FolderId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("RuleConfigJson")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("RuleType")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("char(36)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FolderId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("AudienceSegmentItems");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.BrandAsset", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("FileType")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("IconKey")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("MimeType")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("StoragePath")
+                        .HasColumnType("longtext");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("char(36)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("BrandAssets");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.BrandProfile", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("ColorsJson")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("UserId");
+
+                    b.ToTable("BrandProfiles");
                 });
 
             modelBuilder.Entity("ScribeCount.Email.Api.Entities.Campaign", b =>
@@ -227,6 +471,47 @@ namespace ScribeCount.Email.Api.Data.Migrations
                     b.ToTable("CampaignMetrics");
                 });
 
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.ContentBlock", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("BlockType")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("HtmlBody")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("IconKey")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("UsedInCount")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("char(36)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("ContentBlocks");
+                });
+
             modelBuilder.Entity("ScribeCount.Email.Api.Entities.DashboardActivity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -252,6 +537,248 @@ namespace ScribeCount.Email.Api.Data.Migrations
                     b.HasIndex("UserId", "OccurredAt");
 
                     b.ToTable("DashboardActivities");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.DeliveryEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("BounceType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<Guid?>("CampaignId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("DiagnosticCode")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("varchar(320)");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<Guid?>("FlowId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("OutboundMessageId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("RawPayload")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime>("ReceivedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("SesMessageId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<Guid?>("SubscriberId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("char(36)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SesMessageId");
+
+                    b.HasIndex("Email", "EventType");
+
+                    b.HasIndex("UserId", "OccurredAt");
+
+                    b.ToTable("SesDeliveryEvents", (string)null);
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.EmailTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("HtmlBody")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("IconKey")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<bool>("IsCustom")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("PreviewCode")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("PreviewText")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("SubjectLine")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("SuggestedCampaignType")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("char(36)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("EmailTemplates");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.FlowEnrollment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("CurrentStepIndex")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("FlowRunId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<Guid>("SubscriberId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FlowRunId");
+
+                    b.HasIndex("SubscriberId");
+
+                    b.HasIndex("Token")
+                        .IsUnique();
+
+                    b.ToTable("FlowEnrollments");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.FlowRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("CompletedCount")
+                        .HasColumnType("int");
+
+                    b.Property<int>("EnrolledCount")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<Guid>("UserFlowId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("char(36)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserFlowId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("FlowRuns");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.FlowStepResponse", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)");
+
+                    b.Property<Guid>("FlowEnrollmentId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("ResponseJson")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("StepId")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("StepLabel")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("StepType")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime>("SubmittedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FlowEnrollmentId");
+
+                    b.ToTable("FlowStepResponses");
                 });
 
             modelBuilder.Entity("ScribeCount.Email.Api.Entities.FlowTemplate", b =>
@@ -291,6 +818,79 @@ namespace ScribeCount.Email.Api.Data.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("FlowTemplates");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.GrowthToolConfig", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("ToolKey")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("ConfigJson")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("UserId", "ToolKey");
+
+                    b.ToTable("GrowthToolConfigs");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.LandingPage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("ContentJson")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("IconKey")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("Signups")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("ThemeGradient")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<int>("Visits")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Slug")
+                        .IsUnique();
+
+                    b.ToTable("LandingPages");
                 });
 
             modelBuilder.Entity("ScribeCount.Email.Api.Entities.MailboxConnection", b =>
@@ -444,9 +1044,15 @@ namespace ScribeCount.Email.Api.Data.Migrations
                         .IsRequired()
                         .HasColumnType("longtext");
 
+                    b.Property<DateTime?>("LastSentAt")
+                        .HasColumnType("datetime(6)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("NextSendAt")
+                        .HasColumnType("datetime(6)");
 
                     b.Property<string>("PreviewText")
                         .IsRequired()
@@ -485,11 +1091,155 @@ namespace ScribeCount.Email.Api.Data.Migrations
                     b.ToTable("NewsletterSchedules");
                 });
 
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.OutboundEmailMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime?>("BouncedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("CampaignId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime?>("ComplainedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime?>("DeliveredAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("FlowId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("SentAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("SesMessageId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<Guid?>("SubscriberId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("ToEmail")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("varchar(320)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("char(36)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SesMessageId");
+
+                    b.HasIndex("UserId", "SentAt");
+
+                    b.ToTable("SesOutboundMessages", (string)null);
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.ReleasePlan", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("BookTitle")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("ReleaseDate")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("char(36)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .IsUnique();
+
+                    b.ToTable("ReleasePlans");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.SignUpForm", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("ContentJson")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<decimal>("ConversionRate")
+                        .HasColumnType("decimal(65,30)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("FormType")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("Submissions")
+                        .HasColumnType("int");
+
+                    b.Property<Guid?>("TargetListId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("TargetListName")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("char(36)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("SignUpForms");
+                });
+
             modelBuilder.Entity("ScribeCount.Email.Api.Entities.Subscriber", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("char(36)");
+
+                    b.Property<decimal>("ClickRate")
+                        .HasColumnType("decimal(65,30)");
 
                     b.Property<string>("Email")
                         .IsRequired()
@@ -498,11 +1248,29 @@ namespace ScribeCount.Email.Api.Data.Migrations
                     b.Property<DateTime>("JoinedAt")
                         .HasColumnType("datetime(6)");
 
+                    b.Property<Guid?>("ListId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("ListIdsJson")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("longtext");
 
+                    b.Property<string>("Note")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<decimal>("OpenRate")
+                        .HasColumnType("decimal(65,30)");
+
                     b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("TagsJson")
                         .IsRequired()
                         .HasColumnType("longtext");
 
@@ -513,7 +1281,58 @@ namespace ScribeCount.Email.Api.Data.Migrations
 
                     b.HasIndex("UserId");
 
+                    b.HasIndex("UserId", "ListId");
+
                     b.ToTable("Subscribers");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.SubscriberActivity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("ActivityType")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("CampaignFrom")
+                        .HasColumnType("longtext");
+
+                    b.Property<Guid?>("CampaignId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("CampaignSubject")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<Guid>("SubscriberId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("char(36)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("SubscriberId", "OccurredAt");
+
+                    b.ToTable("SubscriberActivities");
                 });
 
             modelBuilder.Entity("ScribeCount.Email.Api.Entities.SubscriberGrowthPoint", b =>
@@ -632,7 +1451,104 @@ namespace ScribeCount.Email.Api.Data.Migrations
                     b.ToTable("UserFlows");
                 });
 
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.UserSettings", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("Json")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("UserId");
+
+                    b.ToTable("UserSettings");
+                });
+
             modelBuilder.Entity("ScribeCount.Email.Api.Entities.AbTest", b =>
+                {
+                    b.HasOne("ScribeCount.Email.Api.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.AbTestVote", b =>
+                {
+                    b.HasOne("ScribeCount.Email.Api.Entities.AbTest", "AbTest")
+                        .WithMany("Votes")
+                        .HasForeignKey("AbTestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AbTest");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.AudienceFolder", b =>
+                {
+                    b.HasOne("ScribeCount.Email.Api.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.AudienceList", b =>
+                {
+                    b.HasOne("ScribeCount.Email.Api.Entities.AudienceFolder", "Folder")
+                        .WithMany()
+                        .HasForeignKey("FolderId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("ScribeCount.Email.Api.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Folder");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.AudienceSegmentItem", b =>
+                {
+                    b.HasOne("ScribeCount.Email.Api.Entities.AudienceFolder", "Folder")
+                        .WithMany()
+                        .HasForeignKey("FolderId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("ScribeCount.Email.Api.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Folder");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.BrandAsset", b =>
+                {
+                    b.HasOne("ScribeCount.Email.Api.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.BrandProfile", b =>
                 {
                     b.HasOne("ScribeCount.Email.Api.Entities.User", "User")
                         .WithMany()
@@ -676,7 +1592,100 @@ namespace ScribeCount.Email.Api.Data.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.ContentBlock", b =>
+                {
+                    b.HasOne("ScribeCount.Email.Api.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("ScribeCount.Email.Api.Entities.DashboardActivity", b =>
+                {
+                    b.HasOne("ScribeCount.Email.Api.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.EmailTemplate", b =>
+                {
+                    b.HasOne("ScribeCount.Email.Api.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.FlowEnrollment", b =>
+                {
+                    b.HasOne("ScribeCount.Email.Api.Entities.FlowRun", "FlowRun")
+                        .WithMany("Enrollments")
+                        .HasForeignKey("FlowRunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ScribeCount.Email.Api.Entities.Subscriber", "Subscriber")
+                        .WithMany()
+                        .HasForeignKey("SubscriberId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("FlowRun");
+
+                    b.Navigation("Subscriber");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.FlowRun", b =>
+                {
+                    b.HasOne("ScribeCount.Email.Api.Entities.UserFlow", "UserFlow")
+                        .WithMany()
+                        .HasForeignKey("UserFlowId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ScribeCount.Email.Api.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+
+                    b.Navigation("UserFlow");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.FlowStepResponse", b =>
+                {
+                    b.HasOne("ScribeCount.Email.Api.Entities.FlowEnrollment", "FlowEnrollment")
+                        .WithMany("Responses")
+                        .HasForeignKey("FlowEnrollmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("FlowEnrollment");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.GrowthToolConfig", b =>
+                {
+                    b.HasOne("ScribeCount.Email.Api.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.LandingPage", b =>
                 {
                     b.HasOne("ScribeCount.Email.Api.Entities.User", "User")
                         .WithMany()
@@ -720,6 +1729,39 @@ namespace ScribeCount.Email.Api.Data.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.OutboundEmailMessage", b =>
+                {
+                    b.HasOne("ScribeCount.Email.Api.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.ReleasePlan", b =>
+                {
+                    b.HasOne("ScribeCount.Email.Api.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.SignUpForm", b =>
+                {
+                    b.HasOne("ScribeCount.Email.Api.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("ScribeCount.Email.Api.Entities.Subscriber", b =>
                 {
                     b.HasOne("ScribeCount.Email.Api.Entities.User", "User")
@@ -727,6 +1769,25 @@ namespace ScribeCount.Email.Api.Data.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.SubscriberActivity", b =>
+                {
+                    b.HasOne("ScribeCount.Email.Api.Entities.Subscriber", "Subscriber")
+                        .WithMany()
+                        .HasForeignKey("SubscriberId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ScribeCount.Email.Api.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Subscriber");
 
                     b.Navigation("User");
                 });
@@ -751,6 +1812,32 @@ namespace ScribeCount.Email.Api.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.UserSettings", b =>
+                {
+                    b.HasOne("ScribeCount.Email.Api.Entities.User", "User")
+                        .WithOne()
+                        .HasForeignKey("ScribeCount.Email.Api.Entities.UserSettings", "UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.AbTest", b =>
+                {
+                    b.Navigation("Votes");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.FlowEnrollment", b =>
+                {
+                    b.Navigation("Responses");
+                });
+
+            modelBuilder.Entity("ScribeCount.Email.Api.Entities.FlowRun", b =>
+                {
+                    b.Navigation("Enrollments");
                 });
 
             modelBuilder.Entity("ScribeCount.Email.Api.Entities.User", b =>

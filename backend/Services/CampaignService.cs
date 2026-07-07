@@ -8,7 +8,7 @@ using ScribeCount.Email.Api.Entities;
 
 namespace ScribeCount.Email.Api.Services;
 
-public class CampaignService(AppDbContext db, AudienceService audience, MailboxService mailbox, CampaignTrackingService tracking, ILogger<CampaignService> logger)
+public class CampaignService(AppDbContext db, AudienceService audience, SesEmailService ses, CampaignTrackingService tracking, SettingsService settings, ILogger<CampaignService> logger)
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
@@ -31,11 +31,15 @@ public class CampaignService(AppDbContext db, AudienceService audience, MailboxS
             .OrderByDescending(t => t.CreatedAt).ToListAsync();
         var releasePlan = await db.ReleasePlans.FirstOrDefaultAsync(r => r.UserId == userId);
 
+        var abTestDtos = new List<AbTestDto>();
+        foreach (var t in abTests)
+            abTestDtos.Add(await MapAbTestAsync(t));
+
         return new CampaignsBundleDto(
             campaigns.Select(MapCampaign).ToList(),
             events.Select(MapCalendarEvent).ToList(),
             MapNewsletter(newsletter ?? new NewsletterSchedule { UserId = userId }),
-            abTests.Select(MapAbTest).ToList(),
+            abTestDtos,
             releasePlan is null ? null : MapReleasePlan(releasePlan)
         );
     }
@@ -153,6 +157,9 @@ public class CampaignService(AppDbContext db, AudienceService audience, MailboxS
             return MapCampaign(c);
         }
 
+        if (c.Status == "sent" && c.SentAt == null)
+            c.Status = "draft";
+
         if (c.Status == "sent")
             throw new InvalidOperationException("This campaign has already been sent.");
 
@@ -167,12 +174,12 @@ public class CampaignService(AppDbContext db, AudienceService audience, MailboxS
         if (recipients.Count == 0)
             throw new InvalidOperationException("No active recipients match your audience and suppression rules.");
 
-        var delivered = await DeliverCampaignEmailsAsync(userId, c, recipients);
+        var sentRecipients = await DeliverCampaignEmailsAsync(userId, c, recipients);
 
         c.Status = "sent";
         c.SentAt = sentAt;
-        c.SentCount = delivered;
-        await audience.RecordCampaignSendActivitiesAsync(userId, c, recipients);
+        c.SentCount = sentRecipients.Count;
+        await audience.RecordCampaignSendActivitiesAsync(userId, c, sentRecipients);
         await RefreshCampaignStatsAsync(c);
         c.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
@@ -203,22 +210,19 @@ public class CampaignService(AppDbContext db, AudienceService audience, MailboxS
         }
     }
 
-    private async Task<int> DeliverCampaignEmailsAsync(Guid userId, Campaign campaign, IReadOnlyList<Subscriber> recipients)
+    private async Task<IReadOnlyList<Subscriber>> DeliverCampaignEmailsAsync(Guid userId, Campaign campaign, IReadOnlyList<Subscriber> recipients)
     {
         if (campaign.UserId != userId)
             throw new UnauthorizedAccessException("Cannot send a campaign that belongs to another account.");
 
-        var conn = await db.MailboxConnections.FirstOrDefaultAsync(c => c.UserId == userId);
-        if (conn is null || !conn.IsConnected)
+        if (!ses.IsConfigured)
         {
             throw new InvalidOperationException(
-                "Connect your mailbox under Email → Settings before sending campaigns.");
+                "Amazon SES is not configured. Platform campaigns send through SES (see Settings → Domain and docs/AWS-SES-SNS-SETUP.md).");
         }
 
-        if (conn.UserId != userId)
-            throw new InvalidOperationException("Mailbox connection does not belong to your account.");
-
-        var sent = 0;
+        var sentRecipients = new List<Subscriber>();
+        string? lastError = null;
 
         foreach (var recipient in recipients)
         {
@@ -229,6 +233,9 @@ public class CampaignService(AppDbContext db, AudienceService audience, MailboxS
                     recipient.Email, recipient.Status);
                 continue;
             }
+
+            if (recipient.Status is "bounced" or "complained" or "unsubscribed")
+                continue;
 
             if (recipient.UserId != userId)
             {
@@ -241,27 +248,35 @@ public class CampaignService(AppDbContext db, AudienceService audience, MailboxS
             try
             {
                 var token = tracking.CreateToken(campaign.Id, recipient.Id, userId);
-                var body = BuildRecipientCampaignHtml(campaign, recipient, token);
+                var body = await BuildRecipientCampaignHtmlAsync(campaign, recipient, token, userId);
                 var subject = CampaignMergeTagService.Apply(campaign.Subject, campaign, recipient);
-                await mailbox.SendEmailAsync(userId, new SendEmailRequest(
+                await ses.SendAsync(new PlatformSendRequest(
+                    userId,
                     recipient.Email,
                     subject,
-                    body));
-                sent++;
+                    body,
+                    "campaign",
+                    recipient.Id,
+                    campaign.Id));
+                sentRecipients.Add(recipient);
             }
             catch (Exception ex)
             {
+                lastError = ex is InvalidOperationException ioe ? ioe.Message : ex.Message;
                 logger.LogWarning(ex, "Failed to send campaign {CampaignId} to {Email}", campaign.Id, recipient.Email);
             }
         }
 
-        if (sent == 0)
+        if (sentRecipients.Count == 0)
         {
+            var detail = string.IsNullOrWhiteSpace(lastError)
+                ? "Check SES configuration and recipient addresses."
+                : lastError;
             throw new InvalidOperationException(
-                "Campaign could not be delivered. Check your mailbox connection and try again.");
+                $"Campaign could not be delivered via Amazon SES. {detail}");
         }
 
-        return sent;
+        return sentRecipients;
     }
 
     public async Task RecordCampaignOpenAsync(string token)
@@ -295,6 +310,48 @@ public class CampaignService(AppDbContext db, AudienceService audience, MailboxS
         await db.SaveChangesAsync();
         await RefreshCampaignStatsAsync(campaign);
         await db.SaveChangesAsync();
+    }
+
+    public async Task<string?> RecordCampaignClickAsync(string token, string? encodedDestination)
+    {
+        if (!tracking.TryParseToken(token, out var campaignId, out var subscriberId, out var userId))
+            return null;
+
+        if (!tracking.TryDecodeClickDestination(encodedDestination, out var destination))
+            return null;
+
+        var campaign = await db.Campaigns.FirstOrDefaultAsync(c => c.Id == campaignId && c.UserId == userId);
+        if (campaign is null) return null;
+
+        await RecordCampaignOpenAsync(token);
+
+        var alreadyClicked = await db.SubscriberActivities.AnyAsync(a =>
+            a.CampaignId == campaignId
+            && a.SubscriberId == subscriberId
+            && a.ActivityType == "campaign_clicked");
+        if (!alreadyClicked)
+        {
+            var fromEmail = ParseExtras(campaign.ExtrasJson).GetValueOrDefault("fromEmail") ?? campaign.FromName;
+            db.SubscriberActivities.Add(new SubscriberActivity
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                SubscriberId = subscriberId,
+                ActivityType = "campaign_clicked",
+                Title = "Email campaign link clicked",
+                Description = $"({campaign.Name}) {destination}",
+                CampaignId = campaign.Id,
+                CampaignSubject = campaign.Subject,
+                CampaignFrom = fromEmail,
+                Status = "clicked",
+                OccurredAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+            await RefreshCampaignStatsAsync(campaign);
+            await db.SaveChangesAsync();
+        }
+
+        return destination;
     }
 
     public async Task<UnsubscribePreviewDto?> GetUnsubscribePreviewAsync(string token)
@@ -369,7 +426,7 @@ public class CampaignService(AppDbContext db, AudienceService audience, MailboxS
 
         await RecordCampaignOpenAsync(token);
 
-        var html = BuildRecipientCampaignHtml(campaign, subscriber, token, includeTrackingPixel: false);
+        var html = await BuildRecipientCampaignHtmlAsync(campaign, subscriber, token, userId, includeTrackingPixel: false);
         var subject = CampaignMergeTagService.Apply(campaign.Subject, campaign, subscriber);
         return new CampaignViewDto(
             subject,
@@ -429,29 +486,75 @@ public class CampaignService(AppDbContext db, AudienceService audience, MailboxS
             conversionRate);
     }
 
-    private string BuildRecipientCampaignHtml(
+    private async Task<string> BuildRecipientCampaignHtmlAsync(
         Campaign campaign,
         Subscriber recipient,
         string token,
+        Guid userId,
         bool includeTrackingPixel = true)
     {
         var unsubUrl = tracking.UnsubscribeUrl(token);
         var viewUrl = tracking.ViewInBrowserUrl(token);
+        var prefUrl = tracking.PreferenceUrl(token);
         var openPixel = includeTrackingPixel
             ? $"""<img src="{tracking.OpenTrackingUrl(token)}" width="1" height="1" alt="" style="display:block;width:1px;height:1px;border:0;margin:0;padding:0;" />"""
             : "";
 
         var content = string.IsNullOrWhiteSpace(campaign.Content) ? "<p></p>" : campaign.Content;
         content = CampaignMergeTagService.Apply(content, campaign, recipient);
-        content = InjectCampaignLinks(content, unsubUrl, viewUrl);
+
+        if (!PreferenceFooterHelper.HasFooter(content))
+        {
+            var (footer, domain) = await settings.GetUserFooterAsync(userId);
+            content = PreferenceFooterHelper.AppendFooter(content, footer, domain);
+        }
+
+        content = InjectCampaignLinks(content, unsubUrl, viewUrl, prefUrl);
+        content = RewriteLinksForClickTracking(content, token, unsubUrl, viewUrl, prefUrl);
 
         return content + openPixel;
     }
 
-    private static string InjectCampaignLinks(string html, string unsubUrl, string viewUrl)
+    private string RewriteLinksForClickTracking(string html, string token, string unsubUrl, string viewUrl, string prefUrl)
+    {
+        return Regex.Replace(
+            html,
+            """<a\s+([^>]*?)href\s*=\s*["']([^"']+)["']([^>]*)>""",
+            match =>
+            {
+                var href = match.Groups[2].Value;
+                if (ShouldSkipClickTracking(href, unsubUrl, viewUrl, prefUrl))
+                    return match.Value;
+
+                var tracked = tracking.ClickTrackingUrl(token, href);
+                return $"""<a{match.Groups[1].Value}href="{tracked}"{match.Groups[3].Value}>""";
+            },
+            RegexOptions.IgnoreCase);
+    }
+
+    private static bool ShouldSkipClickTracking(string href, string unsubUrl, string viewUrl, string prefUrl)
+    {
+        if (string.IsNullOrWhiteSpace(href)) return true;
+        if (href.StartsWith('#')) return true;
+        if (href.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase)) return true;
+        if (href.StartsWith("tel:", StringComparison.OrdinalIgnoreCase)) return true;
+        if (href.Contains("{{", StringComparison.Ordinal)) return true;
+        if (href.Contains("/public/campaigns/click", StringComparison.OrdinalIgnoreCase)) return true;
+        if (href.Contains("/public/campaigns/open.gif", StringComparison.OrdinalIgnoreCase)) return true;
+        if (string.Equals(href, unsubUrl, StringComparison.OrdinalIgnoreCase)) return true;
+        if (string.Equals(href, viewUrl, StringComparison.OrdinalIgnoreCase)) return true;
+        if (string.Equals(href, prefUrl, StringComparison.OrdinalIgnoreCase)) return true;
+        if (href.Contains("/unsubscribe", StringComparison.OrdinalIgnoreCase)) return true;
+        if (href.Contains("/email/view", StringComparison.OrdinalIgnoreCase)) return true;
+        if (href.Contains("/preferences", StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
+
+    private static string InjectCampaignLinks(string html, string unsubUrl, string viewUrl, string prefUrl)
     {
         html = html.Replace("{{unsubscribe_url}}", unsubUrl, StringComparison.OrdinalIgnoreCase)
-            .Replace("{{view_in_browser_url}}", viewUrl, StringComparison.OrdinalIgnoreCase);
+            .Replace("{{view_in_browser_url}}", viewUrl, StringComparison.OrdinalIgnoreCase)
+            .Replace("{{preference_url}}", prefUrl, StringComparison.OrdinalIgnoreCase);
 
         html = Regex.Replace(
             html,
@@ -463,6 +566,12 @@ public class CampaignService(AppDbContext db, AudienceService audience, MailboxS
             html,
             """<a([^>]*?)href\s*=\s*["']#["']([^>]*?)>\s*View in browser\s*</a>""",
             $"""<a$1href="{viewUrl}"$2>View in browser</a>""",
+            RegexOptions.IgnoreCase);
+
+        html = Regex.Replace(
+            html,
+            """<a([^>]*?)href\s*=\s*["']{{preference_url}}["']([^>]*?)>""",
+            $"""<a$1href="{prefUrl}"$2>""",
             RegexOptions.IgnoreCase);
 
         return html;
@@ -479,14 +588,28 @@ public class CampaignService(AppDbContext db, AudienceService audience, MailboxS
         var user = await db.Users.FindAsync(userId);
         if (user is null || string.IsNullOrWhiteSpace(user.Email)) return null;
 
+        var subject = request.Subject ?? "Campaign preview";
+        var body = "<p>This is a campaign test send via Amazon SES.</p>";
+
         if (!string.IsNullOrWhiteSpace(request.CampaignId) && Guid.TryParse(request.CampaignId, out var campaignId))
         {
             var campaign = await db.Campaigns.FirstOrDefaultAsync(c => c.Id == campaignId && c.UserId == userId);
             if (campaign is null) return null;
+            subject = string.IsNullOrWhiteSpace(request.Subject) ? campaign.Subject : request.Subject;
+            body = string.IsNullOrWhiteSpace(campaign.Content)
+                ? body
+                : campaign.Content;
         }
 
+        await ses.SendAsync(new PlatformSendRequest(
+            userId,
+            user.Email,
+            $"[TEST] {subject}",
+            body,
+            "campaign_test"));
+
         return new TestSendResponse(
-            $"Test preview queued for {user.Email}. Subject: \"{request.Subject ?? "Campaign preview"}\"",
+            $"Test email sent via Amazon SES to {user.Email}. Subject: \"{subject}\"",
             user.Email);
     }
 
@@ -594,19 +717,50 @@ public class CampaignService(AppDbContext db, AudienceService audience, MailboxS
 
         test.Status = "running";
         test.StartedAt = DateTime.UtcNow;
+        if (test.EndsAt is null)
+            test.EndsAt = test.StartedAt.Value.AddHours(test.WaitHours);
         test.CompletedAt = null;
         test.Winner = null;
         test.VotesA = 0;
         test.VotesB = 0;
         test.OpenRateA = null;
         test.OpenRateB = null;
+        test.WinnerCampaignId = null;
+        test.WinnerSentAt = null;
+        test.CampaignIdA = null;
+        test.CampaignIdB = null;
+        test.HeldSubscriberIdsJson = "[]";
 
         var existingVotes = await db.AbTestVotes.Where(v => v.AbTestId == test.Id).ToListAsync();
         if (existingVotes.Count > 0)
             db.AbTestVotes.RemoveRange(existingVotes);
 
         await db.SaveChangesAsync();
-        return MapAbTest(test);
+
+        try
+        {
+            await LaunchAbTestEmailSplitsAsync(test);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "A/B test {AbTestId} launched for voting but email split sends failed", test.Id);
+        }
+
+        await db.SaveChangesAsync();
+        return await MapAbTestAsync(test);
+    }
+
+    public async Task<AbTestDto?> EndAbTestAsync(Guid userId, Guid id, CancellationToken cancellationToken = default)
+    {
+        var test = await db.AbTests.FirstOrDefaultAsync(t => t.Id == id && t.UserId == userId, cancellationToken);
+        if (test is null) return null;
+
+        if (test.Status != "running")
+            throw new InvalidOperationException("Only a running A/B test can be ended early.");
+
+        await CompleteAbTestAsync(test, cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+        return await MapAbTestAsync(test);
     }
 
     public async Task<PublicAbTestDto?> GetPublicAbTestAsync(Guid id)
@@ -673,12 +827,14 @@ public class CampaignService(AppDbContext db, AudienceService audience, MailboxS
         var due = await db.AbTests
             .Where(t => t.Status == "running"
                 && t.StartedAt != null
-                && t.StartedAt.Value.AddHours(t.WaitHours) <= now)
+                && (
+                    (t.EndsAt != null && t.EndsAt <= now)
+                    || (t.EndsAt == null && t.StartedAt!.Value.AddHours(t.WaitHours) <= now)))
             .ToListAsync(cancellationToken);
 
         foreach (var test in due)
         {
-            CompleteAbTest(test);
+            await CompleteAbTestAsync(test, cancellationToken);
             await db.SaveChangesAsync(cancellationToken);
         }
     }
@@ -737,11 +893,45 @@ public class CampaignService(AppDbContext db, AudienceService audience, MailboxS
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    private static void CompleteAbTest(AbTest test)
+    private async Task CompleteAbTestAsync(AbTest test, CancellationToken cancellationToken = default)
     {
         test.Status = "complete";
         test.CompletedAt = DateTime.UtcNow;
 
+        if (test.CampaignIdA.HasValue && test.CampaignIdB.HasValue)
+            await ApplyEngagementWinnerAsync(test, cancellationToken);
+        else
+            ApplyVoteWinner(test);
+
+        await TryAutoSendAbTestWinnerAsync(test, cancellationToken);
+    }
+
+    private async Task ApplyEngagementWinnerAsync(AbTest test, CancellationToken cancellationToken)
+    {
+        var campaignA = await db.Campaigns.FirstOrDefaultAsync(c => c.Id == test.CampaignIdA, cancellationToken);
+        var campaignB = await db.Campaigns.FirstOrDefaultAsync(c => c.Id == test.CampaignIdB, cancellationToken);
+        if (campaignA is not null) await RefreshCampaignStatsAsync(campaignA);
+        if (campaignB is not null) await RefreshCampaignStatsAsync(campaignB);
+
+        test.OpenRateA = campaignA?.OpenRate;
+        test.OpenRateB = campaignB?.OpenRate;
+
+        var useClicks = string.Equals(test.WinnerMetric, "clicks", StringComparison.OrdinalIgnoreCase);
+        var metricA = useClicks ? campaignA?.ClickRate ?? 0 : campaignA?.OpenRate ?? 0;
+        var metricB = useClicks ? campaignB?.ClickRate ?? 0 : campaignB?.OpenRate ?? 0;
+
+        if (metricA > metricB)
+            test.Winner = "A";
+        else if (metricB > metricA)
+            test.Winner = "B";
+        else if (campaignA?.SentCount > 0 || campaignB?.SentCount > 0)
+            test.Winner = "tie";
+        else
+            ApplyVoteWinner(test);
+    }
+
+    private static void ApplyVoteWinner(AbTest test)
+    {
         if (test.VotesA > test.VotesB)
         {
             test.Winner = "A";
@@ -756,9 +946,192 @@ public class CampaignService(AppDbContext db, AudienceService audience, MailboxS
         }
         else
         {
-            test.Winner = test.VotesA == 0 ? null : "tie";
+            test.Winner = test.VotesA == 0 && test.VotesB == 0 ? null : "tie";
             test.OpenRateA = 50;
             test.OpenRateB = 50;
+        }
+    }
+
+    private async Task LaunchAbTestEmailSplitsAsync(AbTest test)
+    {
+        if (string.IsNullOrWhiteSpace(test.Content))
+            return;
+
+        if (!ses.IsConfigured)
+        {
+            logger.LogInformation("Skipping A/B email split for {AbTestId} — SES is not configured", test.Id);
+            return;
+        }
+
+        var pseudoCampaign = new Campaign
+        {
+            UserId = test.UserId,
+            SendToSegment = string.IsNullOrWhiteSpace(test.SendToSegment) ? "all" : test.SendToSegment,
+            ExtrasJson = "{}",
+        };
+
+        var recipients = await audience.ResolveCampaignRecipientsAsync(test.UserId, pseudoCampaign, []);
+        recipients = recipients
+            .Where(r => r.UserId == test.UserId && string.Equals(r.Status, "active", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (recipients.Count == 0)
+        {
+            logger.LogInformation("Skipping A/B email split for {AbTestId} — no active recipients", test.Id);
+            return;
+        }
+
+        var testCount = Math.Max(1, (int)Math.Round(recipients.Count * test.TestSize / 100.0, MidpointRounding.AwayFromZero));
+        if (testCount * 2 > recipients.Count)
+            testCount = Math.Max(1, recipients.Count / 2);
+
+        var shuffled = recipients.OrderBy(_ => Guid.NewGuid()).ToList();
+        var groupA = shuffled.Take(testCount).ToList();
+        var groupB = shuffled.Skip(testCount).Take(testCount).ToList();
+        var held = shuffled.Skip(testCount * 2).ToList();
+
+        test.HeldSubscriberIdsJson = JsonSerializer.Serialize(held.Select(s => s.Id.ToString()).ToList(), JsonOptions);
+
+        var campaignA = CreateAbTestCampaign(test, "A", test.SubjectA);
+        var campaignB = CreateAbTestCampaign(test, "B", test.SubjectB);
+        db.Campaigns.Add(campaignA);
+        db.Campaigns.Add(campaignB);
+        test.CampaignIdA = campaignA.Id;
+        test.CampaignIdB = campaignB.Id;
+        await db.SaveChangesAsync();
+
+        await SendCampaignToRecipientsAsync(test.UserId, campaignA, groupA);
+        await SendCampaignToRecipientsAsync(test.UserId, campaignB, groupB);
+    }
+
+    private static Campaign CreateAbTestCampaign(AbTest test, string variant, string subject) => new()
+    {
+        Id = Guid.NewGuid(),
+        UserId = test.UserId,
+        Name = $"{test.Name} — Version {variant}",
+        Subject = subject,
+        Content = test.Content,
+        CampaignType = "ab-test",
+        Status = "draft",
+        FromName = "Campaign",
+        SendToSegment = test.SendToSegment,
+        CreatedAt = DateTime.UtcNow,
+        UpdatedAt = DateTime.UtcNow,
+        ExtrasJson = JsonSerializer.Serialize(new Dictionary<string, string>
+        {
+            ["abTestId"] = test.Id.ToString(),
+            ["abVariant"] = variant,
+        }, JsonOptions),
+    };
+
+    private async Task<int> SendCampaignToRecipientsAsync(
+        Guid userId,
+        Campaign campaign,
+        IReadOnlyList<Subscriber> recipients)
+    {
+        if (recipients.Count == 0)
+            return 0;
+
+        var sentAt = DateTime.UtcNow;
+        var sentRecipients = await DeliverCampaignEmailsAsync(userId, campaign, recipients);
+        campaign.Status = "sent";
+        campaign.SentAt = sentAt;
+        campaign.SentCount = sentRecipients.Count;
+        await audience.RecordCampaignSendActivitiesAsync(userId, campaign, sentRecipients);
+        await RefreshCampaignStatsAsync(campaign);
+        campaign.UpdatedAt = DateTime.UtcNow;
+        return sentRecipients.Count;
+    }
+
+    private async Task TryAutoSendAbTestWinnerAsync(AbTest test, CancellationToken cancellationToken)
+    {
+        if (!test.AutoSendWinner || test.WinnerSentAt.HasValue)
+            return;
+
+        if (test.Winner is not ("A" or "B"))
+            return;
+
+        if (string.IsNullOrWhiteSpace(test.Content))
+            return;
+
+        if (!ses.IsConfigured)
+        {
+            logger.LogInformation("Skipping A/B winner send for {AbTestId} — SES is not configured", test.Id);
+            return;
+        }
+
+        var heldIds = ParseHeldSubscriberIds(test.HeldSubscriberIdsJson);
+        List<Subscriber> recipients;
+
+        if (heldIds.Count > 0)
+        {
+            recipients = await db.Subscribers
+                .Where(s => s.UserId == test.UserId && heldIds.Contains(s.Id))
+                .ToListAsync(cancellationToken);
+        }
+        else
+        {
+            var pseudoCampaign = new Campaign
+            {
+                UserId = test.UserId,
+                SendToSegment = string.IsNullOrWhiteSpace(test.SendToSegment) ? "all" : test.SendToSegment,
+                ExtrasJson = "{}",
+            };
+            recipients = await audience.ResolveCampaignRecipientsAsync(test.UserId, pseudoCampaign, []);
+            recipients = recipients
+                .Where(r => r.UserId == test.UserId && string.Equals(r.Status, "active", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
+        if (recipients.Count == 0)
+        {
+            logger.LogInformation("Skipping A/B winner send for {AbTestId} — no recipients for remainder", test.Id);
+            return;
+        }
+
+        var winningSubject = test.Winner == "A" ? test.SubjectA : test.SubjectB;
+        var winnerCampaign = new Campaign
+        {
+            Id = Guid.NewGuid(),
+            UserId = test.UserId,
+            Name = $"{test.Name} — Winner ({test.Winner})",
+            Subject = winningSubject,
+            Content = test.Content,
+            CampaignType = "ab-test-winner",
+            Status = "draft",
+            FromName = "Campaign",
+            SendToSegment = test.SendToSegment,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+            ExtrasJson = JsonSerializer.Serialize(new Dictionary<string, string>
+            {
+                ["abTestId"] = test.Id.ToString(),
+                ["abWinner"] = test.Winner,
+            }, JsonOptions),
+        };
+
+        db.Campaigns.Add(winnerCampaign);
+        test.WinnerCampaignId = winnerCampaign.Id;
+        await db.SaveChangesAsync(cancellationToken);
+
+        await SendCampaignToRecipientsAsync(test.UserId, winnerCampaign, recipients);
+        test.WinnerSentAt = DateTime.UtcNow;
+    }
+
+    private static List<Guid> ParseHeldSubscriberIds(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return [];
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(json, JsonOptions)?
+                .Select(s => Guid.TryParse(s, out var id) ? id : Guid.Empty)
+                .Where(id => id != Guid.Empty)
+                .ToList() ?? [];
+        }
+        catch
+        {
+            return [];
         }
     }
 
@@ -819,11 +1192,15 @@ public class CampaignService(AppDbContext db, AudienceService audience, MailboxS
             TestSize = request.TestSize,
             WinnerMetric = request.WinnerMetric,
             WaitHours = request.WaitHours,
+            EndsAt = request.EndsAt,
+            Content = request.Content?.Trim() ?? "",
+            SendToSegment = string.IsNullOrWhiteSpace(request.SendToSegment) ? "all" : request.SendToSegment.Trim(),
+            AutoSendWinner = request.AutoSendWinner,
             Status = "draft",
         };
         db.AbTests.Add(test);
         await db.SaveChangesAsync();
-        return MapAbTest(test);
+        return await MapAbTestAsync(test);
     }
 
     public async Task<bool> DeleteAbTestAsync(Guid userId, Guid id)
@@ -938,24 +1315,59 @@ public class CampaignService(AppDbContext db, AudienceService audience, MailboxS
         n.LastSentAt
     );
 
-    private static AbTestDto MapAbTest(AbTest t) => new(
-        t.Id.ToString(),
-        t.Name,
-        t.SubjectA,
-        t.SubjectB,
-        t.TestSize,
-        t.WinnerMetric,
-        t.WaitHours,
-        t.Status,
-        t.OpenRateA,
-        t.OpenRateB,
-        t.Winner,
-        t.VotesA,
-        t.VotesB,
-        t.StartedAt,
-        t.CompletedAt,
-        $"/ab-test/{t.Id}"
-    );
+    private async Task<AbTestDto> MapAbTestAsync(AbTest t)
+    {
+        decimal? clickA = null;
+        decimal? clickB = null;
+        decimal? openA = t.OpenRateA;
+        decimal? openB = t.OpenRateB;
+
+        if (t.CampaignIdA.HasValue)
+        {
+            var campaignA = await db.Campaigns.AsNoTracking().FirstOrDefaultAsync(c => c.Id == t.CampaignIdA.Value);
+            if (campaignA is not null)
+            {
+                clickA = campaignA.ClickRate;
+                openA ??= campaignA.OpenRate;
+            }
+        }
+
+        if (t.CampaignIdB.HasValue)
+        {
+            var campaignB = await db.Campaigns.AsNoTracking().FirstOrDefaultAsync(c => c.Id == t.CampaignIdB.Value);
+            if (campaignB is not null)
+            {
+                clickB = campaignB.ClickRate;
+                openB ??= campaignB.OpenRate;
+            }
+        }
+
+        return new AbTestDto(
+            t.Id.ToString(),
+            t.Name,
+            t.SubjectA,
+            t.SubjectB,
+            t.TestSize,
+            t.WinnerMetric,
+            t.WaitHours,
+            t.Status,
+            openA,
+            openB,
+            clickA,
+            clickB,
+            t.Winner,
+            t.VotesA,
+            t.VotesB,
+            t.StartedAt,
+            t.CompletedAt,
+            t.EndsAt,
+            string.IsNullOrWhiteSpace(t.Content) ? null : t.Content,
+            t.SendToSegment,
+            t.AutoSendWinner,
+            t.WinnerSentAt,
+            $"/ab-test/{t.Id}"
+        );
+    }
 
     private static string FormatDate(DateTime date) =>
         date.ToString("MMM d, yyyy", CultureInfo.InvariantCulture);

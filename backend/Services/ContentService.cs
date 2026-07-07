@@ -6,7 +6,7 @@ using ScribeCount.Email.Api.Entities;
 
 namespace ScribeCount.Email.Api.Services;
 
-public class ContentService(AppDbContext db, IWebHostEnvironment env)
+public class ContentService(AppDbContext db, IWebHostEnvironment env, IConfiguration configuration)
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
     private const long MaxAssetBytes = 10 * 1024 * 1024;
@@ -515,13 +515,35 @@ public class ContentService(AppDbContext db, IWebHostEnvironment env)
             ? b.HtmlBody!
             : ContentBlockBodies.Get(b.BlockType, b.Name);
 
-    private static BrandAssetDto MapAsset(BrandAsset a) => new(
+    private BrandAssetDto MapAsset(BrandAsset a) => new(
         a.Id.ToString(),
         a.Name,
         FormatSize(a.SizeBytes),
         a.IconKey,
-        a.StoragePath,
+        ResolveAssetPublicUrl(a.StoragePath),
         a.MimeType);
+
+    private string? ResolveAssetPublicUrl(string? storagePath)
+    {
+        if (string.IsNullOrWhiteSpace(storagePath)) return null;
+
+        var path = storagePath.StartsWith('/') ? storagePath : "/" + storagePath;
+
+        var filesBase = configuration["App:FilesBaseUrl"]?.TrimEnd('/')
+            ?? Environment.GetEnvironmentVariable("FILES_BASE_URL")?.TrimEnd('/');
+        if (!string.IsNullOrWhiteSpace(filesBase))
+            return filesBase + path;
+
+        var apiBase = configuration["App:ApiBaseUrl"]?.TrimEnd('/');
+        if (!string.IsNullOrWhiteSpace(apiBase))
+        {
+            if (apiBase.EndsWith("/api/v1", StringComparison.OrdinalIgnoreCase))
+                apiBase = apiBase[..^7];
+            return apiBase + path;
+        }
+
+        return path;
+    }
 
     private async Task EnsureBrandProfileAsync(Guid userId)
     {

@@ -35,7 +35,7 @@ import { PublicAbTest, PublicCampaignService } from '../../core/services/public-
           <p class="status" *ngIf="test.votingOpen && !voted">Tap your preferred subject line to vote.</p>
           <p class="status success" *ngIf="voted">{{ voteMessage || 'Thanks — your vote was recorded.' }}</p>
           <p class="status" *ngIf="!test.votingOpen">
-            Voting is closed<span *ngIf="test.winner"> — winner: Version {{ test.winner }}</span>.
+            Voting is closed<span *ngIf="test.winner === 'tie'"> — it's a tie, no winner</span><span *ngIf="test.winner === 'A' || test.winner === 'B'"> — winner: Version {{ test.winner }}</span>.
           </p>
         </ng-container>
       </div>

@@ -26,6 +26,10 @@ import { groupByFolder, AudienceFolderGroup } from '../audience-campaign-links';
           <p class="page-subtitle">Organize email subscribers into static lists or dynamic segments for targeted campaigns</p>
         </div>
         <div class="header-actions">
+          <button class="btn-secondary" routerLink="/audience/import">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Import
+          </button>
           <button class="btn-ghost btn-sm" (click)="showGuide = !showGuide">
             {{ showGuide ? 'Hide guide' : 'Lists vs Segments' }}
           </button>

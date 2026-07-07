@@ -18,6 +18,15 @@ public class AbTest
     public int VotesB { get; set; }
     public DateTime? StartedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
+    public DateTime? EndsAt { get; set; }
+    public string Content { get; set; } = "";
+    public string SendToSegment { get; set; } = "all";
+    public bool AutoSendWinner { get; set; } = true;
+    public Guid? CampaignIdA { get; set; }
+    public Guid? CampaignIdB { get; set; }
+    public string HeldSubscriberIdsJson { get; set; } = "[]";
+    public Guid? WinnerCampaignId { get; set; }
+    public DateTime? WinnerSentAt { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public ICollection<AbTestVote> Votes { get; set; } = [];

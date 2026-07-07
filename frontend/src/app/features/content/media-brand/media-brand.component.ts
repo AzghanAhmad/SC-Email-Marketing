@@ -10,6 +10,7 @@ interface AssetView extends BrandAsset {
   safeIcon: SafeHtml;
   imageUrl: string | null;
   isImage: boolean;
+  imageBroken?: boolean;
 }
 
 @Component({
@@ -49,8 +50,8 @@ interface AssetView extends BrandAsset {
         <div class="assets-grid" *ngIf="assets().length > 0">
           <div class="asset-card" *ngFor="let a of assets()">
             <div class="asset-preview">
-              <img *ngIf="a.isImage && a.imageUrl" [src]="a.imageUrl" [alt]="a.name" class="asset-img" />
-              <span class="nav-icon" *ngIf="!a.isImage || !a.imageUrl" [innerHTML]="a.safeIcon"></span>
+              <img *ngIf="a.isImage && a.imageUrl && !a.imageBroken" [src]="a.imageUrl" [alt]="a.name" class="asset-img" (error)="onImageError(a)" />
+              <span class="nav-icon" *ngIf="!a.isImage || !a.imageUrl || a.imageBroken" [innerHTML]="a.safeIcon"></span>
             </div>
             <div class="asset-info">
               <span class="asset-name">{{ a.name }}</span>
@@ -87,6 +88,9 @@ interface AssetView extends BrandAsset {
             <input type="file" #fileInput accept=".jpg,.jpeg,.png,.gif,.webp,.svg,.pdf,image/*" (change)="onFileSelected($event)" />
             <button type="button" class="btn-secondary btn-sm" (click)="fileInput.click()">Choose File</button>
             <span class="file-name">{{ selectedFile?.name || 'No file chosen' }}</span>
+          </div>
+          <div class="file-preview" *ngIf="selectedFilePreviewUrl">
+            <img [src]="selectedFilePreviewUrl" alt="Selected file preview" class="file-preview-img" />
           </div>
         </div>
         <p class="form-error" *ngIf="uploadError">{{ uploadError }}</p>
@@ -134,6 +138,8 @@ interface AssetView extends BrandAsset {
     .upload-row { display:flex; align-items:center; gap:.75rem; flex-wrap:wrap; }
     .upload-row input[type=file] { display:none; }
     .file-name { font-size:.8125rem; color:#64748b; }
+    .file-preview { margin-top:.75rem; border:1.5px solid #e2e8f0; border-radius:10px; background:#f8fafc; padding:.75rem; display:flex; justify-content:center; }
+    .file-preview-img { max-width:100%; max-height:180px; object-fit:contain; border-radius:8px; }
     .form-error { margin:0; font-size:.8125rem; color:#ef4444; }
     .modal-actions { display:flex; justify-content:flex-end; gap:.75rem; }
     @media(max-width:1100px) { .assets-grid { grid-template-columns:repeat(4,1fr); } }
@@ -154,6 +160,7 @@ export class MediaBrandComponent implements OnInit {
   uploading = false;
   uploadError = '';
   selectedFile: File | null = null;
+  selectedFilePreviewUrl: string | null = null;
   mediaDraft = { name: '', category: ASSET_CATEGORIES[0] };
 
   ngOnInit() {
@@ -168,6 +175,7 @@ export class MediaBrandComponent implements OnInit {
   }
 
   openAddMedia() {
+    this.revokeFilePreview();
     this.mediaDraft = { name: '', category: ASSET_CATEGORIES[0] };
     this.selectedFile = null;
     this.uploadError = '';
@@ -176,14 +184,26 @@ export class MediaBrandComponent implements OnInit {
 
   closeAddMedia() {
     if (this.uploading) return;
+    this.revokeFilePreview();
     this.showAddMedia = false;
   }
 
   onFileSelected(event: Event) {
     const input = event.target as HTMLInputElement;
+    this.revokeFilePreview();
     this.selectedFile = input.files?.[0] ?? null;
+    if (this.selectedFile && this.selectedFile.type.startsWith('image/')) {
+      this.selectedFilePreviewUrl = URL.createObjectURL(this.selectedFile);
+    }
     if (this.selectedFile && !this.mediaDraft.name.trim()) {
       this.mediaDraft.name = this.selectedFile.name.replace(/\.[^.]+$/, '');
+    }
+  }
+
+  private revokeFilePreview() {
+    if (this.selectedFilePreviewUrl) {
+      URL.revokeObjectURL(this.selectedFilePreviewUrl);
+      this.selectedFilePreviewUrl = null;
     }
   }
 
@@ -196,10 +216,12 @@ export class MediaBrandComponent implements OnInit {
     this.uploading = true;
     this.uploadError = '';
     this.contentApi.uploadAsset(this.selectedFile, this.mediaDraft.name.trim(), this.mediaDraft.category).subscribe({
-      next: () => {
+      next: asset => {
         this.uploading = false;
+        this.revokeFilePreview();
         this.showAddMedia = false;
-        this.load();
+        const view = this.toAssetView(asset);
+        this.assets.update(list => [view, ...list.filter(a => a.id !== asset.id)]);
       },
       error: err => {
         this.uploading = false;
@@ -214,14 +236,26 @@ export class MediaBrandComponent implements OnInit {
     this.contentApi.deleteAsset(asset.id).subscribe(() => this.load());
   }
 
+  onImageError(asset: AssetView) {
+    asset.imageBroken = true;
+    this.assets.update(list => [...list]);
+  }
+
   private toAssetView(a: BrandAsset): AssetView {
     const url = this.contentApi.assetFullUrl(a);
-    const isImage = !!(a.mimeType?.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(a.url ?? ''));
+    const isImage = this.isImageAsset(a);
     return {
       ...a,
       safeIcon: this.sanitizer.bypassSecurityTrustHtml(NAV_ICONS[a.iconKey] ?? NAV_ICONS['image']),
       imageUrl: url,
       isImage,
+      imageBroken: false,
     };
+  }
+
+  private isImageAsset(a: BrandAsset): boolean {
+    if (a.mimeType?.startsWith('image/')) return true;
+    const ref = `${a.url ?? ''} ${a.name ?? ''}`;
+    return /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(ref);
   }
 }

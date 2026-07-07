@@ -35,6 +35,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<GrowthToolConfig> GrowthToolConfigs => Set<GrowthToolConfig>();
     public DbSet<SubscriberActivity> SubscriberActivities => Set<SubscriberActivity>();
     public DbSet<UserSettings> UserSettings => Set<UserSettings>();
+    public DbSet<SenderIdentity> SenderIdentities => Set<SenderIdentity>();
+    public DbSet<OutboundEmailMessage> OutboundEmailMessages => Set<OutboundEmailMessage>();
+    public DbSet<DeliveryEvent> DeliveryEvents => Set<DeliveryEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -218,6 +221,44 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             e.HasKey(x => x.UserId);
             e.HasOne(x => x.User).WithOne().HasForeignKey<UserSettings>(x => x.UserId);
+        });
+
+        modelBuilder.Entity<SenderIdentity>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId);
+            e.HasIndex(x => x.UserId).IsUnique();
+            e.HasIndex(x => x.FromEmail);
+            e.Property(x => x.FromEmail).HasMaxLength(320);
+            e.Property(x => x.PendingEmail).HasMaxLength(320);
+            e.Property(x => x.FromName).HasMaxLength(200);
+            e.Property(x => x.PendingName).HasMaxLength(200);
+            e.Property(x => x.OtpHash).HasMaxLength(128);
+        });
+
+        modelBuilder.Entity<OutboundEmailMessage>(e =>
+        {
+            e.ToTable("SesOutboundMessages");
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId);
+            e.HasIndex(x => x.SesMessageId);
+            e.HasIndex(x => new { x.UserId, x.SentAt });
+            e.Property(x => x.Status).HasMaxLength(32);
+            e.Property(x => x.Source).HasMaxLength(64);
+            e.Property(x => x.ToEmail).HasMaxLength(320);
+            e.Property(x => x.SesMessageId).HasMaxLength(200);
+        });
+
+        modelBuilder.Entity<DeliveryEvent>(e =>
+        {
+            e.ToTable("SesDeliveryEvents");
+            e.HasIndex(x => x.SesMessageId);
+            e.HasIndex(x => new { x.UserId, x.OccurredAt });
+            e.HasIndex(x => new { x.Email, x.EventType });
+            e.Property(x => x.EventType).HasMaxLength(32);
+            e.Property(x => x.BounceType).HasMaxLength(32);
+            e.Property(x => x.Email).HasMaxLength(320);
+            e.Property(x => x.SesMessageId).HasMaxLength(200);
+            e.Property(x => x.Source).HasMaxLength(64);
         });
     }
 }

@@ -14,7 +14,20 @@ public static class MailboxContentHelper
     public static string PrepareBodyForStorage(string body)
     {
         if (string.IsNullOrEmpty(body)) return body;
+        body = SanitizeHtml(body);
         return InlineDataImageSrc.Replace(body, @"src=""#inline-image-removed""");
+    }
+
+    /// <summary>Remove common XSS vectors from user-authored HTML.</summary>
+    public static string SanitizeHtml(string html)
+    {
+        if (string.IsNullOrEmpty(html)) return html;
+
+        var withoutScripts = Regex.Replace(html, @"<script\b[\s\S]*?</script>", string.Empty, RegexOptions.IgnoreCase);
+        withoutScripts = Regex.Replace(withoutScripts, @"</?(?:script|iframe|object|embed|form|meta|link|base|style)\b[^>]*>", string.Empty, RegexOptions.IgnoreCase);
+        withoutScripts = Regex.Replace(withoutScripts, @"\s+on\w+\s*=\s*(""[^""]*""|'[^']*'|[^\s>]+)", string.Empty, RegexOptions.IgnoreCase);
+        withoutScripts = Regex.Replace(withoutScripts, @"\b(href|src|xlink:href)\s*=\s*(""[^""]*""|'[^']*')\s*javascript:[^""']*\2", "$1=\"#\"", RegexOptions.IgnoreCase);
+        return withoutScripts;
     }
 
     public static string PreparePreview(string body)

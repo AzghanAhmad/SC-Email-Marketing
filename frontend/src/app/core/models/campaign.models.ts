@@ -56,11 +56,18 @@ export interface AbTest {
   status: string;
   openRateA?: number;
   openRateB?: number;
+  clickRateA?: number;
+  clickRateB?: number;
   winner?: string;
   votesA?: number;
   votesB?: number;
   startedAt?: string | null;
   completedAt?: string | null;
+  endsAt?: string | null;
+  content?: string | null;
+  sendToSegment?: string;
+  autoSendWinner?: boolean;
+  winnerSentAt?: string | null;
   publicUrl?: string;
 }
 
