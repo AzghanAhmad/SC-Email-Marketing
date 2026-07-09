@@ -63,6 +63,14 @@ import { MilestoneCelebrationDetailPanelComponent } from './milestone-celebratio
         </div>
       </div>
 
+      <div class="flow-error-banner" *ngIf="flowAlertMessage" role="alert">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        <span>{{ flowAlertMessage }}</span>
+        <button type="button" class="flow-error-dismiss" (click)="dismissFlowAlert()" aria-label="Dismiss error">×</button>
+      </div>
+
       <!-- Webhook requirement notice (subscription flows only) -->
       <div class="webhook-notice" *ngIf="flow.requiresWebhook">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
@@ -448,6 +456,7 @@ import { MilestoneCelebrationDetailPanelComponent } from './milestone-celebratio
             <strong>{{ toastTitle }}</strong>
             <span>{{ toastDescription }}</span>
           </div>
+          <button *ngIf="toastIsError" type="button" class="toast-dismiss" (click)="dismissToast()" aria-label="Dismiss">×</button>
         </div>
       </div>
 
@@ -787,6 +796,44 @@ import { MilestoneCelebrationDetailPanelComponent } from './milestone-celebratio
       align-items: center;
       gap: 0.75rem;
     }
+    .toast-dismiss {
+      margin-left: auto;
+      border: none;
+      background: transparent;
+      color: #fecaca;
+      font-size: 1.25rem;
+      line-height: 1;
+      cursor: pointer;
+      padding: 0 .15rem;
+      flex-shrink: 0;
+    }
+    .toast-dismiss:hover { color: #fff; }
+    .flow-error-banner {
+      display: flex;
+      align-items: flex-start;
+      gap: .625rem;
+      margin: 0 0 1rem;
+      padding: .75rem 1rem;
+      border-radius: 10px;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #991b1b;
+      font-size: .8125rem;
+      line-height: 1.45;
+    }
+    .flow-error-banner svg { flex-shrink: 0; margin-top: .1rem; color: #dc2626; }
+    .flow-error-banner span { flex: 1; }
+    .flow-error-dismiss {
+      border: none;
+      background: transparent;
+      color: #b91c1c;
+      font-size: 1.25rem;
+      line-height: 1;
+      cursor: pointer;
+      padding: 0;
+      flex-shrink: 0;
+    }
+    .flow-error-dismiss:hover { color: #7f1d1d; }
     .toast-icon {
       color: #10b981;
       background: rgba(16, 185, 129, 0.15);
@@ -1057,6 +1104,9 @@ import { MilestoneCelebrationDetailPanelComponent } from './milestone-celebratio
   `]
 })
 export class FlowBuilderComponent {
+  private static readonly ERROR_TOAST_MS = 5000;
+  private static readonly SUCCESS_TOAST_MS = 4500;
+
   @Input() flow!: Flow;
   @Output() onBack = new EventEmitter<void>();
   @Output() onFlowUpdated = new EventEmitter<Flow>();
@@ -1076,7 +1126,10 @@ export class FlowBuilderComponent {
   toastTitle = 'Flow Triggered!';
   toastDescription = 'Successfully initiated flow for test subscriber.';
   toastIsError = false;
+  flowAlertMessage = '';
   private toastTimeout: ReturnType<typeof setTimeout> | null = null;
+  private flowAlertTimeout: ReturnType<typeof setTimeout> | null = null;
+  private errorToastShownAt = 0;
   draggedStepIndex: number | null = null;
   dragOverIndex: number | null = null;
   dragOverPosition: 'above' | 'below' | null = null;
@@ -1169,19 +1222,62 @@ export class FlowBuilderComponent {
   }
 
   private showToast(title: string, description: string, isError = false) {
+    const now = Date.now();
+    if (!isError && this.showTriggerToast && this.toastIsError) {
+      const elapsed = now - this.errorToastShownAt;
+      if (elapsed < FlowBuilderComponent.ERROR_TOAST_MS) {
+        return;
+      }
+    }
+
     if (this.toastTimeout) {
       clearTimeout(this.toastTimeout);
       this.toastTimeout = null;
     }
+
     this.toastTitle = title;
     this.toastDescription = description;
     this.toastIsError = isError;
     this.showTriggerToast = true;
-    const duration = isError ? 5000 : 4500;
+
+    if (isError) {
+      this.errorToastShownAt = now;
+      this.setFlowAlert(description);
+    }
+
+    const duration = isError ? FlowBuilderComponent.ERROR_TOAST_MS : FlowBuilderComponent.SUCCESS_TOAST_MS;
     this.toastTimeout = setTimeout(() => {
-      this.showTriggerToast = false;
-      this.toastTimeout = null;
+      this.dismissToast();
     }, duration);
+  }
+
+  private setFlowAlert(message: string) {
+    this.flowAlertMessage = message;
+    if (this.flowAlertTimeout) {
+      clearTimeout(this.flowAlertTimeout);
+      this.flowAlertTimeout = null;
+    }
+    this.flowAlertTimeout = setTimeout(() => {
+      this.flowAlertMessage = '';
+      this.flowAlertTimeout = null;
+    }, FlowBuilderComponent.ERROR_TOAST_MS);
+  }
+
+  dismissFlowAlert() {
+    this.flowAlertMessage = '';
+    if (this.flowAlertTimeout) {
+      clearTimeout(this.flowAlertTimeout);
+      this.flowAlertTimeout = null;
+    }
+  }
+
+  dismissToast() {
+    this.showTriggerToast = false;
+    this.toastIsError = false;
+    if (this.toastTimeout) {
+      clearTimeout(this.toastTimeout);
+      this.toastTimeout = null;
+    }
   }
 
   viewResults() {

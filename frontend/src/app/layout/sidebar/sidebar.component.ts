@@ -74,7 +74,8 @@ interface NavGroup {
           <span class="nav-label">{{ item.label }}</span>
         </a>
 
-        <div class="nav-group" *ngFor="let group of marketingGroups; trackBy: trackGroup">
+        <div class="nav-group" *ngFor="let group of marketingGroups; trackBy: trackGroup"
+             (mouseenter)="positionFlyout($event)">
           <button type="button" class="nav-group-header" (click)="toggleGroup(group.key, $event)"
                   [class.expanded]="isExpanded(group.key)">
             <span class="nav-icon" [innerHTML]="group.icon"></span>
@@ -85,6 +86,7 @@ interface NavGroup {
             </svg>
           </button>
           <div class="nav-group-children" [class.open]="isExpanded(group.key)">
+            <div class="nav-flyout-title">{{ group.label }}</div>
             <a *ngFor="let child of group.children"
                [routerLink]="child.route" routerLinkActive="active" class="nav-child-item"
                (click)="onNavClick()">
@@ -98,7 +100,8 @@ interface NavGroup {
         <div class="nav-divider"></div>
         <div class="nav-section-label">Analytics</div>
 
-        <div class="nav-group" *ngFor="let group of analyticsGroups; trackBy: trackGroup">
+        <div class="nav-group" *ngFor="let group of analyticsGroups; trackBy: trackGroup"
+             (mouseenter)="positionFlyout($event)">
           <button type="button" class="nav-group-header" (click)="toggleGroup(group.key, $event)"
                   [class.expanded]="isExpanded(group.key)">
             <span class="nav-icon" [innerHTML]="group.icon"></span>
@@ -109,6 +112,7 @@ interface NavGroup {
             </svg>
           </button>
           <div class="nav-group-children" [class.open]="isExpanded(group.key)">
+            <div class="nav-flyout-title">{{ group.label }}</div>
             <a *ngFor="let child of group.children"
                [routerLink]="child.route" routerLinkActive="active" class="nav-child-item"
                (click)="onNavClick()">
@@ -155,7 +159,7 @@ interface NavGroup {
       display:flex; flex-direction:column; overflow:hidden;
       transition:width .28s cubic-bezier(.4,0,.2,1), transform .28s cubic-bezier(.4,0,.2,1);
     }
-    .sidebar.sidebar-compact { width:72px; }
+    .sidebar.sidebar-compact { width:72px; z-index:200; }
     .sidebar-logo {
       display:flex; align-items:center; gap:.75rem;
       padding:1.25rem 1.125rem 1.125rem;
@@ -275,16 +279,49 @@ interface NavGroup {
     .sidebar-compact .nav-divider { margin:.5rem .35rem; }
     .sidebar-compact .user-info { justify-content:center; padding:.5rem; }
     .sidebar-compact .nav-group { position:relative; }
+    .nav-flyout-title { display:none; }
     .sidebar-compact .nav-group-children {
-      display:none !important; position:absolute; left:calc(100% + 6px); top:0;
-      min-width:190px; padding:.35rem; background:#152238;
-      border:1px solid rgba(255,255,255,0.1); border-radius:10px;
-      box-shadow:8px 8px 24px rgba(0,0,0,0.35); z-index:60;
+      display:none !important;
+      position:fixed;
+      top:0;
+      left:78px;
+      min-width:210px;
+      padding:.35rem;
+      background:#152238;
+      border:1px solid rgba(255,255,255,0.12);
+      border-radius:10px;
+      box-shadow:8px 12px 28px rgba(0,0,0,0.4);
+      z-index:300;
+      pointer-events:none;
+      opacity:0;
+      visibility:hidden;
+      transition:opacity .12s ease, visibility .12s ease;
     }
-    .sidebar-compact .nav-group:hover .nav-group-children {
+    .sidebar-compact .nav-group-children::before {
+      content:'';
+      position:absolute;
+      left:-10px;
+      top:0;
+      width:10px;
+      height:100%;
+    }
+    .sidebar-compact .nav-flyout-title {
+      display:block;
+      font-size:.625rem;
+      font-weight:700;
+      text-transform:uppercase;
+      letter-spacing:.1em;
+      color:rgba(255,255,255,0.35);
+      padding:.35rem .75rem .25rem;
+    }
+    .sidebar-compact .nav-group:hover .nav-group-children,
+    .sidebar-compact .nav-group:focus-within .nav-group-children {
       display:block !important;
+      pointer-events:auto;
+      opacity:1;
+      visibility:visible;
     }
-    .sidebar-compact .nav-group:hover .nav-group-children .child-label { display:inline; }
+    .sidebar-compact .nav-group-children .child-label { display:inline !important; }
     .sidebar-compact .nav-child-item { padding:.55rem .875rem; }
 
     /* ── Mobile: Sidebar as slide-in drawer ── */
@@ -430,6 +467,25 @@ export class SidebarComponent implements OnDestroy {
 
   onNavClick(): void {
     this.layout.close();
+  }
+
+  positionFlyout(event: MouseEvent): void {
+    if (!this.layout.sidebarCompact() || this.layout.isMobile()) return;
+    const group = event.currentTarget as HTMLElement;
+    const menu = group.querySelector('.nav-group-children') as HTMLElement | null;
+    const trigger = group.querySelector('.nav-group-header') as HTMLElement | null;
+    if (!menu || !trigger) return;
+
+    const rect = trigger.getBoundingClientRect();
+    const gap = 6;
+    menu.style.top = `${rect.top}px`;
+    menu.style.left = `${rect.right + gap}px`;
+
+    const menuRect = menu.getBoundingClientRect();
+    const overflow = menuRect.bottom - window.innerHeight;
+    if (overflow > 0) {
+      menu.style.top = `${Math.max(8, rect.top - overflow)}px`;
+    }
   }
 
   initials(): string {
