@@ -118,6 +118,7 @@ const THEME_PRESETS = [
             </button>
           </div>
           <div class="modal-body">
+            <div class="api-error-banner" *ngIf="createApiError">{{ createApiError }}</div>
             <div class="setup-field">
               <label>Page Title <span class="req">*</span></label>
               <input type="text" [(ngModel)]="newPage.name" placeholder="e.g. Free Prequel Novelization" class="text-input" [class.input-error]="createErrors.name">
@@ -287,6 +288,11 @@ const THEME_PRESETS = [
     .field-hint { font-size:.72rem; color:#94a3b8; margin-top:4px; }
     .req { color:#dc2626; }
     .field-error { font-size:.72rem; color:#dc2626; margin-top:2px; }
+    .api-error-banner {
+      padding:.75rem 1rem; margin-bottom:1rem; border-radius:10px;
+      background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.25);
+      color:#b91c1c; font-size:.8125rem; line-height:1.45;
+    }
     .input-error { border-color:#fca5a5 !important; }
     .badge-published { background:rgba(16,185,129,0.1); color:#059669; }
     .badge-draft { background:#f1f5f9; color:#64748b; }
@@ -341,6 +347,7 @@ export class LandingPagesComponent implements OnInit {
     thankYouMessage: '',
   };
   createErrors = { name: false, headline: false, description: false, buttonText: false, thankYouMessage: false };
+  createApiError = '';
   editPage = {
     name: '',
     slug: '',
@@ -447,6 +454,7 @@ export class LandingPagesComponent implements OnInit {
       headline: '', description: '', buttonText: '', thankYouMessage: '',
     };
     this.createErrors = { name: false, headline: false, description: false, buttonText: false, thankYouMessage: false };
+    this.createApiError = '';
     this.showCreatePageModal = true;
   }
 
@@ -482,7 +490,8 @@ export class LandingPagesComponent implements OnInit {
   }
 
   pageHref(page: PageView): string {
-    return page.url?.includes('://') ? page.url : landingPagePublicUrl(page.slug);
+    if (page.slug) return landingPagePublicUrl(page.slug);
+    return page.url?.includes('://') ? page.url : landingPagePublicUrl('');
   }
 
   pageUrlDisplay(page: PageView): string {
@@ -506,6 +515,7 @@ export class LandingPagesComponent implements OnInit {
 
   createPage() {
     if (!this.validateCreatePage()) return;
+    this.createApiError = '';
     this.websiteApi.createLandingPage({
       name: this.newPage.name.trim(),
       status: this.newPage.status,
@@ -515,9 +525,14 @@ export class LandingPagesComponent implements OnInit {
       description: this.newPage.description.trim(),
       buttonText: this.newPage.buttonText.trim(),
       thankYouMessage: this.newPage.thankYouMessage.trim(),
-    }).subscribe(() => {
-      this.load();
-      this.closeCreatePageModal();
+    }).subscribe({
+      next: () => {
+        this.load();
+        this.closeCreatePageModal();
+      },
+      error: (err) => {
+        this.createApiError = err?.error?.message ?? err?.error?.title ?? err?.message ?? 'Could not create landing page. Please try again.';
+      },
     });
   }
 

@@ -1,0 +1,1332 @@
+[
+  {
+    "id": "t1",
+    "name": "Welcome Sequence (4-Part)",
+    "family": "onboarding",
+    "priority": "day-one",
+    "description": "Four-email onboarding series: Welcome, Story Behind the Author, World of Your Books, and The Invitation. Open rates exceed 50%. The cornerstone of every author email program.",
+    "goalExit": "Reader clicks a book link or makes a first purchase",
+    "estimatedSetupMinutes": 45,
+    "steps": [
+      {
+        "id": "s1",
+        "type": "trigger",
+        "label": "Trigger",
+        "detail": "New subscriber joins list"
+      },
+      {
+        "id": "s2",
+        "type": "email",
+        "label": "Email 1 — Welcome",
+        "detail": "Introduce yourself, set expectations, deliver lead magnet if promised. Goal: strong first impression, establish author brand."
+      },
+      {
+        "id": "s3",
+        "type": "wait",
+        "label": "Wait 1–2 Days",
+        "detail": "Delay: 1–2 days"
+      },
+      {
+        "id": "s4",
+        "type": "email",
+        "label": "Email 2 — Story Behind the Author",
+        "detail": "Your background, writing journey, and passion. Personal and memorable. Goal: emotional connection beyond the books."
+      },
+      {
+        "id": "s5",
+        "type": "wait",
+        "label": "Wait 2–3 Days",
+        "detail": "Delay: 2–3 days"
+      },
+      {
+        "id": "s6",
+        "type": "email",
+        "label": "Email 3 — World of Your Books",
+        "detail": "Introduce catalog, highlight best entry-point title. Soft sales moment, not a hard pitch. Goal: guide toward first purchase."
+      },
+      {
+        "id": "s7",
+        "type": "wait",
+        "label": "Wait 3–5 Days",
+        "detail": "Delay: 3–5 days"
+      },
+      {
+        "id": "s8",
+        "type": "email",
+        "label": "Email 4 — The Invitation",
+        "detail": "Reader group, key platform, or what to expect. Direct CTA toward most important title. Goal: complete onboarding, convert warm subscribers."
+      },
+      {
+        "id": "s9",
+        "type": "goal-exit",
+        "label": "Goal Exit",
+        "detail": "Reader clicks a book link"
+      }
+    ]
+  },
+  {
+    "id": "t2",
+    "name": "Reader Magnet Delivery",
+    "family": "onboarding",
+    "priority": "day-one",
+    "description": "Delivers promised free content instantly on sign-up. Two emails + conditional branch: delivery email fires in seconds, 24–48hr check detects non-downloaders, follow-up removes barriers. Connects to Welcome Sequence on completion.",
+    "goalExit": "Free content delivered and reader clicks the download link",
+    "estimatedSetupMinutes": 20,
+    "steps": [
+      {
+        "id": "s1",
+        "type": "trigger",
+        "label": "Trigger",
+        "detail": "New subscriber opts in via reader magnet form — fires within seconds of form submission"
+      },
+      {
+        "id": "s2",
+        "type": "email",
+        "label": "Delivery Email",
+        "detail": "Lead with download link first. Brief warm introduction (2–3 sentences). Forward frame toward welcome sequence. Subject: \"Your copy of [Title] is here\""
+      },
+      {
+        "id": "s3",
+        "type": "wait",
+        "label": "Wait 24–48 Hours",
+        "detail": "ScribeCount checks whether reader clicked the download link during this window"
+      },
+      {
+        "id": "s4",
+        "type": "condition",
+        "label": "Downloaded?",
+        "detail": "YES → tag confirmed-download, move to Welcome Sequence. NO → send follow-up email."
+      },
+      {
+        "id": "s5",
+        "type": "email",
+        "label": "Delivery Follow-Up",
+        "detail": "Warm, helpful tone. Resend link prominently. Acknowledge possible spam filter. Invite reply for support. Subject: \"Did your copy of [Title] arrive okay?\""
+      },
+      {
+        "id": "s6",
+        "type": "wait",
+        "label": "Wait 1–2 Days",
+        "detail": "Move to Welcome Sequence regardless of download status"
+      },
+      {
+        "id": "s7",
+        "type": "goal-exit",
+        "label": "Goal Exit",
+        "detail": "Reader clicks download link — tagged confirmed-download, transitions to Welcome Sequence"
+      }
+    ]
+  },
+  {
+    "id": "t3",
+    "name": "Order Confirmation & Digital Delivery",
+    "family": "transaction",
+    "priority": "pre-store",
+    "description": "Immediate official receipt then digital content delivery. Absence of this email creates anxiety and support requests. Goal: instant reassurance, reduce support inquiries.",
+    "goalExit": "Digital content delivered and confirmed opened",
+    "estimatedSetupMinutes": 30,
+    "steps": [
+      {
+        "id": "s1",
+        "type": "trigger",
+        "label": "Trigger",
+        "detail": "Completed order in direct store"
+      },
+      {
+        "id": "s2",
+        "type": "email",
+        "label": "Order Confirmation",
+        "detail": "Summarize order, amount charged, delivery details. Warm on-brand message, not a cold generic receipt."
+      },
+      {
+        "id": "s3",
+        "type": "email",
+        "label": "Digital Delivery",
+        "detail": "Clear prominent download link. Simple instructions. Note on compatible devices/apps."
+      },
+      {
+        "id": "s4",
+        "type": "goal-exit",
+        "label": "Goal Exit",
+        "detail": "Reader opens delivery email"
+      }
+    ]
+  },
+  {
+    "id": "t4a",
+    "name": "Post-Purchase Thank You (First Purchase)",
+    "family": "transaction",
+    "priority": "pre-store",
+    "description": "Sent immediately after first purchase. Confirms, appreciates, suggests related title or review opportunity. Reduces buyer remorse and opens door to second sale.",
+    "goalExit": "Reader clicks a catalog or series link",
+    "estimatedSetupMinutes": 20,
+    "steps": [
+      {
+        "id": "s1",
+        "type": "trigger",
+        "label": "Trigger",
+        "detail": "First-time purchase completed"
+      },
+      {
+        "id": "s2",
+        "type": "email",
+        "label": "First Purchase Thank You",
+        "detail": "Confirm purchase, express genuine appreciation. Suggest related title, invite reader group, or point toward review opportunity while excitement is fresh."
+      },
+      {
+        "id": "s3",
+        "type": "goal-exit",
+        "label": "Goal Exit",
+        "detail": "Reader clicks catalog or series link"
+      }
+    ]
+  },
+  {
+    "id": "t4b",
+    "name": "Repeat Purchase Thank You",
+    "family": "transaction",
+    "description": "Triggered on second or subsequent purchase. Warmer and more personal than first thank you. Acknowledges loyalty, offers exclusive perk. Deepens relationship and increases lifetime reader value.",
+    "goalExit": "Reader accepts exclusive perk or joins reader community",
+    "estimatedSetupMinutes": 20,
+    "steps": [
+      {
+        "id": "s1",
+        "type": "trigger",
+        "label": "Trigger",
+        "detail": "Reader completes second or subsequent purchase"
+      },
+      {
+        "id": "s2",
+        "type": "email",
+        "label": "Loyalty Thank You",
+        "detail": "Acknowledge loyalty, make them feel recognized. Offer exclusive perk: early access, bonus, or reader community invitation."
+      },
+      {
+        "id": "s3",
+        "type": "goal-exit",
+        "label": "Goal Exit",
+        "detail": "Reader accepts perk or joins community"
+      }
+    ]
+  },
+  {
+    "id": "t4c",
+    "name": "Post-Purchase Follow-up",
+    "family": "transaction",
+    "priority": "pre-store",
+    "description": "Sent 3–5 days after purchase when reading experience is fresh and emotion is high. Invites review, asks for feedback, or suggests next book while enthusiasm is at its peak.",
+    "goalExit": "Reader leaves a review or clicks next book link",
+    "estimatedSetupMinutes": 20,
+    "steps": [
+      {
+        "id": "s1",
+        "type": "trigger",
+        "label": "Trigger",
+        "detail": "3–5 days after digital delivery confirmed opened"
+      },
+      {
+        "id": "s2",
+        "type": "email",
+        "label": "Follow-up Email",
+        "detail": "Invite honest review, ask for feedback, or suggest next book in series while enthusiasm is at its peak."
+      },
+      {
+        "id": "s3",
+        "type": "goal-exit",
+        "label": "Goal Exit",
+        "detail": "Reader leaves review or clicks next book"
+      }
+    ]
+  },
+  {
+    "id": "t5",
+    "name": "Abandoned Cart",
+    "family": "transaction",
+    "priority": "pre-store",
+    "description": "First email fires 1 hour after abandonment — while the book is still in the reader's mental foreground. Two-email sequence. Conversion rate 5–15%. Lead with the book, not the cart. Include cover image and social proof.",
+    "goalExit": "Reader completes the purchase",
+    "estimatedSetupMinutes": 25,
+    "steps": [
+      {
+        "id": "s1",
+        "type": "trigger",
+        "label": "Trigger",
+        "detail": "Reader adds book to cart and leaves without progressing to checkout"
+      },
+      {
+        "id": "s2",
+        "type": "wait",
+        "label": "Wait 1 Hour",
+        "detail": "Delay: 1 hour (configurable) — confirms real abandonment without letting interest cool"
+      },
+      {
+        "id": "s3",
+        "type": "condition",
+        "label": "Already Purchased?",
+        "detail": "If purchase event received — goal exit; else — send reminder"
+      },
+      {
+        "id": "s4",
+        "type": "email",
+        "label": "Cart Reminder — Email 1",
+        "detail": "Lead with the book. Cover image. Brief hook. One line of reader praise. One button back to product page or pre-populated cart."
+      },
+      {
+        "id": "s5",
+        "type": "wait",
+        "label": "Wait 24 Hours",
+        "detail": "Delay: 24 hours"
+      },
+      {
+        "id": "s6",
+        "type": "condition",
+        "label": "Purchased?",
+        "detail": "If purchased — goal exit; else — final nudge"
+      },
+      {
+        "id": "s7",
+        "type": "email",
+        "label": "Final Nudge — Email 2",
+        "detail": "Two or three sentences. Light reminder, no urgency language. After two emails, flow ends."
+      },
+      {
+        "id": "s8",
+        "type": "goal-exit",
+        "label": "Goal Exit",
+        "detail": "Reader completes purchase — post-purchase sequence begins"
+      }
+    ]
+  },
+  {
+    "id": "t5b",
+    "name": "Abandoned Checkout",
+    "family": "transaction",
+    "priority": "pre-store",
+    "description": "First email fires in 30 minutes — faster than cart because intent is higher. Reader entered payment info. Two-email sequence. Direct acknowledgment, friction removal, cart restoration link.",
+    "goalExit": "Reader completes checkout",
+    "estimatedSetupMinutes": 20,
+    "steps": [
+      {
+        "id": "s1",
+        "type": "trigger",
+        "label": "Trigger",
+        "detail": "Reader reaches checkout, enters payment or shipping info, but does not complete"
+      },
+      {
+        "id": "s2",
+        "type": "wait",
+        "label": "Wait 30 Minutes",
+        "detail": "Delay: 30 minutes (configurable) — higher intent warrants faster response"
+      },
+      {
+        "id": "s3",
+        "type": "condition",
+        "label": "Already Purchased?",
+        "detail": "If purchase event received — goal exit; else — send reminder"
+      },
+      {
+        "id": "s4",
+        "type": "email",
+        "label": "Checkout Reminder — Email 1",
+        "detail": "Direct acknowledgment. Address technical friction: payment methods, guest checkout, money-back guarantee. \"Hit reply and I'll sort it out personally.\" Cart restoration link if platform supports it."
+      },
+      {
+        "id": "s5",
+        "type": "wait",
+        "label": "Wait 24 Hours",
+        "detail": "Delay: 24 hours"
+      },
+      {
+        "id": "s6",
+        "type": "condition",
+        "label": "Purchased?",
+        "detail": "If purchased — goal exit; else — 24-hour follow-up"
+      },
+      {
+        "id": "s7",
+        "type": "email",
+        "label": "24-Hour Follow-Up — Email 2",
+        "detail": "Shorter, warmer. Invitation to reach out if anything went wrong. After two emails, flow ends."
+      },
+      {
+        "id": "s8",
+        "type": "goal-exit",
+        "label": "Goal Exit",
+        "detail": "Reader completes purchase — post-purchase sequence begins"
+      }
+    ]
+  },
+  {
+    "id": "t4d",
+    "name": "Review Request",
+    "family": "transaction",
+    "priority": "pre-store",
+    "description": "A focused, standalone automation dedicated entirely to generating social proof. Fires 4–7 days after purchase as a single clear ask. More effective than burying the review request inside a longer email with multiple purposes.",
+    "goalExit": "Reader clicks a review link on any platform",
+    "estimatedSetupMinutes": 20,
+    "steps": [
+      {
+        "id": "s1",
+        "type": "trigger",
+        "label": "Trigger",
+        "detail": "4–7 days after completed purchase"
+      },
+      {
+        "id": "s2",
+        "type": "condition",
+        "label": "Already Left Review?",
+        "detail": "If reader clicked review link in Post-Purchase Follow-Up — goal exit; else — continue"
+      },
+      {
+        "id": "s3",
+        "type": "email",
+        "label": "Review Request",
+        "detail": "Single focused ask with direct links to review submission pages on each platform. Personal framing, genuine curiosity about reader's experience."
+      },
+      {
+        "id": "s4",
+        "type": "goal-exit",
+        "label": "Goal Exit",
+        "detail": "Reader clicks any review link — no further review requests sent for this title"
+      }
+    ]
+  },
+  {
+    "id": "t5c",
+    "name": "Refund Confirmation",
+    "family": "transaction",
+    "description": "Handles refunds with professionalism and grace. Opportunity to leave lasting positive impression and keep door open for return.",
+    "goalExit": "Refund processed and reader acknowledged",
+    "estimatedSetupMinutes": 15,
+    "steps": [
+      {
+        "id": "s1",
+        "type": "trigger",
+        "label": "Trigger",
+        "detail": "Refund request processed in direct store"
+      },
+      {
+        "id": "s2",
+        "type": "email",
+        "label": "Refund Confirmation",
+        "detail": "Confirm refund clearly, provide timeline for funds return. Invite feedback, leave door open with genuine low-pressure closing."
+      },
+      {
+        "id": "s3",
+        "type": "goal-exit",
+        "label": "Goal Exit",
+        "detail": "Refund acknowledged — reader remains on list"
+      }
+    ]
+  },
+  {
+    "id": "t6",
+    "name": "Preorder Confirmation & Nurture",
+    "family": "launch",
+    "priority": "pre-launch",
+    "description": "Three-phase flow anchored to release date. Confirmation honors commitment immediately. Nurture sequence (4 emails) keeps enthusiasm alive. Fulfillment delivers the payoff. Preorder readers suppressed from launch broadcast.",
+    "goalExit": "Fulfillment email opened and download link clicked",
+    "estimatedSetupMinutes": 45,
+    "steps": [
+      {
+        "id": "s1",
+        "type": "trigger",
+        "label": "Trigger",
+        "detail": "Preorder completed — reader tagged as preorder-reader immediately"
+      },
+      {
+        "id": "s2",
+        "type": "email",
+        "label": "Preorder Confirmation",
+        "detail": "Confirm transaction and release date. Clarify billing timing. Acknowledge early commitment. Brief tease. \"Preorder readers hear from me first.\""
+      },
+      {
+        "id": "s3",
+        "type": "wait",
+        "label": "Release-Date Anchor",
+        "detail": "All nurture emails scheduled relative to release date. Updating release date reschedules everything automatically."
+      },
+      {
+        "id": "s4",
+        "type": "email",
+        "label": "Behind the Scenes (7 weeks before)",
+        "detail": "Exclusive personal note about writing the book. The anecdote you haven't shared anywhere else."
+      },
+      {
+        "id": "s5",
+        "type": "email",
+        "label": "Excerpt (4 weeks before)",
+        "detail": "First chapter or compelling excerpt. Reward and commitment-reinforcement."
+      },
+      {
+        "id": "s6",
+        "type": "email",
+        "label": "Cover Story (2 weeks before)",
+        "detail": "The story behind the cover — design process, the detail most readers won't notice."
+      },
+      {
+        "id": "s7",
+        "type": "email",
+        "label": "Countdown (1 week before)",
+        "detail": "Brief and energetic. Release date now imminent. The drumroll before the payoff."
+      },
+      {
+        "id": "s8",
+        "type": "email",
+        "label": "Preorder Fulfillment (release day)",
+        "detail": "Celebration first. Download link prominently placed. Acknowledge reader's role. Plant review seed."
+      },
+      {
+        "id": "s9",
+        "type": "goal-exit",
+        "label": "Goal Exit",
+        "detail": "Download link clicked — reader transitions to post-purchase flow"
+      }
+    ]
+  },
+  {
+    "id": "t7",
+    "name": "Series Completion",
+    "family": "launch",
+    "priority": "pre-launch",
+    "description": "Four routing scenarios based on catalog position and purchase history. Catches readers at the moment of highest emotional readiness. One of the most reliably profitable automations in the flow library.",
+    "goalExit": "Reader purchases the recommended next title",
+    "estimatedSetupMinutes": 35,
+    "steps": [
+      {
+        "id": "s1",
+        "type": "trigger",
+        "label": "Trigger",
+        "detail": "Reader purchases final book in a series — identified via AuthorVault catalog metadata"
+      },
+      {
+        "id": "s2",
+        "type": "wait",
+        "label": "Wait 3–5 Days",
+        "detail": "Configurable. Long enough to finish reading, short enough to catch emotional momentum."
+      },
+      {
+        "id": "s3",
+        "type": "condition",
+        "label": "Catalog Position Check",
+        "detail": "Routes to one of four scenarios based on purchase history and AuthorVault catalog structure"
+      },
+      {
+        "id": "s4",
+        "type": "email",
+        "label": "Scenario 1 — Next Series",
+        "detail": "Acknowledge milestone. Single targeted recommendation with connection explanation. One CTA."
+      },
+      {
+        "id": "s5",
+        "type": "email",
+        "label": "Scenario 2 — Standalone",
+        "detail": "Lead with what's most similar. Position as different kind of excellence, not lesser commitment."
+      },
+      {
+        "id": "s6",
+        "type": "email",
+        "label": "Scenario 3 — Mid-Series",
+        "detail": "Warm direct recommendation for next book in sequence. Brief hook without spoilers."
+      },
+      {
+        "id": "s7",
+        "type": "email",
+        "label": "Scenario 4 — Catalog Complete",
+        "detail": "Relationship deepening. What's coming, community invite, exclusive content."
+      },
+      {
+        "id": "s8",
+        "type": "goal-exit",
+        "label": "Goal Exit",
+        "detail": "Reader purchases recommended next title"
+      }
+    ]
+  },
+  {
+    "id": "t8",
+    "name": "Review Request",
+    "family": "launch",
+    "priority": "pre-launch",
+    "description": "Asks for social proof at the right moment — when reading experience is fresh, not immediately upon purchase.",
+    "goalExit": "Reader clicks a review platform link",
+    "estimatedSetupMinutes": 20,
+    "steps": [
+      {
+        "id": "s1",
+        "type": "trigger",
+        "label": "Trigger",
+        "detail": "5 days after digital delivery confirmed opened"
+      },
+      {
+        "id": "s2",
+        "type": "email",
+        "label": "Review Ask",
+        "detail": "Invite honest review while enthusiasm is at its peak."
+      },
+      {
+        "id": "s3",
+        "type": "goal-exit",
+        "label": "Goal Exit",
+        "detail": "Reader clicks a review platform link"
+      }
+    ]
+  },
+  {
+    "id": "t8b",
+    "name": "ARC Invitation",
+    "family": "launch",
+    "description": "Invites most engaged readers to receive a free early copy in exchange for an honest review at launch. Builds launch-day review base before book goes live.",
+    "goalExit": "Reader accepts ARC invitation and is tagged arc-reader",
+    "estimatedSetupMinutes": 25,
+    "steps": [
+      {
+        "id": "s1",
+        "type": "trigger",
+        "label": "Trigger",
+        "detail": "Sent to most engaged subscribers segment"
+      },
+      {
+        "id": "s2",
+        "type": "email",
+        "label": "ARC Invitation",
+        "detail": "Explain what an ARC is. Outline simple expectations: timing and where to post review. Convey exclusive insider nature so readers feel genuinely selected, not mass-solicited."
+      },
+      {
+        "id": "s3",
+        "type": "condition",
+        "label": "Accepted?",
+        "detail": "If clicked accept — tag as arc-reader; else — no action"
+      },
+      {
+        "id": "s4",
+        "type": "goal-exit",
+        "label": "Goal Exit",
+        "detail": "Reader tagged as arc-reader"
+      }
+    ]
+  },
+  {
+    "id": "t8c",
+    "name": "ARC Confirmation & Follow-up",
+    "family": "launch",
+    "description": "Delivers ARC copy, checks in during reading, then follows up near release to maximize review conversion. Goal: maximize review conversion, ensure advance reader program translates into launch-day impact.",
+    "goalExit": "Reader posts review on launch day",
+    "estimatedSetupMinutes": 30,
+    "steps": [
+      {
+        "id": "s1",
+        "type": "trigger",
+        "label": "Trigger",
+        "detail": "Tag added: arc-reader"
+      },
+      {
+        "id": "s2",
+        "type": "email",
+        "label": "ARC Delivery",
+        "detail": "Deliver ARC immediately and reliably."
+      },
+      {
+        "id": "s3",
+        "type": "wait",
+        "label": "Wait 3 Days",
+        "detail": "Delay: 3 days"
+      },
+      {
+        "id": "s4",
+        "type": "email",
+        "label": "Check-In Email",
+        "detail": "Warm check-in, no pressure."
+      },
+      {
+        "id": "s5",
+        "type": "wait",
+        "label": "Wait Until Near Release",
+        "detail": "Wait until 3–5 days before release date"
+      },
+      {
+        "id": "s6",
+        "type": "email",
+        "label": "ARC Follow-up",
+        "detail": "Gentle reminder to post review. Warm and appreciative, not pressuring. Include direct links to review pages on key platforms."
+      },
+      {
+        "id": "s7",
+        "type": "goal-exit",
+        "label": "Goal Exit",
+        "detail": "Reader posts review — launch-day social proof secured"
+      }
+    ]
+  },
+  {
+    "id": "t8d",
+    "name": "Book Launch",
+    "family": "launch",
+    "description": "High-energy broadcast on or just before release day. Creates urgency and excitement. Generates concentrated burst of sales in the critical launch window to signal momentum to retail algorithms.",
+    "goalExit": "Reader purchases or pre-orders on launch day",
+    "estimatedSetupMinutes": 20,
+    "steps": [
+      {
+        "id": "s1",
+        "type": "trigger",
+        "label": "Trigger",
+        "detail": "Scheduled broadcast — sent on or just before release day"
+      },
+      {
+        "id": "s2",
+        "type": "email",
+        "label": "Launch Announcement",
+        "detail": "Share cover, compelling hook from blurb, early reader praise, clear CTA to purchase or pre-order link. Deliberate high-energy moment designed to create urgency and excitement."
+      },
+      {
+        "id": "s3",
+        "type": "goal-exit",
+        "label": "Goal Exit",
+        "detail": "Reader purchases or pre-orders"
+      }
+    ]
+  },
+  {
+    "id": "t8e",
+    "name": "New Release Notification",
+    "family": "launch",
+    "description": "Targets existing readers who already know and trust your work — warmer and more direct than a launch email. Connects new release to titles they have already enjoyed.",
+    "goalExit": "Reader purchases the new title",
+    "estimatedSetupMinutes": 20,
+    "steps": [
+      {
+        "id": "s1",
+        "type": "trigger",
+        "label": "Trigger",
+        "detail": "New title published — sent to backlist readers and engaged subscribers segment"
+      },
+      {
+        "id": "s2",
+        "type": "email",
+        "label": "New Release Notification",
+        "detail": "Connect new release to titles they have already enjoyed. Highlight what makes this book fresh while feeling familiar. Clear immediate path to purchase."
+      },
+      {
+        "id": "s3",
+        "type": "goal-exit",
+        "label": "Goal Exit",
+        "detail": "Reader purchases new title"
+      }
+    ]
+  },
+  {
+    "id": "t9",
+    "name": "Re-engagement",
+    "family": "retention",
+    "priority": "mature",
+    "description": "Catches inactive subscribers at 60, 90, or 180 days and gives them a genuine reason to reconnect before clean removal. A smaller engaged list always outperforms a large unresponsive one.",
+    "goalExit": "Reader opens or clicks — re-engagement confirmed",
+    "estimatedSetupMinutes": 35,
+    "steps": [
+      {
+        "id": "s1",
+        "type": "trigger",
+        "label": "Trigger",
+        "detail": "No open in 90 days"
+      },
+      {
+        "id": "s2",
+        "type": "email",
+        "label": "Miss You Email",
+        "detail": "Low-pressure check-in. Remind them why they subscribed, share what they have missed, or offer compelling incentive."
+      },
+      {
+        "id": "s3",
+        "type": "wait",
+        "label": "Wait 7 Days",
+        "detail": "Delay: 7 days"
+      },
+      {
+        "id": "s4",
+        "type": "condition",
+        "label": "Opened?",
+        "detail": "If opened — re-engaged; if not — final email"
+      },
+      {
+        "id": "s5",
+        "type": "email",
+        "label": "Last Chance Email",
+        "detail": "Final notice before removal from active list."
+      },
+      {
+        "id": "s6",
+        "type": "goal-exit",
+        "label": "Goal Exit",
+        "detail": "Reader opens or clicks — stays on list"
+      }
+    ]
+  },
+  {
+    "id": "t10",
+    "name": "Milestone Celebration",
+    "family": "retention",
+    "priority": "mature",
+    "description": "Relationship-forward automation for anniversaries, birthdays, and catalog milestones. Reader feels seen, not marketed to.",
+    "goalExit": "Milestone email opened and reader engages",
+    "estimatedSetupMinutes": 15,
+    "steps": [
+      {
+        "id": "s1",
+        "type": "trigger",
+        "label": "Anniversary Trigger",
+        "detail": "Join date anniversary — automatic from subscriber record"
+      },
+      {
+        "id": "s2",
+        "type": "email",
+        "label": "Anniversary Email",
+        "detail": "Recognition first, optional gift second"
+      },
+      {
+        "id": "s3",
+        "type": "trigger",
+        "label": "Birthday Trigger",
+        "detail": "Birth month/day in profile — on birth date"
+      },
+      {
+        "id": "s4",
+        "type": "email",
+        "label": "Birthday Email",
+        "detail": "Brief, warm, genuinely celebratory"
+      },
+      {
+        "id": "s5",
+        "type": "trigger",
+        "label": "Catalog Trigger",
+        "detail": "Purchase count threshold via store webhook"
+      },
+      {
+        "id": "s6",
+        "type": "email",
+        "label": "Catalog Milestone Email",
+        "detail": "Acknowledge purchase milestone, optional community invite"
+      },
+      {
+        "id": "s7",
+        "type": "goal-exit",
+        "label": "Goal Exit",
+        "detail": "Opened and engaged — loyalty deepened"
+      }
+    ]
+  },
+  {
+    "id": "t10b",
+    "name": "Giveaway Announcement",
+    "family": "retention",
+    "description": "Broadcast introducing a contest or giveaway. Leads with the prize, explains how to enter, communicates deadline. Turns existing list into a growth engine for new readers.",
+    "goalExit": "Subscribers enter giveaway and share with friends",
+    "estimatedSetupMinutes": 20,
+    "steps": [
+      {
+        "id": "s1",
+        "type": "trigger",
+        "label": "Trigger",
+        "detail": "Giveaway launched — sent as broadcast"
+      },
+      {
+        "id": "s2",
+        "type": "email",
+        "label": "Giveaway Announcement",
+        "detail": "Lead with the prize. Clearly explain how to enter. Communicate deadline to create urgency. Encourage sharing with friends."
+      },
+      {
+        "id": "s3",
+        "type": "goal-exit",
+        "label": "Goal Exit",
+        "detail": "Subscribers enter and share"
+      }
+    ]
+  },
+  {
+    "id": "t10c",
+    "name": "Newsletter Swap / Cross-Promotion",
+    "family": "retention",
+    "description": "Introduces a fellow author as part of a mutual cross-promotion. Feels like a trusted personal recommendation, not an advertisement.",
+    "goalExit": "Subscribers click through to recommended author",
+    "estimatedSetupMinutes": 15,
+    "steps": [
+      {
+        "id": "s1",
+        "type": "trigger",
+        "label": "Trigger",
+        "detail": "Newsletter swap or cross-promotion scheduled — sent as broadcast"
+      },
+      {
+        "id": "s2",
+        "type": "email",
+        "label": "Cross-Promotion Email",
+        "detail": "Feel like a trusted personal recommendation. Lead with why your readers specifically will enjoy this author."
+      },
+      {
+        "id": "s3",
+        "type": "goal-exit",
+        "label": "Goal Exit",
+        "detail": "Subscribers click through to recommended author"
+      }
+    ]
+  },
+  {
+    "id": "t10d",
+    "name": "Limited Time Offer / Flash Sale",
+    "family": "retention",
+    "description": "Short-window price reduction. Lead with offer and deadline immediately — urgency is the engine. Generates concentrated spike in sales activity.",
+    "goalExit": "Reader purchases during sale window",
+    "estimatedSetupMinutes": 15,
+    "steps": [
+      {
+        "id": "s1",
+        "type": "trigger",
+        "label": "Trigger",
+        "detail": "Flash sale activated — sent as broadcast, typically 24 hours to a few days"
+      },
+      {
+        "id": "s2",
+        "type": "email",
+        "label": "Flash Sale Email",
+        "detail": "Lead with offer and deadline immediately. Combine discounted price with strong reminder of book value so deal feels like opportunity, not clearance."
+      },
+      {
+        "id": "s3",
+        "type": "goal-exit",
+        "label": "Goal Exit",
+        "detail": "Reader purchases during sale window"
+      }
+    ]
+  },
+  {
+    "id": "t10e",
+    "name": "Price Drop Notification",
+    "family": "retention",
+    "description": "Calmer than a flash sale — less about urgency, more about removing a barrier. Re-surfaces a title to readers who may have passed on it at full price.",
+    "goalExit": "Price-sensitive reader converts to buyer",
+    "estimatedSetupMinutes": 15,
+    "steps": [
+      {
+        "id": "s1",
+        "type": "trigger",
+        "label": "Trigger",
+        "detail": "Price permanently or temporarily reduced — automated or manually triggered"
+      },
+      {
+        "id": "s2",
+        "type": "email",
+        "label": "Price Drop Email",
+        "detail": "Re-surface title to readers who may have passed on it at full price. Pair price announcement with fresh look at book hook, reviews, or reader praise."
+      },
+      {
+        "id": "s3",
+        "type": "goal-exit",
+        "label": "Goal Exit",
+        "detail": "Reader purchases at new price"
+      }
+    ]
+  },
+  {
+    "id": "t10f",
+    "name": "Box Set / Bundle Announcement",
+    "family": "retention",
+    "description": "Notifies subscribers that multiple titles are now available as a single discounted package. Leads with value proposition immediately. Increases average order value.",
+    "goalExit": "Reader purchases the bundle",
+    "estimatedSetupMinutes": 20,
+    "steps": [
+      {
+        "id": "s1",
+        "type": "trigger",
+        "label": "Trigger",
+        "detail": "Box set or bundle published — sent as broadcast"
+      },
+      {
+        "id": "s2",
+        "type": "email",
+        "label": "Bundle Announcement",
+        "detail": "Lead with value proposition immediately: how many books, how much savings, why this collection belongs together. Make deal feel curated not convenient."
+      },
+      {
+        "id": "s3",
+        "type": "goal-exit",
+        "label": "Goal Exit",
+        "detail": "Reader purchases the bundle"
+      }
+    ]
+  },
+  {
+    "id": "t10g",
+    "name": "Survey / Feedback Request",
+    "family": "retention",
+    "description": "Invites subscribers to share opinions on books, emails, or reader experience. Brief and respectful of their time. Gathers actionable intelligence.",
+    "goalExit": "Reader completes survey or replies with feedback",
+    "estimatedSetupMinutes": 15,
+    "steps": [
+      {
+        "id": "s1",
+        "type": "trigger",
+        "label": "Trigger",
+        "detail": "Broadcast or automated — sent to subscriber list or targeted segment"
+      },
+      {
+        "id": "s2",
+        "type": "email",
+        "label": "Survey Request",
+        "detail": "Brief and respectful of their time. Lead with why their specific input matters. Keep ask focused and survey short."
+      },
+      {
+        "id": "s3",
+        "type": "goal-exit",
+        "label": "Goal Exit",
+        "detail": "Reader completes survey or replies"
+      }
+    ]
+  },
+  {
+    "id": "t10h",
+    "name": "Reader Group / Community Invitation",
+    "family": "retention",
+    "description": "Invites subscribers to join a dedicated reader space. Moves loyal readers from passive email recipients into an active connected community.",
+    "goalExit": "Reader joins the community",
+    "estimatedSetupMinutes": 20,
+    "steps": [
+      {
+        "id": "s1",
+        "type": "trigger",
+        "label": "Trigger",
+        "detail": "Broadcast — target most engaged subscribers first"
+      },
+      {
+        "id": "s2",
+        "type": "email",
+        "label": "Community Invitation",
+        "detail": "Paint vivid picture of what life inside the community looks like. Make invitation feel like opportunity not obligation. Give sense of founding-member status."
+      },
+      {
+        "id": "s3",
+        "type": "goal-exit",
+        "label": "Goal Exit",
+        "detail": "Reader joins the community"
+      }
+    ]
+  },
+  {
+    "id": "t10i",
+    "name": "Event Announcement",
+    "family": "retention",
+    "description": "Notifies subscribers of an upcoming appearance, live session, or experience. Brings reader community together around a shared live experience.",
+    "goalExit": "Reader registers or RSVPs for the event",
+    "estimatedSetupMinutes": 20,
+    "steps": [
+      {
+        "id": "s1",
+        "type": "trigger",
+        "label": "Trigger",
+        "detail": "Event scheduled — sent as broadcast with follow-up reminder sequence"
+      },
+      {
+        "id": "s2",
+        "type": "email",
+        "label": "Event Announcement",
+        "detail": "Lead with what, when, and where in first sentence. Clear registration or RSVP link that removes every barrier between interest and attendance."
+      },
+      {
+        "id": "s3",
+        "type": "wait",
+        "label": "Wait Until 2 Days Before",
+        "detail": "Wait until 2 days before event"
+      },
+      {
+        "id": "s4",
+        "type": "email",
+        "label": "Event Reminder",
+        "detail": "Brief reminder with registration link. Build final anticipation."
+      },
+      {
+        "id": "s5",
+        "type": "goal-exit",
+        "label": "Goal Exit",
+        "detail": "Reader registers or RSVPs"
+      }
+    ]
+  },
+  {
+    "id": "t10j",
+    "name": "Unsubscribe — Reader's Choice",
+    "family": "retention",
+    "description": "Fires when a subscriber actively opts out. Mandatory: confirm immediately and unambiguously. Optional: offer preference alternative, acknowledge relationship gracefully, leave door open. Protects deliverability — a clean unsubscribe is always better than a spam complaint.",
+    "goalExit": "Unsubscribe confirmed cleanly — goodwill preserved, re-subscribe path provided",
+    "estimatedSetupMinutes": 15,
+    "steps": [
+      {
+        "id": "s1",
+        "type": "trigger",
+        "label": "Trigger",
+        "detail": "Reader clicks unsubscribe link and confirms opt-out"
+      },
+      {
+        "id": "s2",
+        "type": "email",
+        "label": "Unsubscribe Confirmation",
+        "detail": "Subject: 'You have been unsubscribed' or 'You are off the list' or 'All done — you have been removed' — First sentence: 'You have been removed from my mailing list and will receive no further emails from me.' One sentence. No qualifications. No 'removal takes 7-10 days'. Then: preference alternative (low-pressure, unsubscribe already stands). Then: graceful acknowledgment + re-subscribe link."
+      },
+      {
+        "id": "s3",
+        "type": "goal-exit",
+        "label": "Goal Exit",
+        "detail": "Subscriber removed — address suppressed immediately, door left open"
+      }
+    ]
+  },
+  {
+    "id": "t10k",
+    "name": "Unsubscribe — Author's Choice",
+    "family": "retention",
+    "description": "Fires at conclusion of failed re-engagement sequence. Three required elements: (1) clear statement of removal, (2) brief non-blaming explanation, (3) re-subscribe path. Tone: respectful, not apologetic. Transparency is non-negotiable.",
+    "goalExit": "Subscriber removed transparently — re-subscribe path provided, compliance documented",
+    "estimatedSetupMinutes": 15,
+    "steps": [
+      {
+        "id": "s1",
+        "type": "trigger",
+        "label": "Trigger",
+        "detail": "Re-engagement sequence exhausted — subscriber remained unresponsive through all emails"
+      },
+      {
+        "id": "s2",
+        "type": "email",
+        "label": "Removal Notification",
+        "detail": "Subject: 'I have removed you from my list' or 'You have been removed due to inactivity' or 'This is the last email I will send you' — (1) 'I have removed your address from my mailing list due to inactivity.' (2) Brief non-blaming explanation of why. (3) 'If you would like to stay connected, you can re-subscribe using the link below. I would genuinely be glad to have you back.'"
+      },
+      {
+        "id": "s3",
+        "type": "goal-exit",
+        "label": "Goal Exit",
+        "detail": "Subscriber removed — address moved to suppression list, removal documented for compliance"
+      }
+    ]
+  },
+  {
+    "id": "t11",
+    "name": "Subscription Renewal Reminder",
+    "family": "retention",
+    "requiresWebhook": true,
+    "description": "Alerts subscribers before their plan renews — stating the renewal date, amount, and a clear management link. Framed as a service to the reader. For annual plans, sends a second reminder 3 days out.",
+    "goalExit": "Subscription renewed — no further reminders sent",
+    "estimatedSetupMinutes": 25,
+    "steps": [
+      {
+        "id": "s1",
+        "type": "billing-trigger",
+        "label": "Billing Trigger",
+        "detail": "Renewal date approaching — 7 days out (webhook from payment processor)"
+      },
+      {
+        "id": "s2",
+        "type": "email",
+        "label": "Renewal Reminder (7 days)",
+        "detail": "Clearly state renewal date, amount, and how to manage subscription. Treat reader as partner in transaction. Briefly remind of value received."
+      },
+      {
+        "id": "s3",
+        "type": "wait",
+        "label": "Wait 4 Days",
+        "detail": "Delay: 4 days"
+      },
+      {
+        "id": "s4",
+        "type": "condition",
+        "label": "Already Renewed?",
+        "detail": "If renewed — exit; else — send final reminder for annual plans"
+      },
+      {
+        "id": "s5",
+        "type": "email",
+        "label": "Final Reminder (3 days out)",
+        "detail": "For annual subscriptions where higher charge warrants a second reminder."
+      },
+      {
+        "id": "s6",
+        "type": "goal-exit",
+        "label": "Goal Exit",
+        "detail": "Subscription renewed successfully"
+      }
+    ]
+  },
+  {
+    "id": "t12",
+    "name": "Payment Failed — Dunning Sequence",
+    "family": "retention",
+    "requiresWebhook": true,
+    "description": "Three-email dunning sequence for failed recurring charges. Assumes good faith throughout — most failures are a billing system problem, not a reader problem. Access maintained during dunning window.",
+    "goalExit": "Payment updated and subscription restored automatically",
+    "estimatedSetupMinutes": 40,
+    "steps": [
+      {
+        "id": "s1",
+        "type": "billing-trigger",
+        "label": "Billing Trigger",
+        "detail": "Recurring charge fails to process (webhook: payment_failed)"
+      },
+      {
+        "id": "s2",
+        "type": "email",
+        "label": "Email 1 — Immediate",
+        "detail": "Warm, blame-free. Access continues. Direct payment update link. Most failures are unintentional — usually an expired card."
+      },
+      {
+        "id": "s3",
+        "type": "wait",
+        "label": "Wait 4 Days",
+        "detail": "Delay: 4 days — reader retains full access"
+      },
+      {
+        "id": "s4",
+        "type": "condition",
+        "label": "Payment Updated?",
+        "detail": "If updated — subscription restored, exit; else — Email 2"
+      },
+      {
+        "id": "s5",
+        "type": "email",
+        "label": "Email 2 — Follow-up",
+        "detail": "Slightly more direct about timeline. Repeats fix link. Invites reply if having trouble."
+      },
+      {
+        "id": "s6",
+        "type": "wait",
+        "label": "Wait 5 Days",
+        "detail": "Delay: 5 days"
+      },
+      {
+        "id": "s7",
+        "type": "condition",
+        "label": "Payment Updated?",
+        "detail": "If updated — exit; else — Email 3"
+      },
+      {
+        "id": "s8",
+        "type": "email",
+        "label": "Email 3 — Final Notice",
+        "detail": "States deadline clearly. Genuine note that you would hate to lose them. After this, cancellation follows automatically."
+      },
+      {
+        "id": "s9",
+        "type": "goal-exit",
+        "label": "Goal Exit",
+        "detail": "Payment resolved — subscription restored. If unresolved, Author Choice End Subscription fires."
+      }
+    ]
+  },
+  {
+    "id": "t13",
+    "name": "Upgrade / Downgrade Confirmation",
+    "family": "retention",
+    "requiresWebhook": true,
+    "description": "Fires when a reader changes their subscription tier. Answers four questions immediately: what changed, when it takes effect, new billing amount, and what access changed.",
+    "goalExit": "Plan change confirmed and reader understands new access",
+    "estimatedSetupMinutes": 20,
+    "steps": [
+      {
+        "id": "s1",
+        "type": "billing-trigger",
+        "label": "Billing Trigger",
+        "detail": "Subscriber changes plan tier (webhook: subscription_updated)"
+      },
+      {
+        "id": "s2",
+        "type": "condition",
+        "label": "Upgrade or Downgrade?",
+        "detail": "Branch: upgrade — enthusiastic confirmation; downgrade — graceful confirmation, no win-back pitch"
+      },
+      {
+        "id": "s3",
+        "type": "email",
+        "label": "Upgrade Confirmation",
+        "detail": "Genuinely warm. Confirms plan, effective date, new billing amount, new access."
+      },
+      {
+        "id": "s4",
+        "type": "email",
+        "label": "Downgrade Confirmation",
+        "detail": "Clear and respectful. No win-back pitch. Brief low-friction path to return if they change their mind."
+      },
+      {
+        "id": "s5",
+        "type": "goal-exit",
+        "label": "Goal Exit",
+        "detail": "Plan change confirmed — reader understands exactly what changed and when"
+      }
+    ]
+  },
+  {
+    "id": "t14",
+    "name": "End Subscription — Reader's Choice",
+    "family": "retention",
+    "requiresWebhook": true,
+    "description": "Sent when a paying subscriber cancels. Part commercial documentation, part parting letter. Confirms cancellation clearly first — no retention campaign disguised as a confirmation.",
+    "goalExit": "Cancellation confirmed, relationship preserved, door left open",
+    "estimatedSetupMinutes": 20,
+    "steps": [
+      {
+        "id": "s1",
+        "type": "billing-trigger",
+        "label": "Billing Trigger",
+        "detail": "Subscriber cancels subscription (webhook: subscription_cancelled — reader-initiated)"
+      },
+      {
+        "id": "s2",
+        "type": "email",
+        "label": "Cancellation Confirmation",
+        "detail": "First: plan cancelled, access end date, no further charges. Three sentences. Then: genuine acknowledgment of relationship. Then: low-pressure re-subscribe link."
+      },
+      {
+        "id": "s3",
+        "type": "goal-exit",
+        "label": "Goal Exit",
+        "detail": "Cancellation confirmed — reader exits paid relationship on positive terms, remains on free list"
+      }
+    ]
+  },
+  {
+    "id": "t15",
+    "name": "End Subscription — Author's Choice",
+    "family": "retention",
+    "requiresWebhook": true,
+    "description": "Sent when the author ends a subscription — due to unresolved payment failure, terms violation, or product retirement. Tone varies by reason. Transparency and respect non-negotiable.",
+    "goalExit": "Subscription ended cleanly — reader informed, refund referenced if applicable",
+    "estimatedSetupMinutes": 30,
+    "steps": [
+      {
+        "id": "s1",
+        "type": "billing-trigger",
+        "label": "Billing Trigger",
+        "detail": "Author-initiated cancellation (webhook: subscription_cancelled — author-initiated, or dunning exhausted)"
+      },
+      {
+        "id": "s2",
+        "type": "condition",
+        "label": "Reason for Cancellation?",
+        "detail": "Branch: payment failure — matter-of-fact + re-subscribe link; product retirement — personal explanation + refund info"
+      },
+      {
+        "id": "s3",
+        "type": "email",
+        "label": "End Sub — Payment Failure",
+        "detail": "Warm, blame-free. Explain subscription cancelled because payment could not be processed. Clear path to re-subscribe. Refund info if applicable."
+      },
+      {
+        "id": "s4",
+        "type": "email",
+        "label": "End Sub — Product Retirement",
+        "detail": "Honest explanation of retirement reason. Acknowledge inconvenience. State access end date, prorated refund amount and timeline. Personal, not a form letter."
+      },
+      {
+        "id": "s5",
+        "type": "goal-exit",
+        "label": "Goal Exit",
+        "detail": "Subscription ended — reader informed with clarity and care, goodwill preserved"
+      }
+    ]
+  }
+]

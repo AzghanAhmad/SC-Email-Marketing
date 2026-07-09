@@ -151,7 +151,7 @@ import { campaignUrlForList, campaignUrlForSegment } from '../audience-campaign-
     .table-card { overflow:hidden; }
     .table-toolbar { display:flex; align-items:center; justify-content:space-between; padding:1.25rem 1.5rem; border-bottom:1px solid #f1f5f9; flex-wrap:wrap; gap:.75rem; }
     .filter-row { display:flex; align-items:center; gap:.75rem; }
-    .filter-select { padding:.55rem .875rem; background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:10px; color:#334155; font-size:.8125rem; font-family:inherit; outline:none; cursor:pointer; }
+    .filter-select { /* sizing from global styles.css */ color:#334155; font-size:.8125rem; cursor:pointer; }
     .result-count { font-size:.8rem; color:#94a3b8; }
 
     .profile-cell { display:flex; align-items:center; gap:.75rem; }

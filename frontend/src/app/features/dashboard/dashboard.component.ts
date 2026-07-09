@@ -1,5 +1,6 @@
 import { Component, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 import { DashboardApiService, DashboardData } from '../../core/services/dashboard-api.service';
 import { XyChartComponent, ChartSeries } from '../../shared/components/xy-chart/xy-chart.component';
@@ -7,7 +8,7 @@ import { XyChartComponent, ChartSeries } from '../../shared/components/xy-chart/
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterModule, XyChartComponent],
+  imports: [CommonModule, FormsModule, RouterModule, XyChartComponent],
   template: `
     <div class="page-wrapper">
       <!-- Welcome Header -->
@@ -25,18 +26,25 @@ import { XyChartComponent, ChartSeries } from '../../shared/components/xy-chart/
       <div class="conversion-section">
         <div class="conv-header">
           <h3 class="conv-label">Conversion metric</h3>
-          <div class="conv-controls">
-            <select class="conv-select" [value]="conversionMetric" (change)="onConversionChange($event)">
-              <option value="placed_order">Placed Order</option>
-              <option value="clicked_link">Clicked Link</option>
-              <option value="opened_email">Opened Email</option>
-            </select>
-            <select class="conv-select" [value]="periodDays" (change)="onPeriodChange($event)">
-              <option [value]="7">Last 7 days</option>
-              <option [value]="30">Last 30 days</option>
-              <option [value]="90">Last 90 days</option>
-              <option [value]="365">Last year</option>
-            </select>
+          <div class="analytics-filters conv-controls">
+            <div class="filter-field">
+              <label class="filter-label" for="conv-metric">Metric</label>
+              <select id="conv-metric" class="period-select" [value]="conversionMetric" (change)="onConversionChange($event)">
+                <option value="" disabled hidden>Select metric…</option>
+                <option value="placed_order">Placed Order</option>
+                <option value="clicked_link">Clicked Link</option>
+                <option value="opened_email">Opened Email</option>
+              </select>
+            </div>
+            <div class="filter-field">
+              <label class="filter-label" for="conv-period">Time period</label>
+              <select id="conv-period" class="period-select" [ngModel]="periodDays" (ngModelChange)="onPeriodChange($event)">
+                <option [ngValue]="7">Last 7 days</option>
+                <option [ngValue]="30">Last 30 days</option>
+                <option [ngValue]="90">Last 90 days</option>
+                <option [ngValue]="365">Last year</option>
+              </select>
+            </div>
           </div>
           <span class="conv-date-range">{{ periodStart }} — {{ periodEnd }} compared to previous period</span>
         </div>
@@ -400,7 +408,7 @@ export class DashboardComponent implements OnInit {
   welcomeName = 'there';
   periodStart = '';
   periodEnd = '';
-  periodDays = 30;
+  periodDays = 7;
   conversionMetric = 'opened_email';
   conversionMetrics: { key: string; label: string; value: string; change: number; description: string }[] = [];
   subscriberGrowthPct = 0;
@@ -428,8 +436,8 @@ export class DashboardComponent implements OnInit {
     this.loadDashboard();
   }
 
-  onPeriodChange(ev: Event) {
-    this.periodDays = Number((ev.target as HTMLSelectElement).value);
+  onPeriodChange(days: number) {
+    this.periodDays = days;
     this.loadDashboard();
   }
 

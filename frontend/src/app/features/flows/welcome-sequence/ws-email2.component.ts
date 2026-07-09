@@ -1,16 +1,23 @@
-import { Component, Output, EventEmitter } from '@angular/core';
+import { Component, Output, EventEmitter, Input } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FlowStep } from '../../../core/services/mock-data.service';
+import { WsEmailScheduleComponent } from './ws-email-schedule.component';
 
 @Component({
   selector: 'app-ws-email2',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, WsEmailScheduleComponent],
   template: `
     <div class="ws-email-section">
+      <app-ws-email-schedule
+        [step]="emailStep"
+        [showError]="showScheduleError"
+        (scheduleChange)="scheduleChange.emit($event)">
+      </app-ws-email-schedule>
       <div class="ws-email-header e2">
         <span class="ws-email-badge">Email 2</span>
         <span class="ws-email-name">The Story Behind the Author</span>
-        <span class="ws-email-timing">1–2 days after Email 1</span>
+        <span class="ws-email-timing">{{ timingLabel }}</span>
       </div>
       <div class="ws-callout indigo">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
@@ -73,7 +80,16 @@ import { CommonModule } from '@angular/common';
   `]
 })
 export class WsEmail2Component {
+  @Input() emailStep: FlowStep | null = null;
+  @Input() showScheduleError = false;
   @Output() subjectSelected = new EventEmitter<string>();
+  @Output() scheduleChange = new EventEmitter<string>();
+
+  get timingLabel(): string {
+    if (!this.emailStep?.scheduledAt) return 'Set send date & time below';
+    const d = new Date(this.emailStep.scheduledAt);
+    return Number.isNaN(d.getTime()) ? 'Scheduled' : `Scheduled: ${d.toLocaleString()}`;
+  }
 
   readonly email2Criteria = [
     'Conversational — reads like the answer to a question, not a press release',

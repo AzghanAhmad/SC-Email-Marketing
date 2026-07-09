@@ -1,16 +1,23 @@
-import { Component, Output, EventEmitter } from '@angular/core';
+import { Component, Output, EventEmitter, Input } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FlowStep } from '../../../core/services/mock-data.service';
+import { WsEmailScheduleComponent } from './ws-email-schedule.component';
 
 @Component({
   selector: 'app-ws-email1',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, WsEmailScheduleComponent],
   template: `
     <div class="ws-email-section">
+      <app-ws-email-schedule
+        [step]="emailStep"
+        [showError]="showScheduleError"
+        (scheduleChange)="scheduleChange.emit($event)">
+      </app-ws-email-schedule>
       <div class="ws-email-header e1">
         <span class="ws-email-badge">Email 1</span>
         <span class="ws-email-name">The Welcome</span>
-        <span class="ws-email-timing">Sends immediately on opt-in</span>
+        <span class="ws-email-timing">{{ timingLabel }}</span>
       </div>
       <div class="ws-timing-note">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -92,7 +99,16 @@ import { CommonModule } from '@angular/common';
   `]
 })
 export class WsEmail1Component {
+  @Input() emailStep: FlowStep | null = null;
+  @Input() showScheduleError = false;
   @Output() subjectSelected = new EventEmitter<string>();
+  @Output() scheduleChange = new EventEmitter<string>();
+
+  get timingLabel(): string {
+    if (!this.emailStep?.scheduledAt) return 'Set send date & time below';
+    const d = new Date(this.emailStep.scheduledAt);
+    return Number.isNaN(d.getTime()) ? 'Scheduled' : `Scheduled: ${d.toLocaleString()}`;
+  }
 
   readonly email1Jobs = [
     { num: '1', title: 'Deliver what you promised', desc: 'Reader magnet download link, clearly labeled, above all other content. If no magnet, skip this and open with the introduction.' },

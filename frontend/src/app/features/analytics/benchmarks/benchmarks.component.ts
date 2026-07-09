@@ -1,19 +1,32 @@
 import { Component, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { AnalyticsApiService } from '../../../core/services/analytics-api.service';
 import { NAV_ICONS } from '../../../core/constants/nav-icons';
+import { XyChartComponent, ChartSeries } from '../../../shared/components/xy-chart/xy-chart.component';
 
 @Component({
   selector: 'app-benchmarks',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, FormsModule, XyChartComponent],
   template: `
     <div class="page-wrapper">
       <div class="page-header">
         <div>
           <h1 class="page-title">Benchmarks</h1>
           <p class="page-subtitle">Compare your performance against industry averages (refreshed daily from 2026 benchmarks)</p>
+        </div>
+        <div class="analytics-filters">
+          <div class="filter-field">
+            <label class="filter-label" for="bench-period">Time period</label>
+            <select id="bench-period" class="period-select" [ngModel]="periodDays" (ngModelChange)="onPeriodChange($event)">
+              <option [ngValue]="7">Last 7 days</option>
+              <option [ngValue]="30">Last 30 days</option>
+              <option [ngValue]="90">Last 90 days</option>
+              <option [ngValue]="365">Last year</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -31,14 +44,14 @@ import { NAV_ICONS } from '../../../core/constants/nav-icons';
               <span class="bench-label">Industry avg</span>
             </div>
           </div>
-          <div class="bench-bar-wrap">
-            <div class="bench-bar-track">
-              <div class="bench-bar-fill yours" [style.width]="barWidth(b.yoursNum, b.industryNum) + '%'" [style.background]="b.yourColor"></div>
-            </div>
-            <div class="bench-bar-track industry">
-              <div class="bench-bar-fill industry" [style.width]="barWidth(b.industryNum, b.industryNum) + '%'" style="background:#cbd5e1"></div>
-            </div>
-          </div>
+          <app-xy-chart
+            type="horizontalBar"
+            [labels]="['Your rate', 'Industry avg']"
+            [series]="[{ name: b.metric, color: b.yourColor, values: [b.yoursNum, b.industryNum] }]"
+            [height]="100"
+            [showLegend]="false"
+            yAxisLabel="Rate"
+          />
           <span class="bench-verdict" [class.above]="b.yoursNum >= b.industryNum" [class.below]="b.yoursNum < b.industryNum">
             {{ b.yoursNum >= b.industryNum ? 'Above average' : 'Below average' }}
           </span>
@@ -90,6 +103,7 @@ export class BenchmarksComponent implements OnInit {
   private analyticsApi = inject(AnalyticsApiService);
   private sanitizer = inject(DomSanitizer);
 
+  periodDays = 7;
   benchmarks: { metric: string; yours: string; yoursNum: number; industry: string; industryNum: number; yourColor: string }[] = [];
 
   tips = [
@@ -99,8 +113,15 @@ export class BenchmarksComponent implements OnInit {
     { iconKey: 'blocks', title: 'Segment your audience', description: 'Use targeted segments to send relevant content that drives higher engagement.' },
   ].map(t => ({ ...t, safeIcon: this.sanitizer.bypassSecurityTrustHtml(NAV_ICONS[t.iconKey] ?? NAV_ICONS['chart']) }));
 
-  ngOnInit() {
-    this.analyticsApi.getAnalytics(30).subscribe(b => {
+  ngOnInit() { this.load(); }
+
+  onPeriodChange(days: number) {
+    this.periodDays = days;
+    this.load();
+  }
+
+  private load() {
+    this.analyticsApi.getAnalytics(this.periodDays).subscribe(b => {
       this.benchmarks = b.benchmarks.map(row => ({
         metric: row.metric,
         yours: row.yours,
@@ -110,10 +131,5 @@ export class BenchmarksComponent implements OnInit {
         yourColor: row.yourColor,
       }));
     });
-  }
-
-  barWidth(value: number, max: number): number {
-    const cap = Math.max(value, max, 1);
-    return Math.min(100, Math.round(value / cap * 100));
   }
 }

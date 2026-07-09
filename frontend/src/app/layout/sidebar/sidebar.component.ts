@@ -25,7 +25,7 @@ interface NavGroup {
   standalone: true,
   imports: [CommonModule, RouterModule],
   template: `
-    <aside class="sidebar" [class.sidebar-open]="layout.sidebarOpen()">
+    <aside class="sidebar" [class.sidebar-open]="layout.sidebarOpen()" [class.sidebar-compact]="layout.sidebarCompact() && !layout.isMobile()">
       <!-- Logo -->
       <div class="sidebar-logo">
         <div class="logo-mark">
@@ -35,6 +35,18 @@ interface NavGroup {
           <span class="logo-text">ScribeCount</span>
           <span class="logo-subtitle">EMAIL</span>
         </div>
+        <!-- Collapse / expand (tablet & desktop) -->
+        <button
+          class="sidebar-collapse-btn"
+          type="button"
+          (click)="layout.toggleCompact()"
+          [attr.aria-label]="layout.sidebarCompact() ? 'Expand sidebar' : 'Collapse sidebar'"
+          [attr.title]="layout.sidebarCompact() ? 'Expand sidebar' : 'Collapse sidebar'">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16">
+            <polyline *ngIf="!layout.sidebarCompact()" points="15 18 9 12 15 6"/>
+            <polyline *ngIf="layout.sidebarCompact()" points="9 18 15 12 9 6"/>
+          </svg>
+        </button>
         <!-- Close button (mobile only) -->
         <button class="sidebar-close-btn" (click)="layout.close()" aria-label="Close menu">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18">
@@ -141,8 +153,9 @@ interface NavGroup {
       width:252px; height:100vh; position:fixed; left:0; top:0; z-index:50;
       background:#0f1c2e; border-right:1px solid rgba(255,255,255,0.06);
       display:flex; flex-direction:column; overflow:hidden;
-      transition:transform .28s cubic-bezier(.4,0,.2,1);
+      transition:width .28s cubic-bezier(.4,0,.2,1), transform .28s cubic-bezier(.4,0,.2,1);
     }
+    .sidebar.sidebar-compact { width:72px; }
     .sidebar-logo {
       display:flex; align-items:center; gap:.75rem;
       padding:1.25rem 1.125rem 1.125rem;
@@ -153,6 +166,13 @@ interface NavGroup {
     .logo-text-group { display:flex; flex-direction:column; gap:0; flex:1; min-width:0; }
     .logo-text { font-size:1.05rem; font-weight:800; color:white; letter-spacing:-.02em; white-space:nowrap; line-height:1.2; }
     .logo-subtitle { font-size:.6rem; font-weight:700; color:#38bdf8; letter-spacing:.12em; text-transform:uppercase; line-height:1; }
+    .sidebar-collapse-btn {
+      display:flex; width:30px; height:30px; border-radius:8px; flex-shrink:0;
+      background:rgba(255,255,255,0.08); border:none; cursor:pointer;
+      color:rgba(255,255,255,0.65); align-items:center; justify-content:center;
+      transition:background .15s,color .15s; margin-left:auto;
+    }
+    .sidebar-collapse-btn:hover { background:rgba(255,255,255,0.16); color:white; }
     .sidebar-close-btn {
       display:none; width:32px; height:32px; border-radius:8px; flex-shrink:0;
       background:rgba(255,255,255,0.08); border:none; cursor:pointer;
@@ -230,11 +250,53 @@ interface NavGroup {
     .logout-btn svg { width:18px; height:18px; flex-shrink:0; opacity:.7; stroke-width:1.75; }
     .logout-btn:hover svg { opacity:1; }
 
+    /* ── Compact (icon-only) desktop mode ── */
+    .sidebar-compact .logo-text-group,
+    .sidebar-compact .nav-label,
+    .sidebar-compact .nav-section-label,
+    .sidebar-compact .chevron,
+    .sidebar-compact .child-label,
+    .sidebar-compact .user-details,
+    .sidebar-compact .logout-btn span { display:none; }
+    .sidebar-compact .sidebar-logo {
+      flex-direction:column;
+      justify-content:center;
+      align-items:center;
+      padding:.875rem .25rem .75rem;
+      gap:.375rem;
+      min-height:auto;
+    }
+    .sidebar-compact .logo-mark { width:34px; height:34px; }
+    .sidebar-compact .sidebar-collapse-btn { margin-left:0; width:28px; height:28px; }
+    .sidebar-compact .nav-item,
+    .sidebar-compact .nav-group-header,
+    .sidebar-compact .logout-btn { justify-content:center; padding:.7rem; gap:0; }
+    .sidebar-compact .nav-child-item { padding:.55rem 1rem; }
+    .sidebar-compact .nav-divider { margin:.5rem .35rem; }
+    .sidebar-compact .user-info { justify-content:center; padding:.5rem; }
+    .sidebar-compact .nav-group { position:relative; }
+    .sidebar-compact .nav-group-children {
+      display:none !important; position:absolute; left:calc(100% + 6px); top:0;
+      min-width:190px; padding:.35rem; background:#152238;
+      border:1px solid rgba(255,255,255,0.1); border-radius:10px;
+      box-shadow:8px 8px 24px rgba(0,0,0,0.35); z-index:60;
+    }
+    .sidebar-compact .nav-group:hover .nav-group-children {
+      display:block !important;
+    }
+    .sidebar-compact .nav-group:hover .nav-group-children .child-label { display:inline; }
+    .sidebar-compact .nav-child-item { padding:.55rem .875rem; }
+
     /* ── Mobile: Sidebar as slide-in drawer ── */
     @media (max-width: 768px) {
       .sidebar { transform:translateX(-100%); box-shadow:none; }
       .sidebar.sidebar-open { transform:translateX(0); box-shadow:4px 0 32px rgba(0,0,0,0.5); }
+      .sidebar-collapse-btn { display:none !important; }
       .sidebar-close-btn { display:flex; }
+    }
+    @media (min-width: 769px) {
+      .sidebar-close-btn { display:none !important; }
+      .sidebar-collapse-btn { display:flex; }
     }
   `]
 })

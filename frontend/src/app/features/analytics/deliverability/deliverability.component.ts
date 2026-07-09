@@ -1,5 +1,6 @@
 import { Component, signal, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { RouterModule, ActivatedRoute, Router } from '@angular/router';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { AnalyticsApiService, DeliverabilityAction } from '../../../core/services/analytics-api.service';
@@ -9,13 +10,24 @@ import { XyChartComponent, ChartSeries } from '../../../shared/components/xy-cha
 @Component({
   selector: 'app-deliverability',
   standalone: true,
-  imports: [CommonModule, RouterModule, XyChartComponent],
+  imports: [CommonModule, FormsModule, RouterModule, XyChartComponent],
   template: `
     <div class="page-wrapper">
       <div class="page-header">
         <div>
           <h1 class="page-title">Deliverability</h1>
           <p class="page-subtitle">Monitor your sending reputation and inbox placement</p>
+        </div>
+        <div class="analytics-filters">
+          <div class="filter-field">
+            <label class="filter-label" for="del-period">Time period</label>
+            <select id="del-period" class="period-select" [ngModel]="periodDays" (ngModelChange)="onPeriodChange($event)">
+              <option [ngValue]="7">Last 7 days</option>
+              <option [ngValue]="30">Last 30 days</option>
+              <option [ngValue]="90">Last 90 days</option>
+              <option [ngValue]="365">Last year</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -49,19 +61,14 @@ import { XyChartComponent, ChartSeries } from '../../../shared/components/xy-cha
 
             <div class="score-main" *ngIf="scoreView() === 'factors'">
               <div class="score-gauge">
-                <svg viewBox="0 0 120 120" class="gauge-svg">
-                  <circle cx="60" cy="60" r="52" fill="none" stroke="#f1f5f9" stroke-width="12"/>
-                  <circle cx="60" cy="60" r="52" fill="none" stroke="url(#scoreGrad)" stroke-width="12"
-                    [attr.stroke-dasharray]="(scorePercent / 100 * 327) + ' 327'"
-                    stroke-dashoffset="0" stroke-linecap="round" transform="rotate(-90 60 60)"/>
-                  <defs>
-                    <linearGradient id="scoreGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                      <stop offset="0%" stop-color="#ef4444"/>
-                      <stop offset="50%" stop-color="#f59e0b"/>
-                      <stop offset="100%" stop-color="#10b981"/>
-                    </linearGradient>
-                  </defs>
-                </svg>
+                <app-xy-chart
+                  type="doughnut"
+                  [labels]="['Score', 'Remaining']"
+                  [series]="[{ name: 'Score', color: scoreGaugeColor, values: [scorePercent, scoreRemainder] }]"
+                  [height]="160"
+                  [showLegend]="false"
+                  cutout="78%"
+                />
                 <div class="gauge-center">
                   <span class="gauge-value">{{ deliverabilityScore }}</span>
                 </div>
@@ -127,6 +134,17 @@ import { XyChartComponent, ChartSeries } from '../../../shared/components/xy-cha
 
       <!-- Reports View -->
       <div *ngIf="activeSubTab() === 'reports'">
+        <div class="glass-card report-section" *ngIf="deliveryReports.length">
+          <h3 class="rs-title">Delivery Rate by Campaign</h3>
+          <app-xy-chart
+            type="horizontalBar"
+            [labels]="deliveryChartLabels"
+            [series]="deliveryChartSeries"
+            yAxisLabel="Campaign"
+            xAxisLabel="Delivery rate %"
+            [height]="Math.max(180, deliveryReports.length * 44)"
+          />
+        </div>
         <div class="glass-card report-section">
           <h3 class="rs-title">Recent Campaign Deliverability</h3>
           <table class="data-table">
@@ -139,12 +157,7 @@ import { XyChartComponent, ChartSeries } from '../../../shared/components/xy-cha
                 <td>{{ r.sent | number }}</td>
                 <td class="success-text">{{ r.delivered | number }}</td>
                 <td class="error-text">{{ r.bounced }}</td>
-                <td>
-                  <div class="rate-cell">
-                    <div class="mini-bar"><div class="mini-bar-fill" [style.width]="r.rate + '%'" [style.background]="r.rate > 98 ? '#10b981' : r.rate > 95 ? '#f59e0b' : '#ef4444'"></div></div>
-                    <span>{{ r.rate }}%</span>
-                  </div>
-                </td>
+                <td class="rate-text" [class.good]="r.rate > 98" [class.warn]="r.rate <= 98 && r.rate > 95" [class.bad]="r.rate <= 95">{{ r.rate }}%</td>
               </tr>
             </tbody>
           </table>
@@ -153,14 +166,26 @@ import { XyChartComponent, ChartSeries } from '../../../shared/components/xy-cha
 
       <!-- Bounce Details -->
       <div *ngIf="activeSubTab() === 'bounce'">
-        <div class="glass-card report-section">
+        <div class="glass-card report-section" *ngIf="bounceData.length">
           <h3 class="rs-title">Bounce Breakdown</h3>
-          <div class="bounce-grid">
-            <div class="bounce-card" *ngFor="let b of bounceData">
-              <span class="nav-icon" [innerHTML]="b.safeIcon"></span>
-              <span class="bounce-val">{{ b.value }}</span>
-              <span class="bounce-label">{{ b.label }}</span>
-              <span class="bounce-pct">{{ b.pct }}% of total</span>
+          <div class="bounce-chart-row">
+            <div class="bounce-donut-wrap">
+              <app-xy-chart
+                type="doughnut"
+                [labels]="bounceChartLabels"
+                [series]="bounceChartSeries"
+                [height]="200"
+                [showLegend]="false"
+                cutout="65%"
+              />
+            </div>
+            <div class="bounce-grid">
+              <div class="bounce-card" *ngFor="let b of bounceData">
+                <span class="nav-icon" [innerHTML]="b.safeIcon"></span>
+                <span class="bounce-val">{{ b.value }}</span>
+                <span class="bounce-label">{{ b.label }}</span>
+                <span class="bounce-pct">{{ b.pct }}% of total</span>
+              </div>
             </div>
           </div>
         </div>
@@ -201,9 +226,8 @@ import { XyChartComponent, ChartSeries } from '../../../shared/components/xy-cha
     .toggle-btn.active { background:white; color:#0f172a; font-weight:600; box-shadow:0 1px 3px rgba(0,0,0,0.08); }
 
     .score-main { display:flex; align-items:center; gap:2rem; margin-bottom:2rem; }
-    .score-gauge { position:relative; width:120px; height:120px; flex-shrink:0; }
-    .gauge-svg { width:100%; height:100%; }
-    .gauge-center { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
+    .score-gauge { position:relative; width:160px; height:160px; flex-shrink:0; margin:0 auto 1rem; }
+    .gauge-center { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; }
     .gauge-value { font-size:2.25rem; font-weight:800; color:#0f172a; }
     .score-status { display:flex; flex-direction:column; gap:.5rem; }
     .score-label-row { display:flex; align-items:center; gap:.5rem; font-size:.9rem; color:#334155; }
@@ -250,9 +274,12 @@ import { XyChartComponent, ChartSeries } from '../../../shared/components/xy-cha
     .camp-name { font-weight:600; color:#0f172a; }
     .success-text { color:#059669; font-weight:600; }
     .error-text { color:#dc2626; font-weight:600; }
-    .rate-cell { display:flex; align-items:center; gap:.5rem; font-size:.8125rem; font-weight:600; }
-    .mini-bar { width:60px; height:5px; background:#f1f5f9; border-radius:100px; overflow:hidden; }
-    .mini-bar-fill { height:100%; border-radius:100px; }
+    .rate-text { font-size:.8125rem; font-weight:700; }
+    .rate-text.good { color:#059669; }
+    .rate-text.warn { color:#d97706; }
+    .rate-text.bad { color:#dc2626; }
+    .bounce-chart-row { display:grid; grid-template-columns:220px 1fr; gap:1.5rem; align-items:center; margin-bottom:1rem; }
+    .bounce-donut-wrap { max-width:220px; }
     .email-cell { color:#64748b; font-size:.8125rem; }
     .muted { color:#94a3b8; font-size:.8125rem; }
 
@@ -268,7 +295,7 @@ import { XyChartComponent, ChartSeries } from '../../../shared/components/xy-cha
     .badge-soft { background:rgba(245,158,11,0.1); color:#d97706; }
 
     @media(max-width:1100px) { .score-layout { grid-template-columns:1fr; } .action-card { position:static; } }
-    @media(max-width:800px) { .bounce-grid { grid-template-columns:repeat(2,1fr); } }
+    @media(max-width:800px) { .bounce-grid { grid-template-columns:repeat(2,1fr); } .bounce-chart-row { grid-template-columns:1fr; } }
   `]
 })
 export class DeliverabilityComponent implements OnInit {
@@ -277,9 +304,11 @@ export class DeliverabilityComponent implements OnInit {
   private route = inject(ActivatedRoute);
   private router = inject(Router);
 
+  readonly Math = Math;
   activeSubTab = signal('score');
   scoreView = signal<'factors' | 'time'>('factors');
 
+  periodDays = 7;
   deliverabilityScore = 0;
   scorePercent = 0;
   scoreRating = '—';
@@ -290,10 +319,24 @@ export class DeliverabilityComponent implements OnInit {
   scoreSeries: ChartSeries[] = [];
   metrics: { name: string; rate: string; recommended: string; statusClass: string }[] = [];
   deliveryReports: { name: string; sent: number; delivered: number; bounced: number; rate: number }[] = [];
+  deliveryChartLabels: string[] = [];
+  deliveryChartSeries: ChartSeries[] = [];
   bounceData: { label: string; value: string; pct: string; safeIcon: SafeHtml }[] = [];
+  bounceChartLabels: string[] = [];
+  bounceChartSeries: ChartSeries[] = [];
   bouncedEmails: { email: string; type: string; reason: string; date: string }[] = [];
   actions: (DeliverabilityAction & { safeIcon: SafeHtml; queryParams?: Record<string, string> })[] = [];
   private doneActionKeys = new Set<string>();
+
+  get scoreGaugeColor(): string {
+    if (this.deliverabilityScore >= 80) return '#10b981';
+    if (this.deliverabilityScore >= 60) return '#f59e0b';
+    return '#ef4444';
+  }
+
+  get scoreRemainder(): number {
+    return Math.max(0, 100 - this.scorePercent);
+  }
 
   ngOnInit() {
     this.route.queryParamMap.subscribe(params => {
@@ -305,8 +348,13 @@ export class DeliverabilityComponent implements OnInit {
     this.loadData();
   }
 
+  onPeriodChange(days: number) {
+    this.periodDays = days;
+    this.loadData();
+  }
+
   private loadData() {
-    this.analyticsApi.getAnalytics(30).subscribe(b => {
+    this.analyticsApi.getAnalytics(this.periodDays).subscribe(b => {
       this.deliverabilityScore = b.deliverabilityScore;
       this.scorePercent = b.deliverabilityScore;
       this.scoreChange = b.scoreChange;
@@ -317,12 +365,26 @@ export class DeliverabilityComponent implements OnInit {
       this.scoreSeries = [{ name: 'Score', color: '#3b82f6', values: b.scoreHistory.map(d => d.score) }];
       this.metrics = b.deliverabilityMetrics;
       this.deliveryReports = b.deliveryReports;
+      this.deliveryChartLabels = b.deliveryReports.map(r => r.name);
+      this.deliveryChartSeries = [{
+        name: 'Delivery rate',
+        color: '#3b82f6',
+        values: b.deliveryReports.map(r => r.rate),
+      }];
       this.bounceData = b.bounceStats.map(stat => ({
         label: stat.label,
         value: stat.value,
         pct: stat.pct,
         safeIcon: this.sanitizer.bypassSecurityTrustHtml(NAV_ICONS[stat.iconKey] ?? NAV_ICONS['hard-bounce']),
       }));
+      const bounceColors = ['#ef4444', '#f59e0b', '#94a3b8', '#3b82f6'];
+      this.bounceChartLabels = b.bounceStats.map(s => s.label);
+      this.bounceChartSeries = [{
+        name: 'Bounces',
+        color: '#ef4444',
+        colors: b.bounceStats.map((_, i) => bounceColors[i % bounceColors.length]),
+        values: b.bounceStats.map(s => parseFloat(s.pct) || 0),
+      }];
       this.bouncedEmails = b.bouncedEmails;
       this.actions = (b.deliverabilityActions ?? [])
         .filter(a => !this.doneActionKeys.has(a.title))

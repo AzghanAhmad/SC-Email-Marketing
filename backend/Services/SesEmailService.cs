@@ -235,6 +235,8 @@ public class SesEmailService(
             tags.Add(new MessageTag { Name = "campaign_id", Value = SanitizeTag(request.CampaignId.Value.ToString("N")) });
         if (request.FlowId.HasValue)
             tags.Add(new MessageTag { Name = "flow_id", Value = SanitizeTag(request.FlowId.Value.ToString("N")) });
+        if (!string.IsNullOrWhiteSpace(request.StepId))
+            tags.Add(new MessageTag { Name = "step_id", Value = SanitizeTag(request.StepId) });
 
         var sendRequest = new Amazon.SimpleEmailV2.Model.SendEmailRequest
         {
@@ -274,6 +276,7 @@ public class SesEmailService(
                     SubscriberId = request.SubscriberId,
                     CampaignId = request.CampaignId,
                     FlowId = request.FlowId,
+                    StepId = request.StepId,
                     Source = request.Source,
                     ToEmail = request.ToEmail.Trim().ToLowerInvariant(),
                     Subject = request.Subject,

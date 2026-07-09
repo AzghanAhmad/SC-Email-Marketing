@@ -122,14 +122,14 @@ import { switchMap } from 'rxjs/operators';
       />
 
       <!-- Best Practices Button -->
-      <button class="tips-fab" (click)="showTips = true" title="Email Best Practices">
+      <button class="tips-fab" type="button" (click)="openTips($event)" title="Email Best Practices">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
           <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>
         </svg>
       </button>
 
       <!-- Tips Panel -->
-      <app-email-tips *ngIf="showTips" (onClose)="showTips = false" />
+      <app-email-tips *ngIf="showTips" (onClose)="closeTips()" />
 
       <!-- Toast -->
       <div class="toast" [class.show]="showToast">
@@ -304,7 +304,7 @@ import { switchMap } from 'rxjs/operators';
       min-width: 0;
     }
     .tips-fab {
-      position: absolute;
+      position: fixed;
       bottom: 1.25rem;
       right: 1.25rem;
       width: 44px;
@@ -535,6 +535,22 @@ export class EmailPageComponent implements OnInit, OnDestroy {
 
   private runInZone(fn: () => void) {
     this.ngZone.run(fn);
+  }
+
+  openTips(event: Event) {
+    event.preventDefault();
+    event.stopPropagation();
+    this.runInZone(() => {
+      this.showTips = true;
+      this.flushView();
+    });
+  }
+
+  closeTips() {
+    this.runInZone(() => {
+      this.showTips = false;
+      this.flushView();
+    });
   }
 
   private flushView() {

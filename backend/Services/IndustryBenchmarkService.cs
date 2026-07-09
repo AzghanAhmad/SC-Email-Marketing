@@ -66,3 +66,66 @@ public static class ChartMonthHelper
 
     public static string Label(DateTime month) => month.ToString("MMM yy");
 }
+
+public static class ChartPeriodHelper
+{
+    public record PeriodBucket(DateTime Start, DateTime EndExclusive, string Label);
+
+    public static List<PeriodBucket> BuildBuckets(DateTime periodStart, DateTime periodEnd, int periodDays)
+    {
+        if (periodDays <= 31)
+            return DailyBuckets(periodStart, periodEnd);
+        if (periodDays <= 120)
+            return WeeklyBuckets(periodStart, periodEnd);
+        return MonthlyBuckets(periodStart, periodEnd);
+    }
+
+    private static List<PeriodBucket> DailyBuckets(DateTime periodStart, DateTime periodEnd)
+    {
+        var buckets = new List<PeriodBucket>();
+        var cursor = periodStart.Date;
+        while (cursor < periodEnd)
+        {
+            var dayEnd = cursor.AddDays(1);
+            if (dayEnd > periodEnd)
+                dayEnd = periodEnd;
+            buckets.Add(new PeriodBucket(cursor, dayEnd, cursor.ToString("MMM d")));
+            cursor = dayEnd;
+        }
+        return buckets;
+    }
+
+    private static List<PeriodBucket> WeeklyBuckets(DateTime periodStart, DateTime periodEnd)
+    {
+        var buckets = new List<PeriodBucket>();
+        var cursor = periodStart.Date;
+        while (cursor < periodEnd)
+        {
+            var weekEnd = cursor.AddDays(7);
+            if (weekEnd > periodEnd)
+                weekEnd = periodEnd;
+            buckets.Add(new PeriodBucket(cursor, weekEnd, cursor.ToString("MMM d")));
+            cursor = weekEnd;
+        }
+        return buckets;
+    }
+
+    private static List<PeriodBucket> MonthlyBuckets(DateTime periodStart, DateTime periodEnd)
+    {
+        var buckets = new List<PeriodBucket>();
+        var cursor = new DateTime(periodStart.Year, periodStart.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+        if (cursor < periodStart)
+            cursor = periodStart.Date;
+
+        while (cursor < periodEnd)
+        {
+            var monthEnd = new DateTime(cursor.Year, cursor.Month, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(1);
+            if (monthEnd > periodEnd)
+                monthEnd = periodEnd;
+            var effectiveStart = cursor < periodStart ? periodStart : cursor;
+            buckets.Add(new PeriodBucket(effectiveStart, monthEnd, cursor.ToString("MMM yy")));
+            cursor = monthEnd;
+        }
+        return buckets;
+    }
+}

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://schema.railpack.com",
+  "provider": "dotnet",
+  "packages": {
+    "dotnet": "10"
+  },
+  "deploy": {
+    "startCommand": "dotnet ScribeCount.Email.dll",
+    "variables": {
+      "ASPNETCORE_ENVIRONMENT": "Production"
+    }
+  }
+}

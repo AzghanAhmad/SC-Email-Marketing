@@ -21,7 +21,9 @@ import { LayoutService } from '../../core/services/layout.service';
         aria-hidden="true">
       </div>
 
-      <div class="main-area" [class.sidebar-collapsed]="!layout.sidebarOpen() || layout.isMobile()">
+      <div class="main-area"
+           [class.sidebar-collapsed]="!layout.sidebarOpen() || layout.isMobile()"
+           [class.sidebar-compact]="layout.sidebarCompact() && !layout.isMobile()">
         <app-topbar />
         <main class="main-content" (click)="layout.close()">
           <router-outlet />
@@ -36,6 +38,9 @@ import { LayoutService } from '../../core/services/layout.service';
       flex:1 1 0; margin-left:252px; display:flex; flex-direction:column;
       min-height:0; align-self:stretch; background:var(--bg);
       transition:margin-left .28s cubic-bezier(.4,0,.2,1);
+    }
+    .main-area.sidebar-compact {
+      margin-left:72px;
     }
     .main-area.sidebar-collapsed {
       margin-left:0;

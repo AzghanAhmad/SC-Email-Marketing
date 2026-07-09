@@ -91,11 +91,7 @@ import { MilestoneCelebrationDetailPanelComponent } from './milestone-celebratio
 
             <div class="flow-step"
                  [ngClass]="['step-' + step.type, selectedStep?.id === step.id ? 'selected' : '', highlightedStepId === step.id ? 'highlighted' : '', canDragStep(step) ? 'draggable' : '', draggedStepIndex === i ? 'dragging' : '']"
-                 [attr.draggable]="canDragStep(step) ? true : null"
-                 (dragstart)="onDragStart($event, i)"
-                 (dragend)="onDragEnd()"
-                 (click)="highlightStep(step)"
-                 (dblclick)="openStepDetail(step, $event)">
+                 (click)="onStepClick(step, $event)">
               <div class="step-reorder-btns" *ngIf="canDragStep(step)">
                 <button type="button" class="reorder-btn" title="Move up" [disabled]="!canMoveStepUp(i)" (click)="moveStepUp(i, $event)">↑</button>
                 <button type="button" class="reorder-btn" title="Move down" [disabled]="!canMoveStepDown(i)" (click)="moveStepDown(i, $event)">↓</button>
@@ -104,8 +100,11 @@ import { MilestoneCelebrationDetailPanelComponent } from './milestone-celebratio
                       class="drag-handle"
                       *ngIf="canDragStep(step)"
                       title="Drag to reorder"
+                      draggable="true"
                       (click)="$event.stopPropagation()"
-                      (mousedown)="$event.stopPropagation()">
+                      (mousedown)="$event.stopPropagation()"
+                      (dragstart)="onDragStart($event, i)"
+                      (dragend)="onDragEnd()">
                 <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
                   <circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/>
                   <circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/>
@@ -253,12 +252,24 @@ import { MilestoneCelebrationDetailPanelComponent } from './milestone-celebratio
                 <!-- Email fields -->
                 <ng-container *ngIf="selectedStep.type === 'email'">
                   <div class="form-group">
-                    <label class="form-label">Email Subject</label>
-                    <input type="text" class="form-input" [(ngModel)]="selectedStep.subject" placeholder="Enter engaging subject line...">
+                    <label class="form-label">Email Subject <span class="req">*</span></label>
+                    <input type="text" class="form-input" [(ngModel)]="selectedStep.subject" placeholder="Enter engaging subject line..."
+                      [class.input-error]="emailValidationAttempt && !selectedStep.subject?.trim()">
+                    <span class="field-error" *ngIf="emailValidationAttempt && !selectedStep.subject?.trim()">Subject line is required.</span>
                   </div>
                   <div class="form-group">
-                    <label class="form-label">Email Message Body</label>
-                    <textarea class="form-textarea" rows="8" [(ngModel)]="selectedStep.emailBody" placeholder="Hi Reader, write your message here..."></textarea>
+                    <label class="form-label">Email Message Body <span class="req">*</span></label>
+                    <textarea class="form-textarea" rows="8" [(ngModel)]="selectedStep.emailBody" placeholder="Hi Reader, write your message here..."
+                      [class.input-error]="emailValidationAttempt && !selectedStep.emailBody?.trim()"></textarea>
+                    <span class="field-error" *ngIf="emailValidationAttempt && !selectedStep.emailBody?.trim()">Email body is required.</span>
+                  </div>
+                  <div class="form-group" *ngIf="isWelcomeSequenceFlow">
+                    <label class="form-label">Send Date &amp; Time <span class="req">*</span></label>
+                    <input type="datetime-local" class="form-input"
+                      [ngModel]="emailScheduleLocal(selectedStep)"
+                      (ngModelChange)="onEmailScheduleChange(selectedStep, $event)"
+                      [class.input-error]="emailValidationAttempt && !selectedStep.scheduledAt">
+                    <span class="field-error" *ngIf="emailValidationAttempt && !selectedStep.scheduledAt">Set when this email should send.</span>
                   </div>
                 </ng-container>
 
@@ -354,7 +365,11 @@ import { MilestoneCelebrationDetailPanelComponent } from './milestone-celebratio
 
             <!-- Welcome Sequence: use dedicated panel -->
             <app-welcome-sequence-detail-panel
-              *ngIf="isWelcomeSequenceFlow">
+              *ngIf="isWelcomeSequenceFlow"
+              [flow]="flow"
+              [flowId]="flow.id"
+              [showScheduleError]="emailValidationAttempt"
+              (flowChange)="onFlowPanelChange($event)">
             </app-welcome-sequence-detail-panel>
 
             <!-- Reader Magnet Delivery: use dedicated panel -->
@@ -936,6 +951,9 @@ import { MilestoneCelebrationDetailPanelComponent } from './milestone-celebratio
       text-transform: uppercase;
       letter-spacing: 0.04em;
     }
+    .req { color:#dc2626; }
+    .field-error { font-size:.72rem; color:#dc2626; margin-top:.25rem; display:block; }
+    .input-error { border-color:#fca5a5 !important; }
     .form-input, .form-textarea, .form-select {
       width: 100%;
       padding: 0.625rem 0.875rem;
@@ -1047,6 +1065,8 @@ export class FlowBuilderComponent {
 
   selectedStep: FlowStep | null = null;
   highlightedStepId: string | null = null;
+  private stepClickTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastStepClickId: string | null = null;
   showAddStepSelector = false;
   showTriggerToast = false;
   showResults = false;
@@ -1060,6 +1080,7 @@ export class FlowBuilderComponent {
   draggedStepIndex: number | null = null;
   dragOverIndex: number | null = null;
   dragOverPosition: 'above' | 'below' | null = null;
+  emailValidationAttempt = false;
 
   private persistFlow(onSuccess?: () => void) {
     this.saving = true;
@@ -1083,17 +1104,62 @@ export class FlowBuilderComponent {
   }
 
   triggerFlow() {
+    this.emailValidationAttempt = true;
+    const validationError = this.validateEmailStepsBeforeTrigger();
+    if (validationError) {
+      this.showToast('Complete email steps', validationError, true);
+      return;
+    }
     this.persistFlow(() => {
       this.flowApi.triggerFlow(this.flow.id).subscribe({
         next: res => {
           this.flow.triggers += 1;
+          this.emailValidationAttempt = false;
           this.showToast('Flow Triggered!', res.message);
         },
         error: err => {
-          this.showToast('Trigger failed', err.message || 'Could not trigger flow.', true);
+          const msg = err?.error?.message ?? err?.message ?? 'Could not trigger flow.';
+          this.showToast('Trigger failed', msg, true);
         },
       });
     });
+  }
+
+  onFlowPanelChange(updated: Flow) {
+    this.flow = updated;
+    this.onFlowUpdated.emit(this.flow);
+  }
+
+  emailScheduleLocal(step: FlowStep): string {
+    if (!step.scheduledAt) return '';
+    const d = new Date(step.scheduledAt);
+    if (Number.isNaN(d.getTime())) return '';
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  onEmailScheduleChange(step: FlowStep, localValue: string) {
+    step.scheduledAt = localValue ? new Date(localValue).toISOString() : undefined;
+    this.onFlowUpdated.emit(this.flow);
+  }
+
+  private validateEmailStepsBeforeTrigger(): string | null {
+    const emailSteps = this.flow.steps.filter(s => s.type === 'email');
+    if (emailSteps.length === 0) return null;
+
+    const problems: string[] = [];
+    for (const step of emailSteps) {
+      const missing: string[] = [];
+      if (!step.subject?.trim()) missing.push('subject line');
+      if (!step.emailBody?.trim()) missing.push('email body');
+      if (this.isWelcomeSequenceFlow && !step.scheduledAt) missing.push('send date & time');
+      if (missing.length > 0) {
+        problems.push(`${step.label}: add ${missing.join(' and ')}`);
+      }
+    }
+
+    if (problems.length === 0) return null;
+    return problems.join(' · ');
   }
 
   saveFlow() {
@@ -1295,6 +1361,22 @@ export class FlowBuilderComponent {
 
   highlightStep(step: FlowStep) {
     this.highlightedStepId = step.id;
+  }
+
+  onStepClick(step: FlowStep, event: Event) {
+    if (this.stepClickTimer && this.lastStepClickId === step.id) {
+      clearTimeout(this.stepClickTimer);
+      this.stepClickTimer = null;
+      this.lastStepClickId = null;
+      this.openStepDetail(step, event);
+      return;
+    }
+    this.highlightStep(step);
+    this.lastStepClickId = step.id;
+    this.stepClickTimer = setTimeout(() => {
+      this.stepClickTimer = null;
+      this.lastStepClickId = null;
+    }, 320);
   }
 
   openStepDetail(step: FlowStep, event?: Event) {

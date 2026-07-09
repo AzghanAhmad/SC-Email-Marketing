@@ -7,7 +7,7 @@ namespace ScribeCount.Email.Api.Services;
 
 public class AnalyticsService(AppDbContext db, IndustryBenchmarkService industryBenchmarks)
 {
-    public async Task<AnalyticsBundleDto> GetBundleAsync(Guid userId, int periodDays = 30)
+    public async Task<AnalyticsBundleDto> GetBundleAsync(Guid userId, int periodDays = 7)
     {
         var periodEnd = DateTime.UtcNow;
         var periodStart = periodEnd.AddDays(-periodDays);
@@ -107,10 +107,10 @@ public class AnalyticsService(AppDbContext db, IndustryBenchmarkService industry
             new("Revenue", totalRevenue > 0 ? $"${totalRevenue:0,0}" : "$0", revenueChange, "dollar")
         };
 
-        var volumeData = BuildVolumeData(allCampaigns);
-        var engagementTrend = BuildEngagementTrend(allCampaigns);
+        var volumeData = BuildVolumeData(allCampaigns, periodStart, periodEnd, periodDays);
+        var engagementTrend = BuildEngagementTrend(allCampaigns, periodStart, periodEnd, periodDays);
         var engBreakdown = BuildEngagementBreakdown(openRate, clickRate, unsubRate);
-        var subscriberGrowth = BuildSubscriberGrowth(subscribers, activities);
+        var subscriberGrowth = BuildSubscriberGrowth(subscribers, activities, periodStart, periodEnd, periodDays);
         var campaignFunnel = BuildCampaignFunnel(periodCampaigns, activities);
 
         var metrics = new List<MetricCardDto>
@@ -142,7 +142,7 @@ public class AnalyticsService(AppDbContext db, IndustryBenchmarkService industry
         var sendAuditRows = await BuildSendAuditRowsAsync(userId, periodStart, periodEnd);
 
         var deliverabilityScore = ComputeDeliverabilityScore(openRate, clickRate, bounceRate, unsubRate);
-        var scoreHistory = BuildScoreHistory(deliverabilityScore);
+        var scoreHistory = BuildScoreHistory(deliverabilityScore, periodStart, periodEnd, periodDays);
         var scoreChange = scoreHistory.Count >= 2 ? scoreHistory[^1].Score - scoreHistory[^2].Score : 0;
 
         var deliverabilityMetrics = new List<DeliverabilityMetricDto>
@@ -215,7 +215,7 @@ public class AnalyticsService(AppDbContext db, IndustryBenchmarkService industry
         }
 
         var benchmarks = await BuildBenchmarksAsync(openRate, clickRate, bounceRate, unsubRate, revenuePerEmail);
-        var listHealth = BuildListHealth(subscribers, activities, periodStart);
+        var listHealth = BuildListHealth(subscribers, activities, periodStart, periodEnd, periodDays);
         var customReports = BuildCustomReports(userId, periodCampaigns, subscribers, totalSent, openRate);
         var deliverabilityActions = BuildDeliverabilityActions(openRate, bounceRate, unsubRate);
 
@@ -229,7 +229,7 @@ public class AnalyticsService(AppDbContext db, IndustryBenchmarkService industry
         );
     }
 
-    public async Task<MarketingAnalyticsDto> GetMarketingAnalyticsAsync(Guid userId, int periodDays = 30)
+    public async Task<MarketingAnalyticsDto> GetMarketingAnalyticsAsync(Guid userId, int periodDays = 7)
     {
         var bundle = await GetBundleAsync(userId, periodDays);
         var periodEnd = DateTime.UtcNow;
@@ -292,12 +292,13 @@ public class AnalyticsService(AppDbContext db, IndustryBenchmarkService industry
     }
 
     private static List<SubscriberGrowthPointDto> BuildSubscriberGrowth(
-        IReadOnlyList<Subscriber> subscribers, IReadOnlyList<SubscriberActivity> activities) =>
-        ChartMonthHelper.LastMonths(6).Select(m =>
+        IReadOnlyList<Subscriber> subscribers, IReadOnlyList<SubscriberActivity> activities,
+        DateTime periodStart, DateTime periodEnd, int periodDays) =>
+        ChartPeriodHelper.BuildBuckets(periodStart, periodEnd, periodDays).Select(b =>
         {
-            var monthEnd = new DateTime(m.Year, m.Month, DateTime.DaysInMonth(m.Year, m.Month), 23, 59, 59, DateTimeKind.Utc);
-            var count = MetricsHelper.ActiveSubscribersAt(subscribers, activities, monthEnd);
-            return new SubscriberGrowthPointDto(ChartMonthHelper.Label(m), count);
+            var at = b.EndExclusive.AddTicks(-1);
+            var count = MetricsHelper.ActiveSubscribersAt(subscribers, activities, at);
+            return new SubscriberGrowthPointDto(b.Label, count);
         }).ToList();
 
     private static double WeightedRate(List<Campaign> campaigns, Func<Campaign, double> rateFn)
@@ -325,32 +326,32 @@ public class AnalyticsService(AppDbContext db, IndustryBenchmarkService industry
     private static string StatusForChange(double change) =>
         change > 5 ? "Improving" : change < -5 ? "Declining" : "Stable";
 
-    private static List<VolumeDataPointDto> BuildVolumeData(List<Campaign> campaigns)
+    private static List<VolumeDataPointDto> BuildVolumeData(
+        List<Campaign> campaigns, DateTime periodStart, DateTime periodEnd, int periodDays)
     {
-        return ChartMonthHelper.LastMonths(6).Select(m =>
+        return ChartPeriodHelper.BuildBuckets(periodStart, periodEnd, periodDays).Select(b =>
         {
-            var label = ChartMonthHelper.Label(m);
-            var monthCampaigns = campaigns.Where(c =>
+            var bucketCampaigns = campaigns.Where(c =>
                 c.Status == "sent" && c.SentAt.HasValue &&
-                c.SentAt.Value.Year == m.Year && c.SentAt.Value.Month == m.Month).ToList();
-            var sent = monthCampaigns.Sum(c => c.SentCount);
+                c.SentAt >= b.Start && c.SentAt < b.EndExclusive).ToList();
+            var sent = bucketCampaigns.Sum(c => c.SentCount);
             var delivered = (int)(sent * 0.975);
-            return new VolumeDataPointDto(label, sent, delivered);
+            return new VolumeDataPointDto(b.Label, sent, delivered);
         }).ToList();
     }
 
-    private static List<EngagementTrendPointDto> BuildEngagementTrend(List<Campaign> campaigns)
+    private static List<EngagementTrendPointDto> BuildEngagementTrend(
+        List<Campaign> campaigns, DateTime periodStart, DateTime periodEnd, int periodDays)
     {
-        return ChartMonthHelper.LastMonths(6).Select(m =>
+        return ChartPeriodHelper.BuildBuckets(periodStart, periodEnd, periodDays).Select(b =>
         {
-            var label = ChartMonthHelper.Label(m);
-            var monthCampaigns = campaigns.Where(c =>
+            var bucketCampaigns = campaigns.Where(c =>
                 c.Status == "sent" && c.SentAt.HasValue &&
-                c.SentAt.Value.Year == m.Year && c.SentAt.Value.Month == m.Month).ToList();
+                c.SentAt >= b.Start && c.SentAt < b.EndExclusive).ToList();
             return new EngagementTrendPointDto(
-                label,
-                WeightedRate(monthCampaigns, c => (double)c.OpenRate),
-                WeightedRate(monthCampaigns, c => (double)c.ClickRate)
+                b.Label,
+                WeightedRate(bucketCampaigns, c => (double)c.OpenRate),
+                WeightedRate(bucketCampaigns, c => (double)c.ClickRate)
             );
         }).ToList();
     }
@@ -560,21 +561,25 @@ public class AnalyticsService(AppDbContext db, IndustryBenchmarkService industry
         return (int)Math.Clamp(Math.Round(score), 0, 100);
     }
 
-    private static List<ScoreHistoryPointDto> BuildScoreHistory(int currentScore)
+    private static List<ScoreHistoryPointDto> BuildScoreHistory(
+        int currentScore, DateTime periodStart, DateTime periodEnd, int periodDays)
     {
-        var history = new List<ScoreHistoryPointDto>();
-        for (var i = 5; i >= 0; i--)
+        var buckets = ChartPeriodHelper.BuildBuckets(periodStart, periodEnd, periodDays);
+        if (buckets.Count == 0)
+            return [new ScoreHistoryPointDto("Now", currentScore)];
+
+        return buckets.Select((b, i) =>
         {
-            var delta = (5 - i) * 2 - 3;
-            history.Add(new ScoreHistoryPointDto($"Week {6 - i}", Math.Clamp(currentScore - delta, 0, 100)));
-        }
-        history[^1] = new ScoreHistoryPointDto(history[^1].Label, currentScore);
-        return history;
+            var delta = (buckets.Count - 1 - i) * 3;
+            var score = i == buckets.Count - 1 ? currentScore : Math.Clamp(currentScore - delta, 0, 100);
+            return new ScoreHistoryPointDto(b.Label, score);
+        }).ToList();
     }
 
     private static (List<ListHealthKpiDto> Kpis, List<ListHealthTrendPointDto> Trend,
         List<ListHealthOutcomeDto> Outcomes, List<FlaggedSubscriberDto> Flagged) BuildListHealth(
-        List<Subscriber> subscribers, List<SubscriberActivity> activities, DateTime periodStart)
+        List<Subscriber> subscribers, List<SubscriberActivity> activities,
+        DateTime periodStart, DateTime periodEnd, int periodDays)
     {
         var total = subscribers.Count;
         var active = subscribers.Count(s => s.Status == "active");
@@ -602,13 +607,12 @@ public class AnalyticsService(AppDbContext db, IndustryBenchmarkService industry
             new("Removed (30d)", inactive.ToString("N0"), "Cleanly removed after sequence", "#94a3b8")
         };
 
-        var trend = ChartMonthHelper.LastMonths(6).Select(m =>
+        var trend = ChartPeriodHelper.BuildBuckets(periodStart, periodEnd, periodDays).Select(b =>
         {
-            var monthEnd = new DateTime(m.Year, m.Month, DateTime.DaysInMonth(m.Year, m.Month), 23, 59, 59, DateTimeKind.Utc);
-            var activeAtMonth = MetricsHelper.ActiveSubscribersAt(subscribers, activities, monthEnd);
-            var inactiveAtMonth = Math.Max(0, total - activeAtMonth);
-            var activePct = total == 0 ? 0 : (int)Math.Round(activeAtMonth / (double)total * 100);
-            return new ListHealthTrendPointDto(ChartMonthHelper.Label(m), activePct, 100 - activePct);
+            var at = b.EndExclusive.AddTicks(-1);
+            var activeAtBucket = MetricsHelper.ActiveSubscribersAt(subscribers, activities, at);
+            var activePct = total == 0 ? 0 : (int)Math.Round(activeAtBucket / (double)total * 100);
+            return new ListHealthTrendPointDto(b.Label, activePct, 100 - activePct);
         }).ToList();
 
         var outcomes = new List<ListHealthOutcomeDto>

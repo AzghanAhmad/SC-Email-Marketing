@@ -14,10 +14,10 @@ public class AnalyticsController(AnalyticsService analytics) : ControllerBase
     private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub")!);
 
     [HttpGet]
-    public async Task<ActionResult<AnalyticsBundleDto>> GetAnalytics([FromQuery] int days = 30) =>
+    public async Task<ActionResult<AnalyticsBundleDto>> GetAnalytics([FromQuery] int days = 7) =>
         Ok(await analytics.GetBundleAsync(UserId, Math.Clamp(days, 7, 365)));
 
     [HttpGet("marketing")]
-    public async Task<ActionResult<MarketingAnalyticsDto>> GetMarketingAnalytics([FromQuery] int days = 30) =>
+    public async Task<ActionResult<MarketingAnalyticsDto>> GetMarketingAnalytics([FromQuery] int days = 7) =>
         Ok(await analytics.GetMarketingAnalyticsAsync(UserId, Math.Clamp(days, 7, 365)));
 }

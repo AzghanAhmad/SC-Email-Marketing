@@ -1,0 +1,11 @@
+{
+  "name": "scribecount-email-backend",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "prestart": "node scripts/check-mysql.mjs && node scripts/check-port.mjs",
+    "start": "dotnet run",
+    "build": "dotnet build",
+    "export-templates": "node scripts/export-flow-templates.mjs"
+  }
+}

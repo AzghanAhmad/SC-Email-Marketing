@@ -20,6 +20,7 @@ public record FlowStepDto(
     string? WaitUnit = null,
     string? ConditionType = null,
     string? TriggerEvent = null,
+    string? ScheduledAt = null,
     List<FlowFormFieldDto>? FormFields = null
 );
 
@@ -54,6 +55,29 @@ public record FlowTriggerResultDto(
     string RunId,
     int EnrolledCount,
     string Message
+);
+
+public record FlowEmailMetricDto(
+    string StepId,
+    string StepLabel,
+    string? ScheduledAt,
+    int Sent,
+    int Delivered,
+    double DeliveryRate,
+    double OpenRate
+);
+
+public record FlowEmailMetricsDto(
+    int TotalTriggers,
+    int TotalSent,
+    int TotalDelivered,
+    List<FlowEmailMetricDto> Emails,
+    List<FlowEmailSignalDto> Signals
+);
+
+public record FlowEmailSignalDto(
+    string Type,
+    string Signal
 );
 
 public record FlowResultsDto(

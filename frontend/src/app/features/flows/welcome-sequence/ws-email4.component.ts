@@ -1,16 +1,23 @@
-import { Component, Output, EventEmitter } from '@angular/core';
+import { Component, Output, EventEmitter, Input } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FlowStep } from '../../../core/services/mock-data.service';
+import { WsEmailScheduleComponent } from './ws-email-schedule.component';
 
 @Component({
   selector: 'app-ws-email4',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, WsEmailScheduleComponent],
   template: `
     <div class="ws-email-section">
+      <app-ws-email-schedule
+        [step]="emailStep"
+        [showError]="showScheduleError"
+        (scheduleChange)="scheduleChange.emit($event)">
+      </app-ws-email-schedule>
       <div class="ws-email-header e4">
         <span class="ws-email-badge">Email 4</span>
         <span class="ws-email-name">The Invitation</span>
-        <span class="ws-email-timing">3–5 days after Email 3</span>
+        <span class="ws-email-timing">{{ timingLabel }}</span>
       </div>
       <p class="ws-body">Email 4 closes the formal onboarding with clear next steps — not by adding more information, but by opening a door and pointing the reader toward what lies beyond it. The invitation comes first, because it's the relational gesture that makes the commercial ask land warmly rather than abruptly.</p>
       <div class="ws-invitation-options">
@@ -74,7 +81,16 @@ import { CommonModule } from '@angular/common';
   `]
 })
 export class WsEmail4Component {
+  @Input() emailStep: FlowStep | null = null;
+  @Input() showScheduleError = false;
   @Output() subjectSelected = new EventEmitter<string>();
+  @Output() scheduleChange = new EventEmitter<string>();
+
+  get timingLabel(): string {
+    if (!this.emailStep?.scheduledAt) return 'Set send date & time below';
+    const d = new Date(this.emailStep.scheduledAt);
+    return Number.isNaN(d.getTime()) ? 'Scheduled' : `Scheduled: ${d.toLocaleString()}`;
+  }
 
   readonly email4Invitations = [
     { title: 'Your reader community', desc: 'A Facebook Group, Discord server, or other dedicated space. The highest-relationship invitation in the sequence — works best if you have an active community worth inviting readers into.', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>' },

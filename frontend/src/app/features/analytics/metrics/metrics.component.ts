@@ -1,11 +1,13 @@
 import { Component, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { AnalyticsApiService } from '../../../core/services/analytics-api.service';
+import { XyChartComponent, ChartSeries } from '../../../shared/components/xy-chart/xy-chart.component';
 
 @Component({
   selector: 'app-metrics',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, FormsModule, XyChartComponent],
   template: `
     <div class="page-wrapper">
       <div class="page-header">
@@ -13,9 +15,55 @@ import { AnalyticsApiService } from '../../../core/services/analytics-api.servic
           <h1 class="page-title">Metrics</h1>
           <p class="page-subtitle">Track your key email marketing performance metrics over time</p>
         </div>
-        <select class="period-select" [value]="periodDays" (change)="onPeriodChange($event)">
-          <option [value]="7">Last 7 days</option><option [value]="30">Last 30 days</option><option [value]="90">Last 90 days</option><option [value]="365">Last year</option>
-        </select>
+        <div class="analytics-filters">
+          <div class="filter-field">
+            <label class="filter-label" for="metrics-period">Time period</label>
+            <select id="metrics-period" class="period-select" [ngModel]="periodDays" (ngModelChange)="onPeriodChange($event)">
+              <option [ngValue]="7">Last 7 days</option>
+              <option [ngValue]="30">Last 30 days</option>
+              <option [ngValue]="90">Last 90 days</option>
+              <option [ngValue]="365">Last year</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="charts-row">
+        <div class="glass-card chart-card">
+          <div class="chart-header">
+            <div>
+              <h3 class="chart-title">Email Volume</h3>
+              <p class="chart-sub">Sent vs delivered over time</p>
+            </div>
+          </div>
+          <app-xy-chart type="bar" [labels]="volumeLabels" [series]="volumeSeries" yAxisLabel="Emails" xAxisLabel="Month" [showLegend]="true"/>
+        </div>
+        <div class="glass-card chart-card">
+          <div class="chart-header">
+            <div>
+              <h3 class="chart-title">Engagement Trend</h3>
+              <p class="chart-sub">Open and click rates</p>
+            </div>
+          </div>
+          <app-xy-chart type="line" [labels]="engagementLabels" [series]="engagementSeries" yAxisLabel="Rate %" xAxisLabel="Month"/>
+        </div>
+      </div>
+
+      <div class="glass-card chart-card goal-chart-card" *ngIf="goalExitRates.length">
+        <div class="chart-header">
+          <div>
+            <h3 class="chart-title">Flow Goal Exit Rate</h3>
+            <p class="chart-sub">How subscribers exit automated flows</p>
+          </div>
+        </div>
+        <app-xy-chart
+          type="horizontalBar"
+          [labels]="goalLabels"
+          [series]="goalSeries"
+          yAxisLabel="Flow"
+          xAxisLabel="Exit rate %"
+          [height]="Math.max(160, goalExitRates.length * 48)"
+        />
       </div>
 
       <div class="metrics-grid">
@@ -122,7 +170,12 @@ import { AnalyticsApiService } from '../../../core/services/analytics-api.servic
     </div>
   `,
   styles: [`
-    .period-select { padding:.55rem 1rem; background:white; border:1.5px solid #e2e8f0; border-radius:10px; color:#334155; font-size:.8125rem; font-family:inherit; outline:none; cursor:pointer; }
+    .charts-row { display:grid; grid-template-columns:1fr 1fr; gap:1.25rem; margin-bottom:1.75rem; }
+    .chart-card { padding:1.5rem; margin-bottom:1.25rem; }
+    .goal-chart-card { margin-bottom:1.75rem; }
+    .chart-header { margin-bottom:1.25rem; }
+    .chart-title { font-size:1rem; font-weight:700; color:#0f172a; margin:0 0 .2rem; }
+    .chart-sub { font-size:.78rem; color:#94a3b8; margin:0; }
 
     .metrics-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:1.25rem; margin-bottom:1.75rem; }
     .metric-card { padding:1.375rem; }
@@ -154,23 +207,30 @@ import { AnalyticsApiService } from '../../../core/services/analytics-api.servic
     .goal-note { font-size:.72rem; color:#64748b; }
     .empty-row { text-align:center; color:#94a3b8; padding:1.5rem !important; }
 
-    @media(max-width:900px) { .metrics-grid { grid-template-columns:repeat(2,1fr); } }
+    @media(max-width:900px) { .metrics-grid { grid-template-columns:repeat(2,1fr); } .charts-row { grid-template-columns:1fr; } }
     @media(max-width:600px) { .metrics-grid { grid-template-columns:1fr; } .goal-grid { grid-template-columns:1fr; } }
   `]
 })
 export class MetricsComponent implements OnInit {
   private analyticsApi = inject(AnalyticsApiService);
-  periodDays = 30;
+  readonly Math = Math;
+  periodDays = 7;
   metrics: { label: string; value: string; change: number; color: string }[] = [];
   detailMetrics: { name: string; current: string; previous: string; changeNum: number; status: string }[] = [];
   flowSteps: { step: string; entered: number; completed: number; delivered: number; opens: number; clicks: number; revenue: string }[] = [];
   goalExitRates: { name: string; rate: number; note: string }[] = [];
   sendAuditRows: { subscriber: string; flow: string; step: string; reason: string; time: string }[] = [];
+  volumeLabels: string[] = [];
+  volumeSeries: ChartSeries[] = [];
+  engagementLabels: string[] = [];
+  engagementSeries: ChartSeries[] = [];
+  goalLabels: string[] = [];
+  goalSeries: ChartSeries[] = [];
 
   ngOnInit() { this.loadData(); }
 
-  onPeriodChange(ev: Event) {
-    this.periodDays = Number((ev.target as HTMLSelectElement).value);
+  onPeriodChange(days: number) {
+    this.periodDays = days;
     this.loadData();
   }
 
@@ -181,6 +241,18 @@ export class MetricsComponent implements OnInit {
       this.flowSteps = b.flowSteps.map(s => ({ step: s.step, entered: s.entered, completed: s.completed, delivered: s.delivered, opens: s.opens, clicks: s.clicks, revenue: s.revenue }));
       this.goalExitRates = b.goalExitRates;
       this.sendAuditRows = b.sendAuditRows;
+      this.volumeLabels = b.volumeData.map(d => d.label);
+      this.volumeSeries = [
+        { name: 'Sent', color: '#3b82f6', values: b.volumeData.map(d => d.sent) },
+        { name: 'Delivered', color: '#10b981', values: b.volumeData.map(d => d.delivered) },
+      ];
+      this.engagementLabels = b.engagementTrend.map(d => d.label);
+      this.engagementSeries = [
+        { name: 'Open rate', color: '#3b82f6', values: b.engagementTrend.map(d => d.open) },
+        { name: 'Click rate', color: '#8b5cf6', values: b.engagementTrend.map(d => d.click) },
+      ];
+      this.goalLabels = b.goalExitRates.map(g => g.name);
+      this.goalSeries = [{ name: 'Exit rate', color: '#3b82f6', values: b.goalExitRates.map(g => g.rate) }];
     });
   }
 }

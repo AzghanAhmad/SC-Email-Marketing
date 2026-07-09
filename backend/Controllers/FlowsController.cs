@@ -89,6 +89,13 @@ public class FlowsController(AppDbContext db, FlowService flowService) : Control
         }
     }
 
+    [HttpGet("{id:guid}/email-metrics")]
+    public async Task<ActionResult<FlowEmailMetricsDto>> GetEmailMetrics(Guid id)
+    {
+        var metrics = await flowService.GetFlowEmailMetricsAsync(GetUserId(), id);
+        return metrics is null ? NotFound() : Ok(metrics);
+    }
+
     [HttpGet("{id:guid}/results")]
     public async Task<ActionResult<FlowResultsDto>> GetResults(Guid id)
     {

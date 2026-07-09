@@ -1,10 +1,53 @@
-import { Component, Input, OnChanges } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import {
+  Component,
+  Input,
+  OnChanges,
+  AfterViewInit,
+  OnDestroy,
+  ViewChild,
+  ElementRef,
+  PLATFORM_ID,
+  inject,
+} from '@angular/core';
+import { CommonModule, isPlatformBrowser } from '@angular/common';
+import {
+  Chart,
+  BarController,
+  BarElement,
+  CategoryScale,
+  LinearScale,
+  LineController,
+  LineElement,
+  PointElement,
+  DoughnutController,
+  ArcElement,
+  Legend,
+  Tooltip,
+  Filler,
+  ChartConfiguration,
+} from 'chart.js';
+
+Chart.register(
+  BarController,
+  BarElement,
+  CategoryScale,
+  LinearScale,
+  LineController,
+  LineElement,
+  PointElement,
+  DoughnutController,
+  ArcElement,
+  Legend,
+  Tooltip,
+  Filler,
+);
 
 export interface ChartSeries {
   name: string;
   color: string;
   values: number[];
+  /** Per-segment colors for multi-slice doughnut charts */
+  colors?: string[];
 }
 
 @Component({
@@ -12,163 +55,177 @@ export interface ChartSeries {
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="xy-chart" [style.minHeight.px]="height + (showLegend && series.length > 1 ? 72 : 48)">
-      <div class="xy-body">
-        <div class="xy-y-axis">
-          <div class="xy-y-label" *ngIf="yAxisLabel">{{ yAxisLabel }}</div>
-          <div class="xy-y-ticks">
-            <span *ngFor="let tick of yTicks">{{ tick }}</span>
-          </div>
-        </div>
-        <div class="xy-plot">
-          <svg [attr.viewBox]="'0 0 ' + plotW + ' ' + plotH" preserveAspectRatio="none" class="xy-svg">
-            <line *ngFor="let y of gridYs" [attr.x1]="padL" [attr.y1]="y" [attr.x2]="plotW - padR" [attr.y2]="y" stroke="#e2e8f0" stroke-width="1"/>
-            <ng-container *ngIf="type === 'line'">
-              <g *ngFor="let s of series">
-                <polygon [attr.points]="areaPoints(s.values)" [attr.fill]="s.color" fill-opacity="0.12"/>
-                <polyline [attr.points]="linePoints(s.values)" fill="none" [attr.stroke]="s.color" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
-                <circle *ngFor="let pt of lineDots(s.values); let i = index" [attr.cx]="pt.x" [attr.cy]="pt.y" r="4" [attr.fill]="s.color" stroke="#fff" stroke-width="2"/>
-              </g>
-            </ng-container>
-            <ng-container *ngIf="type === 'bar'">
-              <g *ngFor="let i of labelIndexes">
-                <rect *ngFor="let s of series; let si = index"
-                  [attr.x]="barX(i, si)"
-                  [attr.y]="barY(s.values[i])"
-                  [attr.width]="barWidth"
-                  [attr.height]="barH(s.values[i])"
-                  [attr.fill]="s.color"
-                  rx="3"/>
-              </g>
-            </ng-container>
-          </svg>
-          <div class="xy-x-labels">
-            <span *ngFor="let l of labels">{{ l }}</span>
-          </div>
-          <div class="xy-x-title" *ngIf="xAxisLabel">{{ xAxisLabel }}</div>
-        </div>
+    <div class="xy-chart" [style.minHeight.px]="height + (showLegend && series.length > 1 && type !== 'doughnut' ? 56 : 24)">
+      <div class="xy-canvas-wrap" [style.height.px]="height">
+        <canvas #canvas></canvas>
       </div>
-      <div class="xy-legend" *ngIf="showLegend && series.length > 1">
-        <span class="xy-legend-item" *ngFor="let s of series">
-          <span class="xy-dot" [style.background]="s.color"></span>{{ s.name }}
-        </span>
+      <div class="xy-axis-labels" *ngIf="yAxisLabel || xAxisLabel">
+        <span class="xy-y" *ngIf="yAxisLabel">{{ yAxisLabel }}</span>
+        <span class="xy-x" *ngIf="xAxisLabel">{{ xAxisLabel }}</span>
       </div>
     </div>
   `,
   styles: [`
-    .xy-chart { display:flex; flex-direction:column; gap:.625rem; width:100%; }
-    .xy-body { display:flex; gap:.5rem; flex:1; min-height:0; align-items:stretch; }
-    .xy-y-axis { display:flex; flex-direction:column; width:48px; flex-shrink:0; gap:.35rem; }
-    .xy-y-label { font-size:.65rem; font-weight:600; color:#64748b; text-transform:uppercase; letter-spacing:.04em; text-align:right; line-height:1.2; }
-    .xy-y-ticks { display:flex; flex-direction:column; justify-content:space-between; flex:1; font-size:.65rem; color:#64748b; font-weight:500; text-align:right; padding-bottom:1.75rem; min-height:140px; }
-    .xy-plot { flex:1; min-width:0; display:flex; flex-direction:column; }
-    .xy-svg { width:100%; height:140px; display:block; }
-    .xy-x-labels { display:flex; justify-content:space-between; font-size:.68rem; color:#64748b; margin-top:.35rem; padding:0 2px; gap:.25rem; }
-    .xy-x-labels span { flex:1; text-align:center; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .xy-x-title { font-size:.68rem; color:#94a3b8; text-align:center; margin-top:.25rem; }
-    .xy-legend { display:flex; flex-wrap:wrap; gap:.875rem; margin-top:.125rem; padding-top:.25rem; }
-    .xy-legend-item { display:flex; align-items:center; gap:.35rem; font-size:.75rem; color:#64748b; font-weight:500; }
-    .xy-dot { width:8px; height:8px; border-radius:50%; }
-  `]
+    .xy-chart { display:flex; flex-direction:column; gap:.5rem; width:100%; }
+    .xy-canvas-wrap { position:relative; width:100%; }
+    .xy-canvas-wrap canvas { width:100% !important; height:100% !important; }
+    .xy-axis-labels { display:flex; justify-content:space-between; font-size:.68rem; color:#94a3b8; padding:0 .25rem; }
+    .xy-y { font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
+    .xy-x { font-weight:500; }
+  `],
 })
-export class XyChartComponent implements OnChanges {
-  @Input() type: 'bar' | 'line' = 'line';
+export class XyChartComponent implements OnChanges, AfterViewInit, OnDestroy {
+  @Input() type: 'bar' | 'line' | 'doughnut' | 'horizontalBar' = 'line';
   @Input() labels: string[] = [];
   @Input() series: ChartSeries[] = [];
-  @Input() height = 180;
+  @Input() height = 220;
   @Input() yAxisLabel = '';
   @Input() xAxisLabel = '';
   @Input() showLegend = true;
+  /** Doughnut cutout percentage (0–90). Default 72 for ring gauges. */
+  @Input() cutout = '72%';
 
-  plotW = 400;
-  plotH = 160;
-  padL = 8;
-  padR = 8;
-  padT = 12;
-  padB = 8;
-  yTicks: string[] = [];
-  gridYs: number[] = [];
-  labelIndexes: number[] = [];
-  barWidth = 12;
-  private yMin = 0;
-  private yMax = 1;
+  @ViewChild('canvas') canvasRef?: ElementRef<HTMLCanvasElement>;
+
+  private chart?: Chart;
+  private readonly platformId = inject(PLATFORM_ID);
+
+  ngAfterViewInit() {
+    this.render();
+  }
 
   ngOnChanges() {
-    this.labelIndexes = this.labels.map((_, i) => i);
-    this.computeScale();
+    this.render();
   }
 
-  private computeScale() {
-    const all = this.series.flatMap(s => s.values);
-    const max = Math.max(1, ...all, 0);
-    const min = Math.min(0, ...all);
-    this.yMin = min;
-    this.yMax = max <= min ? min + 1 : max;
-    const steps = 4;
-    this.yTicks = [];
-    this.gridYs = [];
-    for (let i = steps; i >= 0; i--) {
-      const val = this.yMin + (i / steps) * (this.yMax - this.yMin);
-      this.yTicks.push(this.formatTick(val));
-      const y = this.padT + ((steps - i) / steps) * (this.plotH - this.padT - this.padB);
-      this.gridYs.push(y);
+  ngOnDestroy() {
+    this.chart?.destroy();
+  }
+
+  private render() {
+    if (!isPlatformBrowser(this.platformId) || !this.canvasRef?.nativeElement) return;
+
+    const ctx = this.canvasRef.nativeElement.getContext('2d');
+    if (!ctx) return;
+
+    this.chart?.destroy();
+
+    const config = this.buildConfig();
+    if (!config) return;
+
+    this.chart = new Chart(ctx, config);
+  }
+
+  private buildConfig(): ChartConfiguration | null {
+    if (!this.labels.length && this.type !== 'doughnut') return null;
+    if (!this.series.length) return null;
+
+    const isHorizontal = this.type === 'horizontalBar';
+    const isDoughnut = this.type === 'doughnut';
+    const chartType = isHorizontal ? 'bar' : isDoughnut ? 'doughnut' : this.type;
+
+    const datasets = isDoughnut
+      ? [{
+          label: this.series[0]?.name ?? '',
+          data: this.series[0]?.values ?? [],
+          backgroundColor: this.series[0]?.values.length === 2
+            ? [this.series[0].color, '#f1f5f9']
+            : (this.series[0]?.colors ?? this.series.map(s => s.color)),
+          borderColor: '#fff',
+          borderWidth: 2,
+          hoverBorderColor: '#3b82f6',
+          hoverBorderWidth: 3,
+        }]
+      : this.series.map(s => ({
+          label: s.name,
+          data: s.values,
+          backgroundColor: this.type === 'line' ? s.color + '22' : s.color,
+          borderColor: s.color,
+          borderWidth: this.type === 'line' ? 2.5 : 0,
+          pointBackgroundColor: s.color,
+          pointBorderColor: '#fff',
+          pointBorderWidth: 2,
+          pointRadius: this.type === 'line' ? 4 : 0,
+          pointHoverRadius: 6,
+          pointHoverBackgroundColor: '#3b82f6',
+          pointHoverBorderColor: '#fff',
+          fill: this.type === 'line',
+          tension: 0.35,
+          borderRadius: this.type === 'bar' || isHorizontal ? 6 : 0,
+          maxBarThickness: isHorizontal ? 28 : 42,
+        }));
+
+    const basePlugins = {
+      legend: {
+        display: this.showLegend && this.series.length > 1 && !isDoughnut,
+        position: 'bottom' as const,
+        labels: {
+          usePointStyle: true,
+          padding: 16,
+          color: '#64748b',
+          font: { size: 12, weight: 500 as const },
+        },
+      },
+      tooltip: {
+        backgroundColor: '#0f172a',
+        titleColor: '#f8fafc',
+        bodyColor: '#e2e8f0',
+        padding: 12,
+        cornerRadius: 8,
+        displayColors: true,
+      },
+    };
+
+    if (isDoughnut) {
+      const doughnutConfig: ChartConfiguration<'doughnut'> = {
+        type: 'doughnut',
+        data: { labels: this.labels, datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: this.cutout,
+          rotation: this.series[0]?.values.length === 2 ? -90 : 0,
+          circumference: this.series[0]?.values.length === 2 ? 360 : undefined,
+          animation: { duration: 900, easing: 'easeOutQuart' },
+          plugins: { ...basePlugins, legend: { display: false } },
+        },
+      };
+      return doughnutConfig;
     }
-    const groups = Math.max(1, this.labels.length);
-    const groupW = (this.plotW - this.padL - this.padR) / groups;
-    this.barWidth = Math.max(6, Math.min(18, (groupW - 4) / Math.max(1, this.series.length)));
-  }
 
-  private formatTick(v: number): string {
-    if (v >= 1000) return (v / 1000).toFixed(v >= 10000 ? 0 : 1) + 'k';
-    if (this.yMax <= 100 && this.yMax > 10) return v.toFixed(0) + '%';
-    if (this.yMax <= 10) return v.toFixed(1);
-    return v.toFixed(0);
-  }
-
-  private valY(v: number): number {
-    const range = this.yMax - this.yMin || 1;
-    return this.padT + (1 - (v - this.yMin) / range) * (this.plotH - this.padT - this.padB);
-  }
-
-  linePoints(values: number[]): string {
-    if (!values.length) return '';
-    return values.map((v, i) => {
-      const x = this.padL + (values.length === 1 ? (this.plotW - this.padL - this.padR) / 2 : (i / (values.length - 1)) * (this.plotW - this.padL - this.padR));
-      return `${x},${this.valY(v)}`;
-    }).join(' ');
-  }
-
-  areaPoints(values: number[]): string {
-    if (!values.length) return '';
-    const line = values.map((v, i) => {
-      const x = this.padL + (values.length === 1 ? (this.plotW - this.padL - this.padR) / 2 : (i / (values.length - 1)) * (this.plotW - this.padL - this.padR));
-      return `${x},${this.valY(v)}`;
-    });
-    const firstX = this.padL;
-    const lastX = this.padL + (values.length === 1 ? (this.plotW - this.padL - this.padR) / 2 : this.plotW - this.padL - this.padR);
-    return `${firstX},${this.plotH - this.padB} ${line.join(' ')} ${lastX},${this.plotH - this.padB}`;
-  }
-
-  lineDots(values: number[]) {
-    return values.map((v, i) => ({
-      x: this.padL + (values.length === 1 ? (this.plotW - this.padL - this.padR) / 2 : (i / (values.length - 1)) * (this.plotW - this.padL - this.padR)),
-      y: this.valY(v),
-    }));
-  }
-
-  barX(index: number, seriesIndex: number): number {
-    const groups = Math.max(1, this.labels.length);
-    const groupW = (this.plotW - this.padL - this.padR) / groups;
-    const groupStart = this.padL + index * groupW;
-    const offset = (groupW - this.barWidth * this.series.length) / 2;
-    return groupStart + offset + seriesIndex * this.barWidth;
-  }
-
-  barY(v: number): number {
-    return this.valY(Math.max(0, v));
-  }
-
-  barH(v: number): number {
-    return Math.max(2, this.plotH - this.padB - this.valY(Math.max(0, v)));
+    return {
+      type: chartType as 'bar' | 'line',
+      data: {
+        labels: this.labels,
+        datasets,
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        indexAxis: isHorizontal ? 'y' : 'x',
+        animation: {
+          duration: 900,
+          easing: 'easeOutQuart',
+        },
+        interaction: {
+          mode: 'index',
+          intersect: false,
+        },
+        plugins: basePlugins,
+        scales: {
+          x: {
+            grid: { color: '#f1f5f9' },
+            ticks: { color: '#64748b', font: { size: 11 } },
+            border: { display: false },
+          },
+          y: {
+            beginAtZero: true,
+            grid: { color: '#f1f5f9' },
+            ticks: { color: '#64748b', font: { size: 11 } },
+            border: { display: false },
+          },
+        },
+      },
+    };
   }
 }

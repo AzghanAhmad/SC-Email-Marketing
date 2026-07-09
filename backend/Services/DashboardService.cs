@@ -7,7 +7,7 @@ namespace ScribeCount.Email.Api.Services;
 
 public class DashboardService(AppDbContext db)
 {
-    public async Task<DashboardDto> GetDashboardAsync(Guid userId, string? userName, int periodDays = 30)
+    public async Task<DashboardDto> GetDashboardAsync(Guid userId, string? userName, int periodDays = 7)
     {
         var subscribers = await db.Subscribers.Where(s => s.UserId == userId).ToListAsync();
         var campaigns = await db.Campaigns
@@ -57,8 +57,8 @@ public class DashboardService(AppDbContext db)
             ? (revenue > 0 ? 100.0 : 0)
             : Math.Round((double)((revenue - prevRevenue) / prevRevenue * 100), 1);
 
-        var campaignChart = BuildCampaignChart(activities);
-        var growthChart = BuildGrowthChart(subscribers, activities);
+        var campaignChart = BuildCampaignChart(activities, periodStart, periodEnd, periodDays);
+        var growthChart = BuildGrowthChart(subscribers, activities, periodStart, periodEnd, periodDays);
         var campaignFunnel = BuildCampaignFunnel(sentCampaigns.Where(c => c.SentAt >= periodStart).ToList(), activities);
 
         var stats = new DashboardStatsDto(
@@ -147,37 +147,37 @@ public class DashboardService(AppDbContext db)
             .Distinct()
             .Count();
 
-    private static List<CampaignChartPointDto> BuildCampaignChart(IReadOnlyList<SubscriberActivity> activities)
+    private static List<CampaignChartPointDto> BuildCampaignChart(
+        IReadOnlyList<SubscriberActivity> activities, DateTime periodStart, DateTime periodEnd, int periodDays)
     {
-        return ChartMonthHelper.LastMonths(6).Select(m =>
+        return ChartPeriodHelper.BuildBuckets(periodStart, periodEnd, periodDays).Select(b =>
         {
-            var monthStart = m;
-            var monthEnd = monthStart.AddMonths(1);
             var sent = activities.Count(a =>
                 a.ActivityType == "campaign_sent"
-                && a.OccurredAt >= monthStart
-                && a.OccurredAt < monthEnd);
+                && a.OccurredAt >= b.Start
+                && a.OccurredAt < b.EndExclusive);
             var opened = activities
                 .Where(a =>
                     (a.ActivityType == "campaign_opened"
                      || a.ActivityType is "unsubscribed" or "unsubscribe")
-                    && a.OccurredAt >= monthStart
-                    && a.OccurredAt < monthEnd)
+                    && a.OccurredAt >= b.Start
+                    && a.OccurredAt < b.EndExclusive)
                 .Select(a => (a.SubscriberId, a.CampaignId))
                 .Distinct()
                 .Count();
-            return new CampaignChartPointDto(ChartMonthHelper.Label(m), sent, opened);
+            return new CampaignChartPointDto(b.Label, sent, opened);
         }).ToList();
     }
 
     private static List<SubscriberGrowthPointDto> BuildGrowthChart(
-        IReadOnlyList<Subscriber> subscribers, IReadOnlyList<SubscriberActivity> activities)
+        IReadOnlyList<Subscriber> subscribers, IReadOnlyList<SubscriberActivity> activities,
+        DateTime periodStart, DateTime periodEnd, int periodDays)
     {
-        return ChartMonthHelper.LastMonths(6).Select(m =>
+        return ChartPeriodHelper.BuildBuckets(periodStart, periodEnd, periodDays).Select(b =>
         {
-            var monthEnd = new DateTime(m.Year, m.Month, DateTime.DaysInMonth(m.Year, m.Month), 23, 59, 59, DateTimeKind.Utc);
-            var count = MetricsHelper.ActiveSubscribersAt(subscribers, activities, monthEnd);
-            return new SubscriberGrowthPointDto(ChartMonthHelper.Label(m), count);
+            var at = b.EndExclusive.AddTicks(-1);
+            var count = MetricsHelper.ActiveSubscribersAt(subscribers, activities, at);
+            return new SubscriberGrowthPointDto(b.Label, count);
         }).ToList();
     }
 

@@ -68,6 +68,7 @@ export interface FlowStep {
   detail: string;
   subject?: string;
   emailBody?: string;
+  scheduledAt?: string;
   waitDuration?: number;
   waitUnit?: 'minutes' | 'hours' | 'days' | 'weeks';
   conditionType?: string;

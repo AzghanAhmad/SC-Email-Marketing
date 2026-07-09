@@ -8,6 +8,7 @@ public class OutboundEmailMessage
     public Guid? SubscriberId { get; set; }
     public Guid? CampaignId { get; set; }
     public Guid? FlowId { get; set; }
+    public string? StepId { get; set; }
     public string Source { get; set; } = "platform";
     public string ToEmail { get; set; } = string.Empty;
     public string Subject { get; set; } = string.Empty;

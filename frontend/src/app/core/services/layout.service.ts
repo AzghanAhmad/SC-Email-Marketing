@@ -1,18 +1,28 @@
 import { Injectable, signal } from '@angular/core';
 
 const MOBILE_BREAKPOINT = 768;
+const COMPACT_STORAGE_KEY = 'scribecount.sidebarCompact';
 
 @Injectable({ providedIn: 'root' })
 export class LayoutService {
   /** True when the sidebar drawer is open (always true on desktop ≥ 769px) */
   sidebarOpen = signal(this.isDesktop());
+  /** Desktop icon-only sidebar (labels hidden, icons only) */
+  sidebarCompact = signal(this.readCompactPreference());
   /** Viewport is at or below the mobile breakpoint */
   isMobile = signal(this.checkMobile());
+
+  readonly sidebarWidth = () => this.sidebarCompact() && !this.isMobile() ? 72 : 252;
 
   constructor() {
     if (typeof window !== 'undefined') {
       this.onResize(window.innerWidth);
     }
+  }
+
+  private readCompactPreference(): boolean {
+    if (typeof localStorage === 'undefined') return false;
+    return localStorage.getItem(COMPACT_STORAGE_KEY) === '1';
   }
 
   private checkMobile(): boolean {
@@ -25,6 +35,16 @@ export class LayoutService {
 
   toggle(): void {
     this.sidebarOpen.update(v => !v);
+  }
+
+  toggleCompact(): void {
+    this.sidebarCompact.update(v => {
+      const next = !v;
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(COMPACT_STORAGE_KEY, next ? '1' : '0');
+      }
+      return next;
+    });
   }
 
   open(): void {

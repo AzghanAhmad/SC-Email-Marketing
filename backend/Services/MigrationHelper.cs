@@ -50,6 +50,7 @@ public static class MigrationHelper
         await EnsureCampaignSchemaAsync(db, logger, cancellationToken);
         await EnsureAbTestSchemaAsync(db, logger, cancellationToken);
         await EnsureSesSchemaAsync(db, logger, cancellationToken);
+        await EnsureFlowEmailSchemaAsync(db, logger, cancellationToken);
         await EnsureUserSettingsSchemaAsync(db, logger, cancellationToken);
         await EnsureSenderIdentitySchemaAsync(db, logger, cancellationToken);
         await EnsureBrandAssetSchemaAsync(db, logger, cancellationToken);
@@ -311,6 +312,40 @@ public static class MigrationHelper
             """, cancellationToken);
 
         logger.LogInformation("SES/SNS tables verified (SesOutboundMessages, SesDeliveryEvents)");
+    }
+
+    private static async Task EnsureFlowEmailSchemaAsync(
+        AppDbContext db,
+        ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        await EnsureSesTableAsync(db, logger, "FlowEmailQueue", """
+            CREATE TABLE `FlowEmailQueue` (
+                `Id` char(36) CHARACTER SET ascii COLLATE ascii_general_ci NOT NULL,
+                `UserId` char(36) CHARACTER SET ascii COLLATE ascii_general_ci NOT NULL,
+                `FlowId` char(36) CHARACTER SET ascii COLLATE ascii_general_ci NOT NULL,
+                `FlowRunId` char(36) CHARACTER SET ascii COLLATE ascii_general_ci NOT NULL,
+                `FlowEnrollmentId` char(36) CHARACTER SET ascii COLLATE ascii_general_ci NOT NULL,
+                `SubscriberId` char(36) CHARACTER SET ascii COLLATE ascii_general_ci NOT NULL,
+                `StepId` varchar(64) CHARACTER SET utf8mb4 NOT NULL,
+                `Subject` varchar(500) CHARACTER SET utf8mb4 NOT NULL,
+                `HtmlBody` longtext CHARACTER SET utf8mb4 NOT NULL,
+                `ScheduledAtUtc` datetime(6) NOT NULL,
+                `SentAt` datetime(6) NULL,
+                `Status` varchar(32) CHARACTER SET utf8mb4 NOT NULL,
+                `ErrorMessage` longtext CHARACTER SET utf8mb4 NULL,
+                PRIMARY KEY (`Id`),
+                KEY `IX_FlowEmailQueue_Status_ScheduledAtUtc` (`Status`, `ScheduledAtUtc`),
+                KEY `IX_FlowEmailQueue_FlowId_StepId` (`FlowId`, `StepId`),
+                CONSTRAINT `FK_FlowEmailQueue_Users_UserId`
+                    FOREIGN KEY (`UserId`) REFERENCES `Users` (`Id`) ON DELETE CASCADE
+            ) CHARACTER SET=utf8mb4;
+            """, cancellationToken);
+
+        if (await TableExistsAsync(db, "SesOutboundMessages", cancellationToken))
+            await EnsureColumnAsync(db, "SesOutboundMessages", "StepId", "varchar(64) CHARACTER SET utf8mb4 NULL", cancellationToken);
+
+        logger.LogInformation("Flow email queue schema verified");
     }
 
     private static async Task EnsureSesTableAsync(

@@ -1,5 +1,6 @@
 import { Component, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { AnalyticsApiService, MarketingAnalytics } from '../../core/services/analytics-api.service';
@@ -9,7 +10,7 @@ import { XyChartComponent, ChartSeries } from '../../shared/components/xy-chart/
 @Component({
   selector: 'app-marketing-analytics',
   standalone: true,
-  imports: [CommonModule, RouterModule, XyChartComponent],
+  imports: [CommonModule, FormsModule, RouterModule, XyChartComponent],
   template: `
     <div class="page-wrapper">
       <div class="page-header">
@@ -17,12 +18,17 @@ import { XyChartComponent, ChartSeries } from '../../shared/components/xy-chart/
           <h1 class="page-title">Marketing Analytics</h1>
           <p class="page-subtitle">Advanced analytics connecting email performance to business outcomes</p>
         </div>
-        <select class="period-select" [value]="periodDays" (change)="onPeriodChange($event)">
-          <option [value]="7">Last 7 days</option>
-          <option [value]="30">Last 30 days</option>
-          <option [value]="90">Last 90 days</option>
-          <option [value]="365">This year</option>
-        </select>
+        <div class="analytics-filters">
+          <div class="filter-field">
+            <label class="filter-label" for="mkt-period">Time period</label>
+            <select id="mkt-period" class="period-select" [ngModel]="periodDays" (ngModelChange)="onPeriodChange($event)">
+              <option [ngValue]="7">Last 7 days</option>
+              <option [ngValue]="30">Last 30 days</option>
+              <option [ngValue]="90">Last 90 days</option>
+              <option [ngValue]="365">Last year</option>
+            </select>
+          </div>
+        </div>
       </div>
 
       <div class="glass-card performance-card" *ngIf="data">
@@ -76,39 +82,37 @@ import { XyChartComponent, ChartSeries } from '../../shared/components/xy-chart/
       <div class="charts-row" *ngIf="data">
         <div class="glass-card chart-card">
           <h3 class="chart-title">Revenue by Source</h3>
-          <div class="source-list">
-            <div class="source-item" *ngFor="let s of data.revenueBySource">
-              <span class="source-name">{{ s.name }}</span>
-              <div class="source-bar-wrap">
-                <div class="source-bar"><div class="source-fill" [style.width]="s.pct + '%'" [style.background]="s.color"></div></div>
-              </div>
-              <span class="source-val">{{ s.value }}</span>
-            </div>
-          </div>
+          <app-xy-chart
+            *ngIf="revenueLabels.length"
+            type="horizontalBar"
+            [labels]="revenueLabels"
+            [series]="revenueSeries"
+            [height]="chartHeight(revenueLabels.length, 44, 160)"
+            [showLegend]="false"
+            xAxisLabel="Source"
+            yAxisLabel="Revenue ($)"
+          />
+          <p class="empty-note" *ngIf="!revenueLabels.length">No revenue data in this period.</p>
         </div>
 
         <div class="glass-card chart-card">
           <h3 class="chart-title">Campaign Revenue Impact</h3>
-          <div class="impact-list">
-            <div class="impact-item" *ngFor="let c of data.campaignImpact">
-              <div class="impact-header">
-                <span class="impact-name">{{ c.name }}</span>
-                <span class="impact-rev">{{ c.revenue }}</span>
-              </div>
-              <div class="impact-bar"><div class="impact-fill" [style.width]="c.pct + '%'"></div></div>
-              <div class="impact-meta">
-                <span>{{ c.sent | number }} sent</span>
-                <span>{{ c.openRate | number:'1.0-1' }}% open rate</span>
-              </div>
-            </div>
-            <p class="empty-note" *ngIf="data.campaignImpact.length === 0">No sent campaigns in this period yet.</p>
-          </div>
+          <app-xy-chart
+            *ngIf="impactLabels.length"
+            type="horizontalBar"
+            [labels]="impactLabels"
+            [series]="impactSeries"
+            [height]="chartHeight(impactLabels.length, 48, 160)"
+            [showLegend]="false"
+            xAxisLabel="Campaign"
+            yAxisLabel="Share %"
+          />
+          <p class="empty-note" *ngIf="!impactLabels.length">No sent campaigns in this period yet.</p>
         </div>
       </div>
     </div>
   `,
   styles: [`
-    .period-select { padding:.55rem 1rem; background:white; border:1.5px solid #e2e8f0; border-radius:10px; color:#334155; font-size:.8125rem; font-family:inherit; outline:none; cursor:pointer; }
     .performance-card { padding:1.75rem; margin-bottom:1.75rem; }
     .perf-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:1.5rem; }
     .perf-title { font-size:1.125rem; font-weight:700; color:#0f172a; margin:0 0 .2rem; }
@@ -154,13 +158,21 @@ export class MarketingAnalyticsComponent implements OnInit {
   private analyticsApi = inject(AnalyticsApiService);
   private sanitizer = inject(DomSanitizer);
 
-  periodDays = 30;
+  periodDays = 7;
   data: MarketingAnalytics | null = null;
   attribution: { label: string; value: string; pct: string; safeIcon: SafeHtml }[] = [];
   volumeLabels: string[] = [];
   volumeSeries: ChartSeries[] = [];
   engagementLabels: string[] = [];
   engagementSeries: ChartSeries[] = [];
+  revenueLabels: string[] = [];
+  revenueSeries: ChartSeries[] = [];
+  impactLabels: string[] = [];
+  impactSeries: ChartSeries[] = [];
+
+  chartHeight(count: number, rowHeight: number, min: number): number {
+    return Math.max(min, count * rowHeight);
+  }
 
   get attrPct(): number {
     if (!this.data || this.data.performance.totalRevenue === 0) return 0;
@@ -169,8 +181,8 @@ export class MarketingAnalyticsComponent implements OnInit {
 
   ngOnInit() { this.load(); }
 
-  onPeriodChange(ev: Event) {
-    this.periodDays = Number((ev.target as HTMLSelectElement).value);
+  onPeriodChange(days: number) {
+    this.periodDays = days;
     this.load();
   }
 
@@ -195,6 +207,22 @@ export class MarketingAnalyticsComponent implements OnInit {
         { name: 'Open Rate', color: '#3b82f6', values: d.engagementTrend.map(e => e.open) },
         { name: 'Click Rate', color: '#8b5cf6', values: d.engagementTrend.map(e => e.click) },
       ];
+      this.revenueLabels = d.revenueBySource.map(s => s.name);
+      this.revenueSeries = [{
+        name: 'Revenue',
+        color: '#3b82f6',
+        values: d.revenueBySource.map(s => this.parseMoney(s.value)),
+      }];
+      this.impactLabels = d.campaignImpact.map(c => c.name);
+      this.impactSeries = [{
+        name: 'Revenue share',
+        color: '#818cf8',
+        values: d.campaignImpact.map(c => c.pct),
+      }];
     });
+  }
+
+  private parseMoney(value: string): number {
+    return Number(String(value).replace(/[^0-9.-]/g, '')) || 0;
   }
 }

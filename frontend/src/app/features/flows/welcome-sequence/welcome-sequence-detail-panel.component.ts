@@ -1,5 +1,6 @@
-import { Component } from '@angular/core';
+import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Flow, FlowStep } from '../../../core/services/mock-data.service';
 import { WsOverviewComponent } from './ws-overview.component';
 import { WsEmail1Component } from './ws-email1.component';
 import { WsEmail2Component } from './ws-email2.component';
@@ -26,7 +27,6 @@ type WsTab = 'overview' | 'email1' | 'email2' | 'email3' | 'email4' | 'logic' | 
   template: `
     <div class="ws-panel">
 
-      <!-- Header -->
       <div class="ws-panel-header">
         <div class="ws-panel-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
@@ -38,11 +38,10 @@ type WsTab = 'overview' | 'email1' | 'email2' | 'email3' | 'email4' | 'logic' | 
         </div>
         <div>
           <p class="ws-panel-title">Welcome Sequence</p>
-          <p class="ws-panel-sub">4 emails · Day One priority · 1,842 triggered</p>
+          <p class="ws-panel-sub">{{ emailStepCount }} emails · Day One priority · {{ flow?.triggers ?? 0 | number }} triggered</p>
         </div>
       </div>
 
-      <!-- Tab nav -->
       <div class="ws-tabs">
         <button *ngFor="let t of tabs"
                 class="ws-tab"
@@ -52,36 +51,40 @@ type WsTab = 'overview' | 'email1' | 'email2' | 'email3' | 'email4' | 'logic' | 
         </button>
       </div>
 
-      <!-- Tab content -->
       <div class="ws-tab-content">
-        <app-ws-overview
-          *ngIf="activeTab === 'overview'"
-          (tabSelect)="setTab($event)">
-        </app-ws-overview>
+        <app-ws-overview *ngIf="activeTab === 'overview'" (tabSelect)="setTab($event)"></app-ws-overview>
 
-        <app-ws-email1
-          *ngIf="activeTab === 'email1'"
-          (subjectSelected)="onSubjectSelected($event)">
+        <app-ws-email1 *ngIf="activeTab === 'email1'"
+          [emailStep]="emailStep(0)"
+          [showScheduleError]="showScheduleError"
+          (subjectSelected)="onSubjectSelected($event)"
+          (scheduleChange)="onScheduleChange(0, $event)">
         </app-ws-email1>
 
-        <app-ws-email2
-          *ngIf="activeTab === 'email2'"
-          (subjectSelected)="onSubjectSelected($event)">
+        <app-ws-email2 *ngIf="activeTab === 'email2'"
+          [emailStep]="emailStep(1)"
+          [showScheduleError]="showScheduleError"
+          (subjectSelected)="onSubjectSelected($event)"
+          (scheduleChange)="onScheduleChange(1, $event)">
         </app-ws-email2>
 
-        <app-ws-email3
-          *ngIf="activeTab === 'email3'"
-          (subjectSelected)="onSubjectSelected($event)">
+        <app-ws-email3 *ngIf="activeTab === 'email3'"
+          [emailStep]="emailStep(2)"
+          [showScheduleError]="showScheduleError"
+          (subjectSelected)="onSubjectSelected($event)"
+          (scheduleChange)="onScheduleChange(2, $event)">
         </app-ws-email3>
 
-        <app-ws-email4
-          *ngIf="activeTab === 'email4'"
-          (subjectSelected)="onSubjectSelected($event)">
+        <app-ws-email4 *ngIf="activeTab === 'email4'"
+          [emailStep]="emailStep(3)"
+          [showScheduleError]="showScheduleError"
+          (subjectSelected)="onSubjectSelected($event)"
+          (scheduleChange)="onScheduleChange(3, $event)">
         </app-ws-email4>
 
         <app-ws-logic *ngIf="activeTab === 'logic'"></app-ws-logic>
 
-        <app-ws-reporting *ngIf="activeTab === 'reporting'"></app-ws-reporting>
+        <app-ws-reporting *ngIf="activeTab === 'reporting'" [flowId]="flowId"></app-ws-reporting>
       </div>
 
     </div>
@@ -118,6 +121,11 @@ type WsTab = 'overview' | 'email1' | 'email2' | 'email3' | 'email4' | 'logic' | 
   `]
 })
 export class WelcomeSequenceDetailPanelComponent {
+  @Input() flow!: Flow;
+  @Input() flowId = '';
+  @Input() showScheduleError = false;
+  @Output() flowChange = new EventEmitter<Flow>();
+
   activeTab: WsTab = 'overview';
 
   readonly tabs: { id: WsTab; label: string }[] = [
@@ -130,8 +138,23 @@ export class WelcomeSequenceDetailPanelComponent {
     { id: 'reporting',  label: 'Reporting' },
   ];
 
+  get emailStepCount(): number {
+    return this.flow?.steps?.filter(s => s.type === 'email').length ?? 4;
+  }
+
+  emailStep(index: number): FlowStep | null {
+    const emails = this.flow?.steps?.filter(s => s.type === 'email') ?? [];
+    return emails[index] ?? null;
+  }
+
+  onScheduleChange(index: number, iso: string) {
+    const step = this.emailStep(index);
+    if (!step) return;
+    step.scheduledAt = iso;
+    this.flowChange.emit(this.flow);
+  }
+
   onSubjectSelected(line: string) {
-    // Subject line copied to clipboard for use in the email editor
     navigator.clipboard?.writeText(line).catch(() => {});
   }
 

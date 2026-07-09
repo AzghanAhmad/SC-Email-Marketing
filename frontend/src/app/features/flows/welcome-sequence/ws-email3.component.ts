@@ -1,16 +1,23 @@
-import { Component, Output, EventEmitter } from '@angular/core';
+import { Component, Output, EventEmitter, Input } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FlowStep } from '../../../core/services/mock-data.service';
+import { WsEmailScheduleComponent } from './ws-email-schedule.component';
 
 @Component({
   selector: 'app-ws-email3',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, WsEmailScheduleComponent],
   template: `
     <div class="ws-email-section">
+      <app-ws-email-schedule
+        [step]="emailStep"
+        [showError]="showScheduleError"
+        (scheduleChange)="scheduleChange.emit($event)">
+      </app-ws-email-schedule>
       <div class="ws-email-header e3">
         <span class="ws-email-badge">Email 3</span>
         <span class="ws-email-name">The World of Your Books</span>
-        <span class="ws-email-timing">2–3 days after Email 2</span>
+        <span class="ws-email-timing">{{ timingLabel }}</span>
       </div>
       <div class="ws-callout amber">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
@@ -74,7 +81,16 @@ import { CommonModule } from '@angular/common';
   `]
 })
 export class WsEmail3Component {
+  @Input() emailStep: FlowStep | null = null;
+  @Input() showScheduleError = false;
   @Output() subjectSelected = new EventEmitter<string>();
+  @Output() scheduleChange = new EventEmitter<string>();
+
+  get timingLabel(): string {
+    if (!this.emailStep?.scheduledAt) return 'Set send date & time below';
+    const d = new Date(this.emailStep.scheduledAt);
+    return Number.isNaN(d.getTime()) ? 'Scheduled' : `Scheduled: ${d.toLocaleString()}`;
+  }
 
   readonly email3Structure = [
     { num: '1', title: 'Paint the reading experience', desc: 'Not a catalog list or cover images with buy links. Describe what it feels like to be inside one of your books — the pace, the atmosphere, the emotional register, the kind of reader who tends to find them.', example: '"My books tend to move fast, but they make room for the moments between the action — the conversations where characters say the things they\'ve been avoiding."' },

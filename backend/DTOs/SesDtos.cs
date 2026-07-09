@@ -32,7 +32,8 @@ public record PlatformSendRequest(
     string Source,
     Guid? SubscriberId = null,
     Guid? CampaignId = null,
-    Guid? FlowId = null);
+    Guid? FlowId = null,
+    string? StepId = null);
 
 public record SenderIdentityDto(
     string FromEmail,

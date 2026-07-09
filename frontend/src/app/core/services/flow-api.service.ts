@@ -36,6 +36,24 @@ export interface PublicFlowEnrollment {
   message?: string;
 }
 
+export interface FlowEmailMetric {
+  stepId: string;
+  stepLabel: string;
+  scheduledAt?: string | null;
+  sent: number;
+  delivered: number;
+  deliveryRate: number;
+  openRate: number;
+}
+
+export interface FlowEmailMetrics {
+  totalTriggers: number;
+  totalSent: number;
+  totalDelivered: number;
+  emails: FlowEmailMetric[];
+  signals: { type: string; signal: string }[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class FlowApiService {
   constructor(private api: ApiService) {}
@@ -62,6 +80,10 @@ export class FlowApiService {
 
   getFlowResults(id: string): Observable<FlowResults> {
     return this.api.get<FlowResults>(`/flows/${id}/results`);
+  }
+
+  getFlowEmailMetrics(id: string): Observable<FlowEmailMetrics> {
+    return this.api.get<FlowEmailMetrics>(`/flows/${id}/email-metrics`);
   }
 
   deleteFlow(id: string): Observable<void> {

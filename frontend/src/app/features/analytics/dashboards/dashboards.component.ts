@@ -1,5 +1,6 @@
 import { Component, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { AnalyticsApiService } from '../../../core/services/analytics-api.service';
 import { NAV_ICONS } from '../../../core/constants/nav-icons';
@@ -8,7 +9,7 @@ import { XyChartComponent, ChartSeries } from '../../../shared/components/xy-cha
 @Component({
   selector: 'app-analytics-dashboards',
   standalone: true,
-  imports: [CommonModule, XyChartComponent],
+  imports: [CommonModule, FormsModule, XyChartComponent],
   template: `
     <div class="page-wrapper">
       <div class="page-header">
@@ -16,13 +17,16 @@ import { XyChartComponent, ChartSeries } from '../../../shared/components/xy-cha
           <h1 class="page-title">Analytics Dashboards</h1>
           <p class="page-subtitle">Comprehensive analytics across campaigns, flows, and audience</p>
         </div>
-        <div class="header-actions">
-          <select class="period-select" [value]="periodDays" (change)="onPeriodChange($event)">
-            <option [value]="7">Last 7 days</option>
-            <option [value]="30">Last 30 days</option>
-            <option [value]="90">Last 90 days</option>
-            <option [value]="365">Last year</option>
-          </select>
+        <div class="analytics-filters header-actions">
+          <div class="filter-field">
+            <label class="filter-label" for="dash-period">Time period</label>
+            <select id="dash-period" class="period-select" [ngModel]="periodDays" (ngModelChange)="onPeriodChange($event)">
+              <option [ngValue]="7">Last 7 days</option>
+              <option [ngValue]="30">Last 30 days</option>
+              <option [ngValue]="90">Last 90 days</option>
+              <option [ngValue]="365">Last year</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -47,7 +51,7 @@ import { XyChartComponent, ChartSeries } from '../../../shared/components/xy-cha
           <div class="chart-header">
             <div>
               <h3 class="chart-title">Email Volume</h3>
-              <p class="chart-sub">Emails sent over the past 6 months</p>
+              <p class="chart-sub">Emails sent over the last {{ periodDays }} days</p>
             </div>
             <div class="chart-legend">
               <span class="legend-item"><span class="legend-dot" style="background:#3b82f6"></span>Sent</span>
@@ -55,7 +59,7 @@ import { XyChartComponent, ChartSeries } from '../../../shared/components/xy-cha
             </div>
           </div>
           <div class="chart-container">
-            <app-xy-chart type="bar" [labels]="volumeLabels" [series]="volumeSeries" yAxisLabel="Emails" xAxisLabel="Month" [showLegend]="false"/>
+            <app-xy-chart type="bar" [labels]="volumeLabels" [series]="volumeSeries" yAxisLabel="Emails" [xAxisLabel]="chartAxisLabel" [showLegend]="false"/>
           </div>
         </div>
 
@@ -67,19 +71,19 @@ import { XyChartComponent, ChartSeries } from '../../../shared/components/xy-cha
               <p class="chart-sub">Open & click rates over time</p>
             </div>
           </div>
-          <app-xy-chart type="line" [labels]="engagementLabels" [series]="engagementSeries" yAxisLabel="Rate %" xAxisLabel="Month"/>
+          <app-xy-chart type="line" [labels]="engagementLabels" [series]="engagementSeries" yAxisLabel="Rate %" [xAxisLabel]="chartAxisLabel"/>
         </div>
       </div>
 
       <!-- Subscriber Growth -->
-      <div class="glass-card chart-card">
+      <div class="glass-card chart-card growth-spaced">
         <div class="chart-header">
           <div>
             <h3 class="chart-title">Subscriber Growth</h3>
-            <p class="chart-sub">Total active subscribers over the past 6 months</p>
+            <p class="chart-sub">Active subscribers over the last {{ periodDays }} days</p>
           </div>
         </div>
-        <app-xy-chart type="line" [labels]="growthLabels" [series]="growthSeries" yAxisLabel="Subscribers" xAxisLabel="Month"/>
+        <app-xy-chart type="line" [labels]="growthLabels" [series]="growthSeries" yAxisLabel="Subscribers" [xAxisLabel]="chartAxisLabel"/>
       </div>
 
       <!-- Engagement Donuts -->
@@ -93,12 +97,14 @@ import { XyChartComponent, ChartSeries } from '../../../shared/components/xy-cha
         <div class="engagement-grid">
           <div class="eng-item" *ngFor="let e of engBreakdown">
             <div class="eng-donut">
-              <svg viewBox="0 0 80 80">
-                <circle cx="40" cy="40" r="32" fill="none" stroke="#f1f5f9" stroke-width="10"/>
-                <circle cx="40" cy="40" r="32" fill="none" [attr.stroke]="e.color" stroke-width="10"
-                  [attr.stroke-dasharray]="(e.value / 100 * 201) + ' 201'"
-                  stroke-dashoffset="50" stroke-linecap="round" transform="rotate(-90 40 40)"/>
-              </svg>
+              <app-xy-chart
+                type="doughnut"
+                [labels]="[e.label, 'Remaining']"
+                [series]="[{ name: e.label, color: e.color, values: [e.value, engRemainder(e.value)] }]"
+                [height]="100"
+                [showLegend]="false"
+                cutout="72%"
+              />
               <div class="eng-center">
                 <span class="eng-val">{{ e.value }}%</span>
               </div>
@@ -150,8 +156,7 @@ import { XyChartComponent, ChartSeries } from '../../../shared/components/xy-cha
     </div>
   `,
   styles: [`
-    .header-actions { display:flex; align-items:center; gap:.75rem; }
-    .period-select { padding:.55rem 1rem; background:white; border:1.5px solid #e2e8f0; border-radius:10px; color:#334155; font-size:.8125rem; font-family:inherit; outline:none; cursor:pointer; }
+    .header-actions { display:flex; align-items:flex-end; gap:.75rem; }
 
     .kpi-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:1.25rem; margin-bottom:1.75rem; }
     .kpi-card { display:flex; align-items:center; gap:1rem; padding:1.25rem 1.375rem; position:relative; }
@@ -165,6 +170,7 @@ import { XyChartComponent, ChartSeries } from '../../../shared/components/xy-cha
     .kpi-change.down { color:#dc2626; background:rgba(239,68,68,0.1); }
 
     .charts-row { display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; margin-bottom:1.5rem; }
+    .growth-spaced { margin-bottom:1.5rem; }
     .chart-card { padding:1.5rem; }
     .chart-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:1.5rem; }
     .chart-title { font-size:1rem; font-weight:700; color:#0f172a; margin:0 0 .2rem; }
@@ -187,9 +193,8 @@ import { XyChartComponent, ChartSeries } from '../../../shared/components/xy-cha
 
     .engagement-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:1.5rem; }
     .eng-item { display:flex; flex-direction:column; align-items:center; gap:.75rem; }
-    .eng-donut { position:relative; width:80px; height:80px; }
-    .eng-donut svg { width:100%; height:100%; }
-    .eng-center { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
+    .eng-donut { position:relative; width:100px; height:100px; margin:0 auto; }
+    .eng-center { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; }
     .eng-val { font-size:.9rem; font-weight:800; color:#0f172a; }
     .eng-label { font-size:.75rem; font-weight:600; color:#64748b; text-align:center; }
     .funnel-card { margin-top:1.5rem; }
@@ -211,7 +216,7 @@ export class AnalyticsDashboardsComponent implements OnInit {
   private sanitizer = inject(DomSanitizer);
   private analyticsApi = inject(AnalyticsApiService);
 
-  periodDays = 30;
+  periodDays = 7;
   kpis: { label: string; value: string; change: number; safeIcon: SafeHtml }[] = [];
   volumeData: { label: string; sent: number; delivered: number }[] = [];
   volumeLabels: string[] = [];
@@ -225,9 +230,17 @@ export class AnalyticsDashboardsComponent implements OnInit {
 
   ngOnInit() { this.loadData(); }
 
-  onPeriodChange(ev: Event) {
-    this.periodDays = Number((ev.target as HTMLSelectElement).value);
+  get chartAxisLabel(): string {
+    return this.periodDays <= 31 ? 'Day' : this.periodDays <= 120 ? 'Week' : 'Month';
+  }
+
+  onPeriodChange(days: number) {
+    this.periodDays = days;
     this.loadData();
+  }
+
+  engRemainder(value: number): number {
+    return Math.max(0, 100 - value);
   }
 
   private loadData() {

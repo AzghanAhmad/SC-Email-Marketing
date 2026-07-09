@@ -13,7 +13,7 @@ namespace ScribeCount.Email.Api.Controllers;
 public class DashboardController(AppDbContext db, DashboardService dashboard) : ControllerBase
 {
     [HttpGet]
-    public async Task<ActionResult<object>> GetDashboard([FromQuery] int days = 30)
+    public async Task<ActionResult<object>> GetDashboard([FromQuery] int days = 7)
     {
         var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub")!);
         var user = await db.Users.FindAsync(userId);

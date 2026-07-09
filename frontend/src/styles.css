@@ -207,6 +207,7 @@ body {
 
 .form-input {
   width: 100%;
+  min-height: 44px;
   padding: .75rem 1rem;
   background: var(--surface);
   border: 1.5px solid var(--border);
@@ -216,25 +217,91 @@ body {
   color: var(--text-primary);
   transition: all .2s;
   outline: none;
+  box-sizing: border-box;
+}
+
+.form-input:hover {
+  border-color: #cbd5e1;
 }
 
 .form-input:focus {
   border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+  background: #fff;
 }
 
 .form-input::placeholder {
   color: var(--text-muted);
 }
 
-.form-input option {
-  background: white;
+/* Shared modal / page controls — same size as .form-input everywhere */
+.text-input,
+.select-input,
+.filter-select {
+  width: 100%;
+  min-height: 44px;
+  padding: .75rem 1rem;
+  background: #fff;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: .9rem;
+  font-family: inherit;
   color: var(--text-primary);
+  transition: all .2s;
+  outline: none;
+  box-sizing: border-box;
 }
 
+.text-input:hover,
+.select-input:hover,
+.filter-select:hover {
+  border-color: #cbd5e1;
+}
+
+.text-input:focus,
+.select-input:focus,
+.filter-select:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+  background: #fff;
+}
+
+.text-input::placeholder {
+  color: var(--text-muted);
+}
+
+textarea.text-input,
 textarea.form-input {
-  resize: vertical;
   min-height: 120px;
+  resize: vertical;
+  padding-top: .75rem;
+}
+
+select.form-input,
+select.text-input,
+select.select-input,
+select.filter-select {
+  appearance: none;
+  cursor: pointer;
+  padding-right: 2.5rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right .875rem center;
+  background-color: #fff;
+}
+
+select.form-input option,
+select.text-input option,
+select.select-input option,
+select.filter-select option {
+  background: #fff;
+  color: var(--text-primary);
+  padding: .5rem;
+}
+
+.form-input option {
+  background: #fff;
+  color: var(--text-primary);
 }
 
 /* ── Badges ── */
@@ -435,6 +502,85 @@ textarea.form-input {
   font-size: .9rem;
   color: var(--text-muted);
   margin-top: .25rem;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  flex-wrap: wrap;
+}
+
+.header-actions .btn-primary,
+.header-actions .btn-secondary,
+.header-actions a.btn-primary,
+.header-actions a.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  min-height: 42px;
+  padding: .65rem 1.15rem;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+/* ── Analytics filter bar (labeled dropdowns) ── */
+.analytics-filters {
+  display: flex;
+  align-items: flex-end;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: .35rem;
+  min-width: 168px;
+}
+
+.filter-label {
+  font-size: .72rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  line-height: 1.2;
+}
+
+.period-select {
+  min-height: 44px;
+  padding: .75rem 2.5rem .75rem 1rem;
+  background: #fff;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: .9rem;
+  font-family: inherit;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right .875rem center;
+  transition: all .2s;
+  box-sizing: border-box;
+}
+
+.period-select:hover {
+  border-color: #cbd5e1;
+}
+
+.period-select:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
+.period-select option {
+  background: #fff;
+  color: var(--text-primary);
+  padding: .5rem;
 }
 
 /* ── Table ── */

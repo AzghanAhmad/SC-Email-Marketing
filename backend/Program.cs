@@ -73,6 +73,7 @@ builder.Services.AddScoped<CampaignService>();
 builder.Services.AddHostedService<CampaignSchedulerService>();
 builder.Services.AddHostedService<CampaignFeatureSchedulerService>();
 builder.Services.AddHostedService<MailboxSchedulerService>();
+builder.Services.AddHostedService<FlowSchedulerService>();
 builder.Services.AddHttpContextAccessor();
 
 var jwtKey = builder.Configuration["Jwt:Key"];

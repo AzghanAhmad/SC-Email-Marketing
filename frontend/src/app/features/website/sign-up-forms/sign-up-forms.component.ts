@@ -117,6 +117,7 @@ interface FormView extends SignUpFormItem {
             </button>
           </div>
           <div class="modal-body">
+            <div class="api-error-banner" *ngIf="createApiError">{{ createApiError }}</div>
             <div class="setup-field">
               <label>Form Name <span class="req">*</span></label>
               <input type="text" [(ngModel)]="newForm.name" placeholder="e.g. Science Fiction VIPs Popup" class="text-input" [class.input-error]="createErrors.name">
@@ -248,7 +249,7 @@ interface FormView extends SignUpFormItem {
     .table-card { overflow:visible; }
     .table-toolbar { display:flex; align-items:center; justify-content:space-between; padding:1.25rem 1.5rem; border-bottom:1px solid #f1f5f9; flex-wrap:wrap; gap:.75rem; }
     .filter-row { display:flex; align-items:center; gap:.75rem; }
-    .filter-select { padding:.55rem .875rem; background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:10px; color:#334155; font-size:.8125rem; font-family:inherit; outline:none; cursor:pointer; }
+    .filter-select { /* sizing from global styles.css */ color:#334155; font-size:.8125rem; cursor:pointer; }
     .form-name-cell { display:flex; align-items:center; gap:.875rem; }
     .form-icon { width:36px; height:36px; border-radius:10px; background:#f8fafc; border:1.5px solid #f1f5f9; }
     .nav-icon { display:flex; align-items:center; justify-content:center; color:#64748b; }
@@ -288,10 +289,15 @@ interface FormView extends SignUpFormItem {
     .modal-footer { padding:1rem 1.5rem; border-top:1px solid #f1f5f9; display:flex; justify-content:flex-end; gap:.75rem; background:#f8fafc; }
     .setup-field { display:flex; flex-direction:column; gap:6px; }
     .setup-field label { font-size:.8125rem; font-weight:600; color:#334155; }
-    .text-input, .select-input { padding:.625rem .875rem; border:1.5px solid #e2e8f0; border-radius:8px; font-size:.875rem; font-family:inherit; color:#0f172a; outline:none; width:100%; box-sizing:border-box; resize:vertical; }
-    .text-input:focus, .select-input:focus { border-color:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,0.1); }
+    .text-input, .select-input { /* sizing from global styles.css */ }
+    .text-input:focus, .select-input:focus { border-color:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,0.12); }
     .req { color:#dc2626; }
     .field-error { font-size:.72rem; color:#dc2626; margin-top:2px; }
+    .api-error-banner {
+      padding:.75rem 1rem; margin-bottom:1rem; border-radius:10px;
+      background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.25);
+      color:#b91c1c; font-size:.8125rem; line-height:1.45;
+    }
     .input-error { border-color:#fca5a5 !important; }
     @media(max-width:1000px) { .mini-stats { grid-template-columns:repeat(2,1fr); } }
     @media(max-width:600px) { .mini-stats { grid-template-columns:1fr; } }
@@ -320,6 +326,7 @@ export class SignUpFormsComponent implements OnInit {
     name: false, targetListId: false, headline: false, description: false,
     buttonText: false, thankYouMessage: false,
   };
+  createApiError = '';
   showCreateAttempt = false;
   editForm = {
     name: '', type: 'Popup', targetListId: '', status: 'draft' as string,
@@ -420,6 +427,7 @@ export class SignUpFormsComponent implements OnInit {
     };
     this.showCreateAttempt = false;
     this.createErrors = { name: false, targetListId: false, headline: false, description: false, buttonText: false, thankYouMessage: false };
+    this.createApiError = '';
     this.showCreateFormModal = true;
   }
 
@@ -466,6 +474,7 @@ export class SignUpFormsComponent implements OnInit {
 
   createForm() {
     this.showCreateAttempt = true;
+    this.createApiError = '';
     if (!this.validateCreateForm()) return;
     const list = this.lists().find(l => l.id === this.newForm.targetListId);
     this.websiteApi.createForm({
@@ -478,9 +487,14 @@ export class SignUpFormsComponent implements OnInit {
       description: this.newForm.description.trim(),
       buttonText: this.newForm.buttonText.trim(),
       thankYouMessage: this.newForm.thankYouMessage.trim(),
-    }).subscribe(() => {
-      this.load();
-      this.closeCreateFormModal();
+    }).subscribe({
+      next: () => {
+        this.load();
+        this.closeCreateFormModal();
+      },
+      error: (err) => {
+        this.createApiError = err?.error?.message ?? err?.error?.title ?? err?.message ?? 'Could not create sign-up form. Please try again.';
+      },
     });
   }
 

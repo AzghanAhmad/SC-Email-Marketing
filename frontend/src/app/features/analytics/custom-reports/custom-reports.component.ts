@@ -1,14 +1,16 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { Router, RouterModule } from '@angular/router';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { AnalyticsApiService, CustomReport } from '../../../core/services/analytics-api.service';
 import { NAV_ICONS } from '../../../core/constants/nav-icons';
+import { XyChartComponent, ChartSeries } from '../../../shared/components/xy-chart/xy-chart.component';
 
 @Component({
   selector: 'app-custom-reports',
   standalone: true,
-  imports: [CommonModule, RouterModule],
+  imports: [CommonModule, FormsModule, RouterModule, XyChartComponent],
   template: `
     <div class="page-wrapper">
       <div class="page-header">
@@ -16,10 +18,31 @@ import { NAV_ICONS } from '../../../core/constants/nav-icons';
           <h1 class="page-title">Custom Reports</h1>
           <p class="page-subtitle">Build and save custom reports tailored to your needs</p>
         </div>
-        <button class="btn-primary" (click)="showCreate.set(true)" data-tooltip="Create a new custom report">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          New Report
-        </button>
+        <div class="header-actions analytics-filters">
+          <div class="filter-field">
+            <label class="filter-label" for="cr-period">Time period</label>
+            <select id="cr-period" class="period-select" [ngModel]="periodDays" (ngModelChange)="onPeriodChange($event)">
+              <option [ngValue]="7">Last 7 days</option>
+              <option [ngValue]="30">Last 30 days</option>
+              <option [ngValue]="90">Last 90 days</option>
+              <option [ngValue]="365">Last year</option>
+            </select>
+          </div>
+          <button class="btn-primary" (click)="showCreate.set(true)" data-tooltip="Create a new custom report">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            New Report
+          </button>
+        </div>
+      </div>
+
+      <div class="glass-card summary-chart" *ngIf="engagementLabels.length">
+        <div class="summary-header">
+          <div>
+            <h3 class="summary-title">Report Period Overview</h3>
+            <p class="summary-sub">Engagement trend for the selected time period</p>
+          </div>
+        </div>
+        <app-xy-chart type="line" [labels]="engagementLabels" [series]="engagementSeries" yAxisLabel="Rate %" xAxisLabel="Month"/>
       </div>
 
       <div class="reports-grid" *ngIf="reports.length > 0">
@@ -78,6 +101,10 @@ import { NAV_ICONS } from '../../../core/constants/nav-icons';
     </div>
   `,
   styles: [`
+    .summary-chart { padding:1.5rem; margin-bottom:1.5rem; }
+    .summary-header { margin-bottom:1.25rem; }
+    .summary-title { font-size:1rem; font-weight:700; color:#0f172a; margin:0 0 .2rem; }
+    .summary-sub { font-size:.78rem; color:#94a3b8; margin:0; }
     .reports-grid { display:flex; flex-direction:column; gap:1rem; margin-bottom:1.5rem; }
     .report-card { display:flex; align-items:center; gap:1.25rem; padding:1.375rem 1.5rem; }
     .nav-icon { display:flex; align-items:center; justify-content:center; flex-shrink:0; color:#64748b; }
@@ -111,6 +138,9 @@ export class CustomReportsComponent implements OnInit {
   private router = inject(Router);
 
   reports: (CustomReport & { safeIcon: SafeHtml })[] = [];
+  periodDays = 7;
+  engagementLabels: string[] = [];
+  engagementSeries: ChartSeries[] = [];
   emptyIcon = this.sanitizer.bypassSecurityTrustHtml(NAV_ICONS['chart']);
   selectedReport = signal<(CustomReport & { safeIcon: SafeHtml }) | null>(null);
   showCreate = signal(false);
@@ -122,6 +152,11 @@ export class CustomReportsComponent implements OnInit {
   ].map(o => ({ ...o, safeIcon: this.sanitizer.bypassSecurityTrustHtml(NAV_ICONS[o.iconKey]) }));
 
   ngOnInit() { this.loadReports(); }
+
+  onPeriodChange(days: number) {
+    this.periodDays = days;
+    this.loadReports();
+  }
 
   viewReport(r: CustomReport & { safeIcon: SafeHtml }) {
     this.selectedReport.set(r);
@@ -160,11 +195,16 @@ export class CustomReportsComponent implements OnInit {
   }
 
   private loadReports() {
-    this.analyticsApi.getAnalytics(30).subscribe(b => {
+    this.analyticsApi.getAnalytics(this.periodDays).subscribe(b => {
       this.reports = b.customReports.map(r => ({
         ...r,
         safeIcon: this.sanitizer.bypassSecurityTrustHtml(NAV_ICONS[r.iconKey] ?? NAV_ICONS['chart']),
       }));
+      this.engagementLabels = b.engagementTrend.map(d => d.label);
+      this.engagementSeries = [
+        { name: 'Open rate', color: '#3b82f6', values: b.engagementTrend.map(d => d.open) },
+        { name: 'Click rate', color: '#8b5cf6', values: b.engagementTrend.map(d => d.click) },
+      ];
     });
   }
 }

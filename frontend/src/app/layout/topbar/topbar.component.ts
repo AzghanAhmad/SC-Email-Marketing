@@ -20,7 +20,10 @@ interface AppNotification {
   standalone: true,
   imports: [CommonModule, RouterModule, FormsModule],
   template: `
-    <header class="topbar" [class.drawer-open]="layout.sidebarOpen() && layout.isMobile()" (click)="onTopbarClick($event)">
+    <header class="topbar"
+            [class.drawer-open]="layout.sidebarOpen() && layout.isMobile()"
+            [class.sidebar-compact]="layout.sidebarCompact() && !layout.isMobile()"
+            (click)="onTopbarClick($event)">
 
       <!-- Hamburger (mobile only) -->
       <button
@@ -231,7 +234,9 @@ interface AppNotification {
       position:fixed; top:0; left:252px; right:0; z-index:40;
       box-shadow:0 1px 0 rgba(0,0,0,0.15);
       gap:.75rem;
+      transition:left .28s cubic-bezier(.4,0,.2,1);
     }
+    .topbar.sidebar-compact { left:72px; }
     .topbar-left { display:flex; align-items:center; gap:1rem; flex:1; max-width:420px; min-width:0; }
     .topbar-right { display:flex; align-items:center; gap:.5rem; position:relative; flex-shrink:0; }
     .topbar-panel { position:relative; }

@@ -1058,7 +1058,10 @@ export class IntegrationsComponent implements OnInit {
           item('make', 'Make (Integromat)', 'Build custom automations between ScribeCount and your author stack', 'integration'),
         ],
       },
-    ];
+    ].map(section => ({
+      ...section,
+      items: section.items.filter(i => !i.comingSoon),
+    })).filter(section => section.items.length > 0);
   }
 
   private icon(key: string): SafeHtml {

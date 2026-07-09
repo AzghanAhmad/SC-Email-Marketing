@@ -1,12 +1,13 @@
 import { Component, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { AnalyticsApiService } from '../../../core/services/analytics-api.service';
 import { XyChartComponent, ChartSeries } from '../../../shared/components/xy-chart/xy-chart.component';
 
 @Component({
   selector: 'app-list-health',
   standalone: true,
-  imports: [CommonModule, XyChartComponent],
+  imports: [CommonModule, FormsModule, XyChartComponent],
   template: `
     <div class="page-wrapper">
       <div class="page-header">
@@ -16,12 +17,26 @@ import { XyChartComponent, ChartSeries } from '../../../shared/components/xy-cha
             Monitor subscriber quality, flagged inactive readers, and re-engagement flow impact
           </p>
         </div>
-        <select class="period-select" [value]="periodDays" (change)="onPeriodChange($event)">
-          <option [value]="7">Last 7 days</option>
-          <option [value]="30">Last 30 days</option>
-          <option [value]="90">Last 90 days</option>
-          <option [value]="180">Last 6 months</option>
-        </select>
+        <div class="analytics-filters">
+          <div class="filter-field">
+            <label class="filter-label" for="lh-period">Time period</label>
+            <select id="lh-period" class="period-select" [ngModel]="periodDays" (ngModelChange)="onPeriodChange($event)">
+              <option [ngValue]="7">Last 7 days</option>
+              <option [ngValue]="30">Last 30 days</option>
+              <option [ngValue]="90">Last 90 days</option>
+              <option [ngValue]="180">Last 6 months</option>
+            </select>
+          </div>
+          <div class="filter-field">
+            <label class="filter-label" for="lh-status">Queue status</label>
+            <select id="lh-status" class="period-select" [value]="statusFilter" (change)="onStatusFilter($event)">
+              <option value="" disabled hidden>Select status…</option>
+              <option value="all">All statuses</option>
+              <option value="queued">Queued</option>
+              <option value="in-sequence">In sequence</option>
+            </select>
+          </div>
+        </div>
       </div>
 
       <div class="lh-kpi-grid">
@@ -48,18 +63,15 @@ import { XyChartComponent, ChartSeries } from '../../../shared/components/xy-cha
         <div class="glass-card lh-flow-card">
           <h3 class="lh-chart-title">Re-engagement flow ({{ periodDays }} days)</h3>
           <p class="lh-chart-sub">Outcomes from subscribers who entered the sequence</p>
-          <div class="lh-outcomes">
-            <div class="lh-outcome" *ngFor="let o of outcomes">
-              <div class="lh-outcome-header">
-                <span class="lh-outcome-name">{{ o.name }}</span>
-                <span class="lh-outcome-val" [style.color]="o.color">{{ o.count }}</span>
-              </div>
-              <div class="lh-outcome-bar">
-                <div class="lh-outcome-fill" [style.width.%]="o.pct" [style.background]="o.color"></div>
-              </div>
-              <span class="lh-outcome-pct">{{ o.pct }}% of sequence entries</span>
-            </div>
-          </div>
+          <app-xy-chart
+            *ngIf="outcomeLabels.length"
+            type="horizontalBar"
+            [labels]="outcomeLabels"
+            [series]="outcomeSeries"
+            [height]="chartHeight(outcomeLabels.length, 48, 140)"
+            [showLegend]="false"
+            yAxisLabel="Subscribers"
+          />
         </div>
       </div>
 
@@ -69,11 +81,6 @@ import { XyChartComponent, ChartSeries } from '../../../shared/components/xy-cha
             <h3 class="lh-chart-title">Flagged subscribers queue</h3>
             <p class="lh-chart-sub">Readers who crossed the inactivity threshold — review before sequence begins</p>
           </div>
-          <select class="filter-select" [value]="statusFilter" (change)="onStatusFilter($event)">
-            <option value="all">All statuses</option>
-            <option value="queued">Queued</option>
-            <option value="in-sequence">In sequence</option>
-          </select>
         </div>
         <table class="data-table">
           <thead>
@@ -114,10 +121,6 @@ import { XyChartComponent, ChartSeries } from '../../../shared/components/xy-cha
     </div>
   `,
   styles: [`
-    .period-select, .filter-select {
-      padding:.55rem 1rem; background:white; border:1.5px solid #e2e8f0;
-      border-radius:10px; color:#334155; font-size:.8125rem; font-family:inherit; outline:none; cursor:pointer;
-    }
     .lh-kpi-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -159,13 +162,19 @@ import { XyChartComponent, ChartSeries } from '../../../shared/components/xy-cha
 export class ListHealthComponent implements OnInit {
   private analyticsApi = inject(AnalyticsApiService);
 
-  periodDays = 30;
+  periodDays = 7;
   statusFilter = 'all';
   kpis: { label: string; value: string; desc: string; color: string }[] = [];
   trendLabels: string[] = [];
   trendSeries: ChartSeries[] = [];
   outcomes: { name: string; count: number; pct: number; color: string }[] = [];
+  outcomeLabels: string[] = [];
+  outcomeSeries: ChartSeries[] = [];
   flaggedQueue: { email: string; lastEngaged: string; daysInactive: number; status: string; statusClass: string; threshold: string }[] = [];
+
+  chartHeight(count: number, rowHeight: number, min: number): number {
+    return Math.max(min, count * rowHeight);
+  }
 
   get filteredQueue() {
     if (this.statusFilter === 'all') return this.flaggedQueue;
@@ -174,8 +183,8 @@ export class ListHealthComponent implements OnInit {
 
   ngOnInit() { this.load(); }
 
-  onPeriodChange(ev: Event) {
-    this.periodDays = Number((ev.target as HTMLSelectElement).value);
+  onPeriodChange(days: number) {
+    this.periodDays = days;
     this.load();
   }
 
@@ -192,6 +201,12 @@ export class ListHealthComponent implements OnInit {
         { name: 'Flagged inactive', color: '#cbd5e1', values: b.listHealthTrend.map(t => t.inactive) },
       ];
       this.outcomes = b.listHealthOutcomes;
+      this.outcomeLabels = b.listHealthOutcomes.map(o => o.name);
+      this.outcomeSeries = [{
+        name: 'Subscribers',
+        color: '#db2777',
+        values: b.listHealthOutcomes.map(o => o.count),
+      }];
       this.flaggedQueue = b.flaggedQueue;
     });
   }

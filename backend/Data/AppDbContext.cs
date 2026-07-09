@@ -37,6 +37,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<UserSettings> UserSettings => Set<UserSettings>();
     public DbSet<SenderIdentity> SenderIdentities => Set<SenderIdentity>();
     public DbSet<OutboundEmailMessage> OutboundEmailMessages => Set<OutboundEmailMessage>();
+    public DbSet<FlowEmailQueueItem> FlowEmailQueue => Set<FlowEmailQueueItem>();
     public DbSet<DeliveryEvent> DeliveryEvents => Set<DeliveryEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -246,6 +247,18 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.Source).HasMaxLength(64);
             e.Property(x => x.ToEmail).HasMaxLength(320);
             e.Property(x => x.SesMessageId).HasMaxLength(200);
+            e.Property(x => x.StepId).HasMaxLength(64);
+        });
+
+        modelBuilder.Entity<FlowEmailQueueItem>(e =>
+        {
+            e.ToTable("FlowEmailQueue");
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId);
+            e.HasIndex(x => new { x.Status, x.ScheduledAtUtc });
+            e.HasIndex(x => new { x.FlowId, x.StepId });
+            e.Property(x => x.Status).HasMaxLength(32);
+            e.Property(x => x.StepId).HasMaxLength(64);
+            e.Property(x => x.Subject).HasMaxLength(500);
         });
 
         modelBuilder.Entity<DeliveryEvent>(e =>
